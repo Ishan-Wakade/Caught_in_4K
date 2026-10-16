@@ -2,6 +2,9 @@
 
 GET /stream.mjpg      multipart JPEG of the latest published frame
 GET /evidence/<path>  files under evidence_dir only
+
+Camera frames can show people, so: bound to 127.0.0.1, no CORS header (the dashboard uses
+<img src>, which needs none), and requests whose Host is not localhost are refused (DNS rebinding).
 """
 
 import threading
@@ -53,6 +56,9 @@ class StreamServer:
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
+                host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+                if host not in ("localhost", "127.0.0.1", "::1"):
+                    return self.send_error(403)
                 path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
                 if path == "/stream.mjpg":
                     return self._stream()
@@ -64,7 +70,6 @@ class StreamServer:
                 self.send_response(200)
                 self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
                 self.send_header("Cache-Control", "no-store")
-                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 try:
                     while True:
@@ -85,7 +90,6 @@ class StreamServer:
                 self.send_response(200)
                 self.send_header("Content-Type", "image/jpeg")
                 self.send_header("Content-Length", str(len(data)))
-                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(data)
 

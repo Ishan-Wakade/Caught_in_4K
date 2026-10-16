@@ -42,3 +42,19 @@ def test_evidence_traversal_blocked(server, path):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(f"http://127.0.0.1:{server.port}{path}", timeout=3)
     assert e.value.code == 404
+
+
+def test_no_cross_origin_read_header(server):
+    """<img src=".../stream.mjpg"> needs no CORS; a wildcard would let any open website read the camera."""
+    server.publish(np.zeros((8, 8, 3), np.uint8))
+    with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/evidence/clip/1_entry.jpg", timeout=3) as r:
+        assert r.headers.get("Access-Control-Allow-Origin") is None
+
+
+@pytest.mark.parametrize("path", ["/stream.mjpg", "/evidence/clip/1_entry.jpg"])
+def test_foreign_host_header_refused(server, path):
+    """DNS rebinding: a page on evil.example resolving to 127.0.0.1 still sends Host: evil.example."""
+    req = urllib.request.Request(f"http://127.0.0.1:{server.port}{path}", headers={"Host": "evil.example"})
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(req, timeout=3)
+    assert e.value.code == 403

@@ -25,6 +25,8 @@ Environment (see the root `.env.example`): `API_BASE_URL`, `WORKER_INGEST_TOKEN`
 | `uv run recyclone-worker replay-labeled --file ../contracts/fixtures/demo-events.jsonl` | Stage backup: post hand-labeled events. Call `POST /api/demo/reset` first, and never mix with a live run. |
 | `uv run recyclone-worker flush` | Resend events queued in `state/outbox.jsonl` while the API was down |
 
+The stream and evidence URLs are for `<img src=...>` on the presenter's laptop only: there is no CORS header, so `fetch()` from the dashboard cannot read them, and requests whose `Host` is not localhost get 403.
+
 Delivery never stops the run:
 - Events are sent from a background thread, so a slow API never freezes the video. Unreachable API, timeouts, 5xx, garbled replies, and configuration errors (401/404/429) go to `state/outbox.jsonl`; a running worker retries them every 5 s, and `flush` resends any left over. Don't run `flush` while `run` is posting.
 - Events core says are wrong (400/413/422) go to `state/rejected.jsonl` with core's reason, printed as `REJECTED`.

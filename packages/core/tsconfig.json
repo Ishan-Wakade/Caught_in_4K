@@ -8,7 +8,23 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@recyclone/core": [
+        "./src/index.ts"
+      ],
+      "@recyclone/contracts": [
+        "../../contracts/src/index.ts"
+      ],
+      "@recyclone/contracts/event-id": [
+        "../../contracts/src/event-id.ts"
+      ]
+    }
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ]
 }

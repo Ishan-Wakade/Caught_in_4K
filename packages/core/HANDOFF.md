@@ -1,61 +1,70 @@
-# Agent I handoff / coordination requests
+# Agent I handoff — after E's contracts landed
 
-## Ownership
+## Completed against E's real package
 
-Only `packages/core/**` and `apps/web/app/api/**` outside `photon/**` changed.
-Root manifests, lockfiles, `contracts/**`, worker, integrations, and dashboard files
-were not edited. This branch started from `e/agents-md-split`; its tree matches
-the brief subsequently merged into `main` at `5698a58`.
+- Shared Zod event/site/catalog validation; nullable unknown confidences supported.
+- Direct shared `DemoSite`, `CatalogItem`, feed, bin, item, alert/message and review types.
+- API response field names and shapes match E's actual schemas, with exact-schema tests.
+- All 11 synthetic events replay through core, including one uncertain-origin review,
+  unattributed generic items, two unassessable cases, correct/incorrect sorting,
+  recommendation and fullness alerts, follow-up, confirmation, and bin reset.
+- E's preset initial bin volumes and selected config profile are applied.
+- Normal null thresholds remain disabled; no silent demo defaults.
+- Real PostgreSQL concurrency, duplicate handling, rollback and API restart persistence
+  tested in an isolated PostgreSQL 16 container. Fixed JSONB key-order comparison.
+- No temporary types or fixture copies under `contracts/`. No E/S/J files edited.
 
-## E — shared contract / workspace
+## Verification
 
-Read and implemented draft contract sections 0–6. No contract freeze is asserted
-while its package, schema, DTOs, and fixtures are absent.
+Core tests (with CORE_TEST_DATABASE_URL): 34 passed, none skipped. Core and I-owned
+API TypeScript checks passed. E's contract suite: 55 passed, and both contract
+TypeScript modes passed. See README for repeatable commands.
 
-Please publish `@recyclone/contracts` exporting `DisposalEvent`, `Messenger`,
-`Illustrator`, `ReplyInterpreter`, `InboundReply`, `OpenAlertSummary`, `ContactRef`,
-`BinInventorySnapshot`, and `ReplySink`, plus the shared event JSON Schema.
-Publish/freeze the response DTOs and seed shape so I can replace private draft
-projections where necessary. See `README.md` for current responses and `SiteSeed`
-in `src/model.ts` for the private seed format. No competing fixture was added
-under `contracts/`.
+The network test database was disposable. These results do not verify the eventual
+hosted database, live Photon/Grok, a Next.js build, deployment, or footage-driven CV.
 
-Collect core's documented environment variables into your root `.env.example`.
-Create the root pnpm workspace; resolve/generate the shared lockfile centrally.
+## S — remaining integration
 
-## S — adapters and webhook
+The S implementation is not present on main as of base `c67d66d`. Please expose
+actual adapter constructors/factories and replace the webhook ReplySink placeholder
+with `(await getCore()).handleReply(normalizedReply)` using I's runtime module.
+I will wire mode-based construction once your package is available. Construction
+must happen within each server instance, not depend on the webhook running first.
 
-Please expose your actual adapter factories or register adapter instances through
-`configureCoreAdapters` in `apps/web/app/api/_core/runtime.ts` before `getCore()`.
-Then forward verified, normalized replies to `(await getCore()).handleReply()`.
-All message/job state, clarification sending, and interpretation invocation stay
-inside core. Local stubs are available while your package is absent; live mode
-fails without registration.
+The current runtime can accept injected adapters and has explicitly mocked local
+stubs. Live modes fail until configured. A shared InboundReply has no mocked flag;
+core uses an explicit construction option to label inbound mock conversations.
 
-Contract does not carry a mocked flag on `InboundReply`; do not add undocumented
-fields silently. Outbound receipts and images do retain `mocked` as required.
-Core now persists ambiguous inbound text as well as confirmations.
+## J — remaining web integration
 
-## J — dashboard
+Declare `@recyclone/core` and `@recyclone/contracts` workspace dependencies in the
+web package. Configure workspace TypeScript transpilation as needed. Run the actual
+Next.js build when the app lands; core does not edit your manifest/configuration.
 
-Declare `@recyclone/core` and `@recyclone/contracts` workspace dependencies in your
-web package. Use `transpilePackages` if your Next.js configuration needs it for
-workspace TypeScript sources. I did not edit your manifest/configuration.
+Use the real shared response fields (`next_cursor`, `estimated_volume_l`,
+`correct_sorting_pct`, `assessed_count`, etc.). The backend now returns those shapes.
+`GET /api/feed` polling drives lazy work. Clear local scenes after demo reset.
+Use persistent storage on Vercel; memory mode is single-process only.
 
-Current response bodies are tabulated in core's README; align them with E's DTOs
-when published. Poll `/api/feed` using its cursor to run lazy work and animate
-scenes. `GET /api/alerts` includes messages and delivery state. `GET /api/bins`
-includes numeric estimates and timestamped generated/mock illustrations.
+Keep the illustrative/estimated labels and observational before/after copy. Labeled
+backup input is named in disposal feed summaries. FeedItem has no mocked flag;
+message/image projections do, and mocked feed summaries are labeled in text.
 
-After a successful demo reset, clear local scene state. Existing cursors continue
-to advance. Demo memory storage is local-only; Vercel requires persistent storage.
+## E — small remaining coordination requests
 
-## Before merge
+- I read and built against the published shared package; no contract edits requested
+  for current outdoor demo behavior. Contract freeze still needs other owners.
+- The shared station shape has no indoor/outdoor scope. Until a contract change adds
+  it, core supports `CORE_CONFIG_JSON.stationLocations` overrides for indoor routing.
+- Collect `CORE_STORAGE`, `RECYCLONE_ROOT`, `CORE_SITE_CONFIG_PATH`, and
+  `CORE_CONFIG_JSON` into the root environment example when convenient. The old
+  `CORE_EVENT_SCHEMA_PATH` is retired because intake imports the shared Zod schema.
+- The shared alert DTO has no delivery-error or pending-job fields; core keeps those
+  internally and signals failed/uncertain delivery in an open alert's trigger text.
+  Add structured delivery status later through a contract change if the UI needs it.
 
-1. Publish E's real shared package/schema/fixtures; align and rerun core/API tests.
-2. Agree on S's construction exports and complete API singleton wiring.
-3. Run J's actual Next.js build and integrated demo with mock adapters.
-4. Validate a real Postgres connection, then live APIs where credentials exist.
-5. Confirm no concurrent changes under I's paths; stage only the explicit I files.
+## Ownership / merge safety
 
-The implementation intentionally does not commit, push, or merge itself.
+Changes are only in `packages/core/**` and I-owned API routes; no root manifest,
+lockfile, contract, worker, integrations or dashboard changes. No commit, push or
+merge is performed by this implementation turn.

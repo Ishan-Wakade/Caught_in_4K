@@ -1,7 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
 import type { Messenger, Illustrator, ReplyInterpreter } from "@recyclone/contracts";
-import { createCore, configFor, initialState, connectPostgres, MemoryRepository, createEventValidator, createLocalMocks, validateSeed, type Core, type SiteSeed, type CoreConfig } from "@recyclone/core";
+import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, createLocalMocks, validateSeed, type Core, type CoreConfig } from "@recyclone/core";
 
 type Adapters = { messenger: Messenger; illustrator: Illustrator; interpreter: ReplyInterpreter };
 const shared = globalThis as typeof globalThis & { recycloneCore?: Promise<Core>; recycloneAdapters?: Adapters };
@@ -17,12 +18,18 @@ export function getCore(): Promise<Core> {
 async function initialize(): Promise<Core> {
   const profile = process.env.CONFIG_PROFILE ?? "normal";
   if (profile !== "normal" && profile !== "demo") throw new Error("CONFIG_PROFILE must be normal or demo");
-  const workspace = process.env.RECYCLONE_ROOT ?? resolve(process.cwd(), "../..");
+  let workspace = process.env.RECYCLONE_ROOT;
+  if (!workspace) {
+    let candidate = process.cwd();
+    for (;;) {
+      try { await access(resolve(candidate, "contracts/fixtures/demo-site.json")); workspace = candidate; break; }
+      catch { const parent = resolve(candidate, ".."); if (parent === candidate) throw new Error("Set RECYCLONE_ROOT to locate contracts/fixtures/demo-site.json"); candidate = parent; }
+    }
+  }
   const seedPath = process.env.CORE_SITE_CONFIG_PATH ?? resolve(workspace, "contracts/fixtures/demo-site.json");
-  const schemaPath = process.env.CORE_EVENT_SCHEMA_PATH ?? resolve(workspace, "contracts/disposal-event.schema.json");
-  const seed = validateSeed(JSON.parse(await readFile(seedPath, "utf8")) as SiteSeed);
+  const seed = validateSeed(JSON.parse(await readFile(seedPath, "utf8")));
   const overrides = process.env.CORE_CONFIG_JSON ? JSON.parse(process.env.CORE_CONFIG_JSON) as Partial<CoreConfig> : {};
-  const config = configFor(profile, overrides);
+  const config = configFromSite(profile, seed.config_profiles[profile], overrides);
   let adapters = shared.recycloneAdapters;
   if (!adapters) {
     const messengerMode = process.env.MESSENGER_MODE ?? "mock";
@@ -39,9 +46,10 @@ async function initialize(): Promise<Core> {
   } else if (storage === "postgres") {
     if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for persistent core storage");
     repository = await connectPostgres(process.env.DATABASE_URL, state);
-    await repository.transaction(s => {
-      if (JSON.stringify(s.config) !== JSON.stringify(config)) throw new Error("Persisted configuration differs from runtime. Use a separate site/database for each profile, or explicitly migrate configuration.");
-    });
+    try { await repository.transaction(s => {
+      try { validateSeed(s.seed); } catch { throw new Error("Persisted site uses an older contract; migrate it or use a separate site/database"); }
+      if (!isDeepStrictEqual(s.config, config)) throw new Error("Persisted configuration differs from runtime. Use a separate site/database for each profile, or explicitly migrate configuration.");
+    }); } catch (error) { await repository.close(); throw error; }
   } else throw new Error("CORE_STORAGE must be postgres or memory");
-  return createCore({ seed, config, repository, ...adapters, validateEvent: createEventValidator(JSON.parse(await readFile(schemaPath, "utf8"))) });
+  return createCore({ seed, config, repository, ...adapters, inboundRepliesMocked: (process.env.MESSENGER_MODE ?? "mock") === "mock", validateEvent: createEventValidator() });
 }

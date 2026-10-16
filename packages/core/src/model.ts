@@ -3,21 +3,8 @@ import type { CoreConfig } from "./config.js";
 
 // Private persistence/configuration records. Shared wire types come from contracts.
 export type BinType = BinInventorySnapshot["binType"];
-export type CatalogRecord = {
-  catalog_item_id: string; name: string; business_id: string | null;
-  correct_destination: BinType; reference_photos: string[];
-  branding_text?: string[]; volume_ml: number | null; volume_source: string;
-  condition_rule?: string | null;
-};
-export type SiteSeed = {
-  site_id: string;
-  businesses: { business_id: string; name: string; manager_contact_id: string; property_manager_contact_id?: string }[];
-  contacts: ContactRef[];
-  stations: { station_id: string; name: string; location: "shared_outdoor" | "in_store" }[];
-  cameras: { camera_id: string; station_id: string }[];
-  bins: { bin_id: string; station_id: string; name: string; type: BinType; capacity_l: number; camera_id: string; emptying_contact_id?: string; initial_contents_known?: boolean }[];
-  catalog: CatalogRecord[];
-};
+export type { CatalogItem as CatalogRecord, DemoSite as SiteSeed } from "@recyclone/contracts";
+import type { DemoSite as SiteSeed, FeedItem, AlertMessage } from "@recyclone/contracts";
 export type EventRecord = {
   raw: DisposalEvent; received_at: string; item_id: string | null; business_id: string | null;
   actual_destination: BinType | null; expected_destination: BinType | null;
@@ -25,12 +12,7 @@ export type EventRecord = {
   review_status: "pending" | "resolved" | "unresolved" | "not_required";
   reviewed_business_id?: string | null;
 };
-export type FeedRecord = {
-  cursor: string; at: string;
-  type: "disposal" | "alert_opened" | "message_sent" | "reply_received" | "intervention_recorded" | "bin_emptied" | "illustration_ready" | "review_queued" | "review_resolved";
-  ref: { event_id?: string; alert_id?: string; bin_id?: string; item_id?: string };
-  summary: string; demo: boolean; mocked?: boolean;
-};
+export type FeedRecord = FeedItem;
 export type AlertRecord = {
   alert_id: string; kind: "recommendation" | "emptying";
   item_id?: string; business_id?: string; bin_id?: string;
@@ -40,7 +22,7 @@ export type AlertRecord = {
 };
 export type MessageRecord = {
   message_id: string; alert_id: string | null; contact_id?: string; body: string; direction: "outbound" | "inbound";
-  at: string; provider_message_id?: string; mocked?: boolean;
+  at: string; provider_message_id?: string; mocked?: boolean; kind: AlertMessage["kind"];
   delivery_status?: "pending" | "sending" | "sent" | "failed" | "cancelled";
   error?: string;
 };

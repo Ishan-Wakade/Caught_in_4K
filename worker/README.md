@@ -1,0 +1,45 @@
+# Recyclone CV worker (Agent E)
+
+Footage in, one `DisposalEvent` per item that entered a bin out, posted to core's `POST /api/events`.
+Contract: `contracts/README.md` §1, §4, §6. Design notes: `AGENTS.md` in this folder.
+
+## Setup
+
+```bash
+cd worker
+uv sync
+# Model weights are not in git. Put (or symlink) them here:
+#   weights/yolo11n.pt            (ultralytics YOLO11n)
+#   weights/clip/ViT-B-32.pt      (OpenAI CLIP)
+```
+
+Environment (see the root `.env.example`): `API_BASE_URL`, `WORKER_INGEST_TOKEN`, `WORKER_PORT` (default 8765).
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `uv run recyclone-worker enroll --clip enroll.mp4 --segments segments.json --out state/gallery.npz` | Build references from an enrollment clip shot with the demo camera. `segments.json`: `[{"catalog_item_id": "item_beanco_cup", "start_s": 0, "end_s": 6}, ...]` |
+| `uv run recyclone-worker run --clip demo.mp4 --clip-id clip_demo_v1 --gallery state/gallery.npz --realtime` | Live demo: plays at clip speed, posts events, serves `http://localhost:8765/stream.mjpg` |
+| `... run ... --dry-run --no-stream` | Print events instead of posting (no API needed) |
+| `uv run recyclone-worker replay-labeled --file ../contracts/fixtures/demo-events.jsonl` | Stage backup: post hand-labeled events. Call `POST /api/demo/reset` first, and never mix with a live run. |
+| `uv run recyclone-worker flush` | Resend events queued in `state/outbox.jsonl` while the API was down |
+
+Delivery never stops the run:
+- Events are sent from a background thread, so a slow API never freezes the video. Unreachable API, timeouts, 5xx, garbled replies, and configuration errors (401/404/429) go to `state/outbox.jsonl`; a running worker retries them every 5 s, and `flush` resends any left over. Don't run `flush` while `run` is posting.
+- Events core says are wrong (400/413/422) go to `state/rejected.jsonl` with core's reason, printed as `REJECTED`.
+- At the end, `run` prints `delivery: created N, duplicate N, queued N, rejected N`. If everything was a duplicate, you forgot `POST /api/demo/reset` after a rehearsal.
+
+`replay-labeled` shifts the file's timestamps to now and, by default, sends each event when its moment arrives (`--no-wait` sends all at once).
+
+## Tests
+
+`uv run pytest -q`. No model downloads: ML parts are faked in `tests/fakes.py`.
+
+## What is real and what is not yet
+
+- Real: tracking (YOLO11n + ByteTrack on the Mac GPU, about 50 fps at imgsz 960, measured 16 Oct; people, worn items and furniture dropped), bin regions from `demo-site.json`, deterministic IDs, contract validation, background delivery with outbox, MJPEG stream, evidence crops (the last frame before the item vanished).
+- Waiting on footage: bin regions in `demo-site.json` are placeholders until the demo camera is set up; reference gallery needs the enrollment clip.
+- Not built: logo/text reading (business is always sent as unknown), a live camera source, one-authoritative-camera handling across several cameras.
+- `throw_score()` (bin entry) is a simple path heuristic, tested against falling in, falling at the rim, being held near and carried away, passing over, and standing still. Tune it on the real footage.
+- Known gap: if the tracker switches IDs mid-throw, one item can produce two events.

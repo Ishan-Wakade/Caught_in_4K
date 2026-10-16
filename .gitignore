@@ -10,3 +10,4 @@ worker/data/
 worker/weights/
 worker/evidence/
 *.pt
+worker/state/

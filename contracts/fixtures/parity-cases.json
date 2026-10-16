@@ -1,0 +1,412 @@
+[
+  {
+    "name": "recorded with offset",
+    "valid": true,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "live without offset",
+    "valid": true,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "live"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": null,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "labeled with no candidates",
+    "valid": true,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "labeled"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": []
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "identified item missing from candidates",
+    "valid": true,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": []
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "recorded without offset",
+    "valid": false,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": null,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "live with offset",
+    "valid": false,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "live"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "negative track_id",
+    "valid": false,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": -1,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "timestamp without timezone",
+    "valid": false,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "confidence above 1",
+    "valid": false,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 1.2,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown mode",
+    "valid": false,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "replay"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": "item_beanco_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.81,
+        "candidates": [
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.81
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  }
+]

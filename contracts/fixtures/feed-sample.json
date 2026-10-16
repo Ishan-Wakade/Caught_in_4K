@@ -1,0 +1,551 @@
+{
+  "feed": {
+    "items": [
+      {
+        "cursor": "000001",
+        "at": "2026-10-17T15:00:05.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_a7628196ddb400e7",
+          "bin_id": "bin_patio_recycling",
+          "item_id": "item_generic_can"
+        },
+        "summary": "Aluminum drink can → Recycling (correct)",
+        "demo": true
+      },
+      {
+        "cursor": "000002",
+        "at": "2026-10-17T15:00:20.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_a7ed51e29f1dddf7",
+          "bin_id": "bin_patio_trash",
+          "item_id": "item_beanco_cup"
+        },
+        "summary": "Bean Co. clear cold cup → Trash (incorrect)",
+        "demo": true
+      },
+      {
+        "cursor": "000003",
+        "at": "2026-10-17T15:00:41.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_9cda84c608c20c47",
+          "bin_id": "bin_patio_recycling",
+          "item_id": "item_beanco_cup"
+        },
+        "summary": "Bean Co. clear cold cup → Recycling (correct)",
+        "demo": true
+      },
+      {
+        "cursor": "000004",
+        "at": "2026-10-17T15:01:02.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_b1d210add8f90206",
+          "bin_id": "bin_patio_trash",
+          "item_id": "item_beanco_cup"
+        },
+        "summary": "Bean Co. clear cold cup → Trash (incorrect)",
+        "demo": true
+      },
+      {
+        "cursor": "000005",
+        "at": "2026-10-17T15:01:03.000Z",
+        "type": "alert_opened",
+        "ref": {
+          "alert_id": "alert_cup",
+          "item_id": "item_beanco_cup"
+        },
+        "summary": "Bean Co. clear cold cup: 33% correct (3 assessed) is below 60%",
+        "demo": true
+      },
+      {
+        "cursor": "000006",
+        "at": "2026-10-17T15:01:04.000Z",
+        "type": "message_sent",
+        "ref": {
+          "alert_id": "alert_cup"
+        },
+        "summary": "Recommendation sent to Bean Co. manager (mocked)",
+        "demo": true
+      },
+      {
+        "cursor": "000007",
+        "at": "2026-10-17T15:01:15.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_8e002b1c6165abe7",
+          "bin_id": "bin_patio_trash",
+          "item_id": "item_beanco_cup"
+        },
+        "summary": "Bean Co. clear cold cup → Trash (incorrect)",
+        "demo": true
+      },
+      {
+        "cursor": "000008",
+        "at": "2026-10-17T15:02:30.000Z",
+        "type": "reply_received",
+        "ref": {
+          "alert_id": "alert_cup"
+        },
+        "summary": "Bean Co. manager: \"Put a sign up at the pickup counter\"",
+        "demo": true
+      },
+      {
+        "cursor": "000009",
+        "at": "2026-10-17T15:02:31.000Z",
+        "type": "intervention_recorded",
+        "ref": {
+          "alert_id": "alert_cup",
+          "item_id": "item_beanco_cup"
+        },
+        "summary": "Intervention recorded: sign at pickup counter",
+        "demo": true
+      },
+      {
+        "cursor": "000010",
+        "at": "2026-10-17T15:03:00.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_64792fd2012b1d0d",
+          "bin_id": "bin_patio_trash",
+          "item_id": "item_tacostop_box"
+        },
+        "summary": "Taco Stop fiber clamshell → Trash (incorrect)",
+        "demo": true
+      },
+      {
+        "cursor": "000011",
+        "at": "2026-10-17T15:03:01.000Z",
+        "type": "alert_opened",
+        "ref": {
+          "alert_id": "alert_trash_full",
+          "bin_id": "bin_patio_trash"
+        },
+        "summary": "Patio trash is ~80% full (estimated)",
+        "demo": true
+      },
+      {
+        "cursor": "000012",
+        "at": "2026-10-17T15:03:02.000Z",
+        "type": "message_sent",
+        "ref": {
+          "alert_id": "alert_trash_full"
+        },
+        "summary": "Emptying request sent to area manager (mocked)",
+        "demo": true
+      },
+      {
+        "cursor": "000013",
+        "at": "2026-10-17T15:03:40.000Z",
+        "type": "illustration_ready",
+        "ref": {
+          "bin_id": "bin_patio_recycling"
+        },
+        "summary": "New illustration for Patio recycling",
+        "demo": true
+      },
+      {
+        "cursor": "000014",
+        "at": "2026-10-17T15:04:10.000Z",
+        "type": "reply_received",
+        "ref": {
+          "alert_id": "alert_trash_full"
+        },
+        "summary": "Area manager: \"Emptied it\"",
+        "demo": true
+      },
+      {
+        "cursor": "000015",
+        "at": "2026-10-17T15:04:11.000Z",
+        "type": "bin_emptied",
+        "ref": {
+          "alert_id": "alert_trash_full",
+          "bin_id": "bin_patio_trash"
+        },
+        "summary": "Patio trash emptied; its estimate was reset",
+        "demo": true
+      },
+      {
+        "cursor": "000016",
+        "at": "2026-10-17T15:04:40.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_9ad63675c7717381",
+          "bin_id": "bin_patio_trash",
+          "item_id": "item_generic_cup"
+        },
+        "summary": "Unbranded clear cup → Trash (incorrect; origin uncertain)",
+        "demo": true
+      },
+      {
+        "cursor": "000017",
+        "at": "2026-10-17T15:04:41.000Z",
+        "type": "review_queued",
+        "ref": {
+          "event_id": "evt_9ad63675c7717381"
+        },
+        "summary": "Possible Bean Co. logo on an unbranded cup: area-manager review",
+        "demo": true
+      },
+      {
+        "cursor": "000018",
+        "at": "2026-10-17T15:05:00.000Z",
+        "type": "disposal",
+        "ref": {
+          "event_id": "evt_b0df5e0163fd8885",
+          "bin_id": "bin_patio_compost"
+        },
+        "summary": "Unrecognised item → Compost (unassessable)",
+        "demo": true
+      }
+    ],
+    "next_cursor": "000018"
+  },
+  "bins": [
+    {
+      "bin_id": "bin_patio_trash",
+      "name": "Patio trash",
+      "type": "trash",
+      "station_id": "st_patio",
+      "capacity_l": 120,
+      "estimated_fullness": 0.005833,
+      "estimated_volume_l": 0.7,
+      "observed_count": 1,
+      "unknown_count": 0,
+      "last_emptied_at": "2026-10-17T15:04:11.000Z",
+      "illustration": null
+    },
+    {
+      "bin_id": "bin_patio_recycling",
+      "name": "Patio recycling",
+      "type": "recycling",
+      "station_id": "st_patio",
+      "capacity_l": 120,
+      "estimated_fullness": 0.258792,
+      "estimated_volume_l": 31.055,
+      "observed_count": 2,
+      "unknown_count": 0,
+      "last_emptied_at": null,
+      "illustration": {
+        "image_url": "/mock/illustrations/bin_patio_recycling.png",
+        "generated_at": "2026-10-17T15:03:40.000Z",
+        "snapshot_id": "snap_rc_1",
+        "snapshot_taken_at": "2026-10-17T15:03:39.000Z",
+        "mocked": true
+      }
+    },
+    {
+      "bin_id": "bin_patio_compost",
+      "name": "Patio compost",
+      "type": "compost",
+      "station_id": "st_patio",
+      "capacity_l": 120,
+      "estimated_fullness": 0.125,
+      "estimated_volume_l": 15.0,
+      "observed_count": 1,
+      "unknown_count": 1,
+      "last_emptied_at": null,
+      "illustration": {
+        "image_url": "/mock/illustrations/bin_patio_compost.png",
+        "generated_at": "2026-10-17T15:00:00.000Z",
+        "snapshot_id": "snap_cp_0",
+        "snapshot_taken_at": "2026-10-17T15:00:00.000Z",
+        "mocked": true
+      }
+    }
+  ],
+  "items": [
+    {
+      "catalog_item_id": "item_beanco_cup",
+      "name": "Bean Co. clear cold cup",
+      "business_id": "biz_beanco",
+      "destination": "recycling",
+      "correct_sorting_pct": 25.0,
+      "status": "below_threshold",
+      "assessed_count": 4,
+      "by_station": [
+        {
+          "station_id": "st_patio",
+          "assessed_count": 4,
+          "correct_count": 1
+        }
+      ]
+    },
+    {
+      "catalog_item_id": "item_generic_can",
+      "name": "Aluminum drink can",
+      "business_id": null,
+      "destination": "recycling",
+      "correct_sorting_pct": 100.0,
+      "status": "insufficient_data",
+      "assessed_count": 1,
+      "by_station": [
+        {
+          "station_id": "st_patio",
+          "assessed_count": 1,
+          "correct_count": 1
+        }
+      ]
+    },
+    {
+      "catalog_item_id": "item_tacostop_box",
+      "name": "Taco Stop fiber clamshell",
+      "business_id": "biz_tacostop",
+      "destination": "compost",
+      "correct_sorting_pct": 0.0,
+      "status": "insufficient_data",
+      "assessed_count": 1,
+      "by_station": [
+        {
+          "station_id": "st_patio",
+          "assessed_count": 1,
+          "correct_count": 0
+        }
+      ]
+    },
+    {
+      "catalog_item_id": "item_generic_cup",
+      "name": "Clear cold cup (unbranded)",
+      "business_id": null,
+      "destination": "recycling",
+      "correct_sorting_pct": 0.0,
+      "status": "insufficient_data",
+      "assessed_count": 1,
+      "by_station": [
+        {
+          "station_id": "st_patio",
+          "assessed_count": 1,
+          "correct_count": 0
+        }
+      ]
+    },
+    {
+      "catalog_item_id": "item_napkin",
+      "name": "Paper napkin",
+      "business_id": null,
+      "destination": "compost",
+      "correct_sorting_pct": null,
+      "status": "insufficient_data",
+      "assessed_count": 0,
+      "by_station": []
+    }
+  ],
+  "item_detail": {
+    "catalog_item_id": "item_beanco_cup",
+    "name": "Bean Co. clear cold cup",
+    "business_id": "biz_beanco",
+    "destination": "recycling",
+    "correct_sorting_pct": 25.0,
+    "status": "below_threshold",
+    "assessed_count": 4,
+    "by_station": [
+      {
+        "station_id": "st_patio",
+        "assessed_count": 4,
+        "correct_count": 1
+      }
+    ],
+    "interventions": [
+      {
+        "intervention_id": "int_cup_sign",
+        "action": "Sign at the pickup counter explaining the cup goes in recycling",
+        "confirmed_at": "2026-10-17T15:02:30.000Z",
+        "before": {
+          "from": "2026-10-17T15:00:00.000Z",
+          "to": "2026-10-17T15:02:30.000Z",
+          "assessed_count": 4,
+          "correct_sorting_pct": 25.0
+        },
+        "after": {
+          "from": "2026-10-17T15:02:30.000Z",
+          "to": "2026-10-17T15:05:00.000Z",
+          "assessed_count": 0,
+          "correct_sorting_pct": null
+        }
+      }
+    ]
+  },
+  "alerts": [
+    {
+      "alert_id": "alert_cup",
+      "kind": "recommendation",
+      "state": "action_confirmed",
+      "item_id": "item_beanco_cup",
+      "bin_id": null,
+      "contact_id": "ct_beanco_mgr",
+      "trigger": "Bean Co. clear cold cup 33% < 60%, 3 assessed events",
+      "opened_at": "2026-10-17T15:01:03.000Z",
+      "messages": [
+        {
+          "message_id": "msg_1",
+          "direction": "outbound",
+          "kind": "recommendation",
+          "body": "Your clear cold cups went into Trash 2 of the last 3 times at the Patio bins. They're recyclable here. A sign at the pickup counter saying \"Clear cups → Recycling\" could help.",
+          "at": "2026-10-17T15:01:04.000Z",
+          "mocked": true
+        },
+        {
+          "message_id": "msg_2",
+          "direction": "inbound",
+          "kind": "reply",
+          "body": "Put a sign up at the pickup counter",
+          "at": "2026-10-17T15:02:30.000Z",
+          "mocked": true
+        }
+      ]
+    },
+    {
+      "alert_id": "alert_trash_full",
+      "kind": "emptying",
+      "state": "emptied",
+      "item_id": null,
+      "bin_id": "bin_patio_trash",
+      "contact_id": "ct_area_mgr",
+      "trigger": "Patio trash ~80% full (estimated)",
+      "opened_at": "2026-10-17T15:03:01.000Z",
+      "messages": [
+        {
+          "message_id": "msg_3",
+          "direction": "outbound",
+          "kind": "emptying_request",
+          "body": "Patio trash is about 80% full (estimated). Could someone empty it? Reply when it's done.",
+          "at": "2026-10-17T15:03:02.000Z",
+          "mocked": true
+        },
+        {
+          "message_id": "msg_4",
+          "direction": "inbound",
+          "kind": "reply",
+          "body": "Emptied it",
+          "at": "2026-10-17T15:04:10.000Z",
+          "mocked": true
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "event_id": "evt_9ad63675c7717381",
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:04:40.000Z",
+      "item": {
+        "catalog_item_id": "item_generic_cup",
+        "label": "clear plastic cup",
+        "confidence": 0.71,
+        "candidates": [
+          {
+            "catalog_item_id": "item_generic_cup",
+            "score": 0.71
+          },
+          {
+            "catalog_item_id": "item_beanco_cup",
+            "score": 0.22
+          }
+        ]
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.41,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/7_entry.jpg",
+          "frame": 8400
+        }
+      ],
+      "status": "pending",
+      "assigned_business_id": null
+    }
+  ],
+  "catalog": [
+    {
+      "catalog_item_id": "item_beanco_cup",
+      "name": "Bean Co. clear cold cup",
+      "business_id": "biz_beanco",
+      "reference_photos": [],
+      "branding_text": [
+        "BEAN CO."
+      ],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 700,
+      "volume_source": "assumption: nominal 24 oz cup volume, uncrushed"
+    },
+    {
+      "catalog_item_id": "item_generic_cup",
+      "name": "Clear cold cup (unbranded)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 700,
+      "volume_source": "assumption: nominal 24 oz cup volume, uncrushed"
+    },
+    {
+      "catalog_item_id": "item_tacostop_box",
+      "name": "Taco Stop fiber clamshell",
+      "business_id": "biz_tacostop",
+      "reference_photos": [],
+      "branding_text": [
+        "TACO STOP"
+      ],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 900,
+      "volume_source": "assumption: outer box volume"
+    },
+    {
+      "catalog_item_id": "item_greenbowl_bowl",
+      "name": "Green Bowl molded-fiber bowl",
+      "business_id": "biz_greenbowl",
+      "reference_photos": [],
+      "branding_text": [
+        "GREEN BOWL"
+      ],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 1000,
+      "volume_source": "assumption: nominal bowl volume"
+    },
+    {
+      "catalog_item_id": "item_generic_can",
+      "name": "Aluminum drink can",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 355,
+      "volume_source": "assumption: 12 oz can, uncrushed"
+    },
+    {
+      "catalog_item_id": "item_napkin",
+      "name": "Paper napkin",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 50,
+      "volume_source": "assumption"
+    },
+    {
+      "catalog_item_id": "item_chip_bag",
+      "name": "Chip bag",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 400,
+      "volume_source": "assumption: loosely crumpled bag"
+    }
+  ]
+}

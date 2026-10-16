@@ -1,0 +1,6 @@
+packages:
+  - contracts
+  - packages/*
+  - apps/*
+allowBuilds:
+  esbuild: true

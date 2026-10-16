@@ -1,0 +1,23 @@
+[
+  {
+    "camera_id": "cam_patio_1",
+    "clip_id": "clip_demo_v1",
+    "track_id": 17,
+    "bin_id": "bin_patio_trash",
+    "event_id": "evt_83e663dafa4ee079"
+  },
+  {
+    "camera_id": "cam_patio_1",
+    "clip_id": "clip_demo_v1",
+    "track_id": 0,
+    "bin_id": "bin_patio_recycling",
+    "event_id": "evt_b3f2dbfa49bd38fe"
+  },
+  {
+    "camera_id": "cam_lobby_2",
+    "clip_id": "stream_2026-10-17T15:00:00Z",
+    "track_id": 4821,
+    "bin_id": "bin_lobby_compost",
+    "event_id": "evt_bc09fe7a006fc824"
+  }
+]

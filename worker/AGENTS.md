@@ -28,6 +28,7 @@ Python, running on a laptop (not Vercel).
 - Never apply confidence thresholds; send raw candidates and confidences (contract §6).
 - Load the catalog from `GET /api/catalog` at startup, falling back to `contracts/fixtures/demo-site.json` (contract §6).
 - Set `occurred_at` from clip start wall-clock time + offset, and validate every event against `contracts/disposal-event.schema.json` before posting.
+- Compute `event_id` with the reference `make_event_id` in `contracts/scripts/check_python.py` (int `track_id` only), and serialize with `allow_nan=False`.
 
 ## Model approach (E's provisional plan, not a user decision)
 

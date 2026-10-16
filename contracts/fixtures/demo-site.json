@@ -1,0 +1,254 @@
+{
+  "site": {
+    "site_id": "site_riverside",
+    "name": "Riverside Food Court (demo)"
+  },
+  "businesses": [
+    {
+      "business_id": "biz_beanco",
+      "name": "Bean Co."
+    },
+    {
+      "business_id": "biz_tacostop",
+      "name": "Taco Stop"
+    },
+    {
+      "business_id": "biz_greenbowl",
+      "name": "Green Bowl"
+    }
+  ],
+  "contacts": [
+    {
+      "contact_id": "ct_beanco_mgr",
+      "name": "Bean Co. manager",
+      "role": "restaurant_manager",
+      "business_id": "biz_beanco",
+      "phone": null,
+      "handle": null
+    },
+    {
+      "contact_id": "ct_tacostop_mgr",
+      "name": "Taco Stop manager",
+      "role": "restaurant_manager",
+      "business_id": "biz_tacostop",
+      "phone": null,
+      "handle": null
+    },
+    {
+      "contact_id": "ct_greenbowl_mgr",
+      "name": "Green Bowl manager",
+      "role": "restaurant_manager",
+      "business_id": "biz_greenbowl",
+      "phone": null,
+      "handle": null
+    },
+    {
+      "contact_id": "ct_area_mgr",
+      "name": "Area manager",
+      "role": "area_manager",
+      "business_id": null,
+      "phone": null,
+      "handle": null
+    }
+  ],
+  "stations": [
+    {
+      "station_id": "st_patio",
+      "name": "Patio"
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "cam_patio_1",
+      "station_id": "st_patio",
+      "name": "Patio camera",
+      "bin_regions": [
+        {
+          "bin_id": "bin_patio_trash",
+          "x": 0.1,
+          "y": 0.62,
+          "w": 0.22,
+          "h": 0.16
+        },
+        {
+          "bin_id": "bin_patio_recycling",
+          "x": 0.39,
+          "y": 0.62,
+          "w": 0.22,
+          "h": 0.16
+        },
+        {
+          "bin_id": "bin_patio_compost",
+          "x": 0.68,
+          "y": 0.62,
+          "w": 0.22,
+          "h": 0.16
+        }
+      ]
+    }
+  ],
+  "bins": [
+    {
+      "bin_id": "bin_patio_trash",
+      "station_id": "st_patio",
+      "name": "Patio trash",
+      "type": "trash",
+      "capacity_l": 120,
+      "initial_volume_l": 93.5,
+      "camera_id": "cam_patio_1",
+      "emptying_contact_id": "ct_area_mgr"
+    },
+    {
+      "bin_id": "bin_patio_recycling",
+      "station_id": "st_patio",
+      "name": "Patio recycling",
+      "type": "recycling",
+      "capacity_l": 120,
+      "initial_volume_l": 30,
+      "camera_id": "cam_patio_1",
+      "emptying_contact_id": "ct_area_mgr"
+    },
+    {
+      "bin_id": "bin_patio_compost",
+      "station_id": "st_patio",
+      "name": "Patio compost",
+      "type": "compost",
+      "capacity_l": 120,
+      "initial_volume_l": 15,
+      "camera_id": "cam_patio_1",
+      "emptying_contact_id": "ct_area_mgr"
+    }
+  ],
+  "catalog": [
+    {
+      "catalog_item_id": "item_beanco_cup",
+      "name": "Bean Co. clear cold cup",
+      "business_id": "biz_beanco",
+      "reference_photos": [],
+      "branding_text": [
+        "BEAN CO."
+      ],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 700,
+      "volume_source": "assumption: nominal 24 oz cup volume, uncrushed"
+    },
+    {
+      "catalog_item_id": "item_generic_cup",
+      "name": "Clear cold cup (unbranded)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 700,
+      "volume_source": "assumption: nominal 24 oz cup volume, uncrushed"
+    },
+    {
+      "catalog_item_id": "item_tacostop_box",
+      "name": "Taco Stop fiber clamshell",
+      "business_id": "biz_tacostop",
+      "reference_photos": [],
+      "branding_text": [
+        "TACO STOP"
+      ],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 900,
+      "volume_source": "assumption: outer box volume"
+    },
+    {
+      "catalog_item_id": "item_greenbowl_bowl",
+      "name": "Green Bowl molded-fiber bowl",
+      "business_id": "biz_greenbowl",
+      "reference_photos": [],
+      "branding_text": [
+        "GREEN BOWL"
+      ],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 1000,
+      "volume_source": "assumption: nominal bowl volume"
+    },
+    {
+      "catalog_item_id": "item_generic_can",
+      "name": "Aluminum drink can",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 355,
+      "volume_source": "assumption: 12 oz can, uncrushed"
+    },
+    {
+      "catalog_item_id": "item_napkin",
+      "name": "Paper napkin",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 50,
+      "volume_source": "assumption"
+    },
+    {
+      "catalog_item_id": "item_chip_bag",
+      "name": "Chip bag",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 400,
+      "volume_source": "assumption: loosely crumpled bag"
+    }
+  ],
+  "config_profiles": {
+    "normal": {
+      "half_life_hours": 48,
+      "correct_threshold_pct": null,
+      "min_assessed_events": 5,
+      "evidence_window_hours": null,
+      "follow_up_after_minutes": 1440,
+      "fullness_alert_threshold": null,
+      "item_confidence_threshold": 0.5,
+      "business_confidence_threshold": 0.6,
+      "provisional": [
+        "half_life_hours",
+        "min_assessed_events",
+        "item_confidence_threshold",
+        "business_confidence_threshold"
+      ]
+    },
+    "demo": {
+      "half_life_hours": 1,
+      "correct_threshold_pct": 60,
+      "min_assessed_events": 3,
+      "evidence_window_hours": 1,
+      "follow_up_after_minutes": 2,
+      "fullness_alert_threshold": 0.8,
+      "item_confidence_threshold": 0.5,
+      "business_confidence_threshold": 0.6,
+      "provisional": [
+        "half_life_hours",
+        "correct_threshold_pct",
+        "min_assessed_events",
+        "evidence_window_hours",
+        "follow_up_after_minutes",
+        "fullness_alert_threshold",
+        "item_confidence_threshold",
+        "business_confidence_threshold"
+      ]
+    }
+  },
+  "provisional": [
+    "businesses",
+    "contacts",
+    "cameras[].bin_regions",
+    "bins[].capacity_l",
+    "bins[].initial_volume_l",
+    "bins[].emptying_contact_id",
+    "catalog"
+  ]
+}

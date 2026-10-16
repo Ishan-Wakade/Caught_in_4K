@@ -1,0 +1,4 @@
+# This package is self-contained until the root pnpm workspace exists (see AGENTS.md).
+# Don't commit an npm lockfile that pnpm will later ignore/replace.
+package-lock.json
+dist/

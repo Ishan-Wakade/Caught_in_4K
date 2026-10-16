@@ -30,9 +30,14 @@ Python, running on a laptop (not Vercel).
 - Set `occurred_at` from clip start wall-clock time + offset, and validate every event against `contracts/disposal-event.schema.json` before posting.
 - Compute `event_id` with the reference `make_event_id` in `contracts/scripts/check_python.py` (int `track_id` only), and serialize with `allow_nan=False`.
 
-## Model approach (E's provisional plan, not a user decision)
+## Model approach (E's decisions, not user decisions)
 
-Earlier testing in Eymen's `~/recycle-cv` showed a stock COCO detector labeling a plastic bottle "vase" and mislabeling food waste. Proposed two-stage design: a class-agnostic "object" detector and tracker near bin openings, plus a classifier/matcher on each crop against catalog reference images and logo text. Training data candidates: TACO, TrashNet, RealWaste, Garbage12, ZeroWaste. Final choice is E's, recorded here once made.
+- **Tracking:** YOLO11n + ByteTrack (`ultralytics track(persist=True)`) on MPS. People, worn/carried items (backpack, handbag, tie...) and furniture/bins are dropped before anything else uses the output (`tracking.NOT_ITEMS`). A track is judged only after it has been missing for 35 frames, longer than ByteTrack's 30-frame buffer, so a cup hidden by a hand over the bin and then carried away is not counted. Eymen was asked whether to add background subtraction and did not answer; it remains an option if YOLO misses items in the real footage.
+- **Identification:** nearest reference embedding (CLIP ViT-B/32), with references **enrolled from the demo camera** (`recyclone-worker enroll`). On 16 Oct, a spike with phone photos plus web product images showed only visually distinctive items (the clear cup) match reliably. Same-table backgrounds dominated, studio web images never matched, DINOv2 was worse, and OCR missed vertical/small logos. So phone/web photos are not used as references.
+- **Bin entry:** `throw_score()` scores a track's path per bin region (Eymen asked Claude to write it). The item must have moved; it must vanish inside the opening, or just above it while falling. `entered_bin()` takes the best region at or above 0.5, returns nothing on a tie, and clamps to a plain float.
+- **Delivery:** see README "Delivery never stops the run". Only 400/413/422 count as the event's fault; other 4xx are configuration problems and are retried.
+- **Catalog:** item IDs are checked against `GET /api/catalog` (fixture fallback) when enrolling (error) and when running (warning).
+- **Timestamps:** realtime runs use "now" as clip start; faster runs back-date the start by the clip length, because core rejects `occurred_at` more than 5 s in the future.
 
 ## Evaluation
 

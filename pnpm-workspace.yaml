@@ -2,5 +2,6 @@ packages:
   - contracts
   - packages/*
   - apps/*
+  - tools/*
 allowBuilds:
   esbuild: true

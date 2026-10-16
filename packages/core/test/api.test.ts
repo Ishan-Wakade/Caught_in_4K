@@ -23,9 +23,7 @@ test("HTTP route flow: worker auth, intake, projections, review, catalog, reset 
   const shared = globalThis as typeof globalThis & { recycloneCore?: unknown };
   try {
     await writeFile(join(dir, "site.json"), JSON.stringify(testSeed));
-    // Route test exercises schema injection. E's full event schema is tested on integration.
-    await writeFile(join(dir, "event.json"), JSON.stringify({ type: "object", required: ["event_id", "source", "bin_id", "occurred_at", "item", "business", "destination_confidence"], properties: { event_id: { type: "string" } } }));
-    Object.assign(process.env, { CONFIG_PROFILE: "demo", CORE_STORAGE: "memory", CORE_SITE_CONFIG_PATH: join(dir, "site.json"), CORE_EVENT_SCHEMA_PATH: join(dir, "event.json"), WORKER_INGEST_TOKEN: "worker_test", MESSENGER_MODE: "mock", ILLUSTRATOR_MODE: "mock" });
+    Object.assign(process.env, { CONFIG_PROFILE: "demo", CORE_STORAGE: "memory", CORE_SITE_CONFIG_PATH: join(dir, "site.json"), WORKER_INGEST_TOKEN: "worker_test", MESSENGER_MODE: "mock", ILLUSTRATOR_MODE: "mock" });
     delete process.env.MANAGER_API_TOKEN;
     const e = event("http1", { occurred_at: new Date().toISOString() });
     assert.equal((await ingest(req("events", e, "wrong"))).status, 401);
@@ -38,9 +36,9 @@ test("HTTP route flow: worker auth, intake, projections, review, catalog, reset 
     assert.equal((await (await items()).json()).length, 3);
     assert.equal((await item(new Request("http://localhost"), { params: Promise.resolve({ id: "missing" }) })).status, 404);
     assert.equal((await catalog()).status, 200); assert.equal((await alerts()).status, 200);
-    const g = event("generic_http", { occurred_at: new Date().toISOString(), item: { catalog_item_id: "generic", label: "can", confidence: 1, candidates: [] } });
+    const g = event("generic_http", { occurred_at: new Date().toISOString(), item: { catalog_item_id: "generic", label: "can", confidence: 1, candidates: [] }, business: { business_id: "biz_cafe", confidence: 0.1, basis: ["logo_text"] } });
     await ingest(req("events", g)); assert.equal((await (await reviews()).json()).length, 1);
-    const context = { params: Promise.resolve({ event_id: "generic_http" }) };
+    const context = { params: Promise.resolve({ event_id: g.event_id }) };
     assert.equal((await review(req("reviews/generic_http", {}), context)).status, 400);
     assert.equal((await review(req("reviews/generic_http", { business_id: "biz_cafe" }), context)).status, 200);
     process.env.MANAGER_API_TOKEN = "manager_test";
@@ -50,6 +48,43 @@ test("HTTP route flow: worker auth, intake, projections, review, catalog, reset 
     assert.equal((await (await bins()).json())[0].observed_count, 0);
   } finally {
     delete shared.recycloneCore;
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous); await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("API runtime loads E's demo fixture and survives a restart using network PostgreSQL", { skip: !process.env.CORE_TEST_DATABASE_URL }, async () => {
+  const { randomUUID } = await import("node:crypto");
+  const { readFile } = await import("node:fs/promises");
+  const { Pool } = await import("pg");
+  const { BinSummarySchema, CatalogItemSchema, FeedResponseSchema } = await import("@recyclone/contracts");
+  const { getCore } = await import("../../../apps/web/app/api/_core/runtime.js");
+  const dir = await mkdtemp(join(tmpdir(), "recyclone-runtime-test-"));
+  const previous = { ...process.env };
+  const shared = globalThis as typeof globalThis & { recycloneCore?: ReturnType<typeof getCore> };
+  const seed = JSON.parse(await readFile(new URL("../../../contracts/fixtures/demo-site.json", import.meta.url), "utf8"));
+  seed.site.site_id = `test_${randomUUID()}`;
+  const pool = new Pool({ connectionString: process.env.CORE_TEST_DATABASE_URL });
+  try {
+    await writeFile(join(dir, "site.json"), JSON.stringify(seed));
+    Object.assign(process.env, { CONFIG_PROFILE: "demo", CORE_STORAGE: "postgres", CORE_SITE_CONFIG_PATH: join(dir, "site.json"), DATABASE_URL: process.env.CORE_TEST_DATABASE_URL, WORKER_INGEST_TOKEN: "worker_test", MESSENGER_MODE: "mock", ILLUSTRATOR_MODE: "mock" });
+    const original = (await (await bins()).json()).map((b: unknown) => BinSummarySchema.parse(b));
+    assert.equal(original.find((b: { type: string }) => b.type === "trash").estimated_volume_l, 93.5);
+    const synthetic = JSON.parse((await readFile(new URL("../../../contracts/fixtures/synthetic-events.jsonl", import.meta.url), "utf8")).split("\n")[0]!);
+    synthetic.occurred_at = new Date().toISOString();
+    assert.equal((await (await ingest(req("events", synthetic))).json()).status, "created");
+    await (await getCore()).close(); delete shared.recycloneCore;
+    assert.equal((await (await ingest(req("events", synthetic))).json()).status, "duplicate");
+    const persisted = (await (await bins()).json()).map((b: unknown) => BinSummarySchema.parse(b));
+    assert.equal(persisted.find((b: { type: string }) => b.type === "recycling").observed_count, 1);
+    const timeline = FeedResponseSchema.parse(await (await feed(new Request("http://localhost/api/feed"))).json());
+    assert.equal(timeline.items.filter(f => f.type === "disposal").length, 1);
+    for (const c of await (await catalog()).json()) CatalogItemSchema.parse(c);
+    assert.equal((await (await reviews()).json()).length, 0);
+  } finally {
+    if (shared.recycloneCore) await (await shared.recycloneCore).close();
+    delete shared.recycloneCore;
+    await pool.query("DELETE FROM recyclone_core_state WHERE site_id = $1", [seed.site.site_id]); await pool.end();
     for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
     Object.assign(process.env, previous); await rm(dir, { recursive: true, force: true });
   }

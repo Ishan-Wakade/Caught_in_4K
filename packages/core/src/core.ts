@@ -1,16 +1,18 @@
 import { createHash } from "node:crypto";
-import type { DisposalEvent, Messenger, Illustrator, ReplyInterpreter, InboundReply, OpenAlertSummary, BinInventorySnapshot, ContactRef } from "@recyclone/contracts";
+import type { DisposalEvent, Messenger, Illustrator, ReplyInterpreter, InboundReply, OpenAlertSummary, BinInventorySnapshot, ContactRef, FeedResponse } from "@recyclone/contracts";
 import type { CoreState, SiteSeed, FeedRecord, AlertRecord, EventRecord, JobRecord } from "./model.js";
 import { initialState } from "./model.js";
-import { configFor, type CoreConfig } from "./config.js";
-import { binInventory, classify, comparison, itemMetric } from "./metrics.js";
+import { configFor, configFromSite, type CoreConfig } from "./config.js";
+import { binInventory, classify, itemMetric } from "./metrics.js";
 import { type Repository, MemoryRepository } from "./repository.js";
-import { invariant, instant, validId, validateCatalog, validateSeed } from "./validation.js";
+import { contact, recommendationContact, projectBin, projectItem, projectItemDetail, projectReview, projectAlert } from "./projections.js";
+import { createEventValidator, invariant, instant, validId, validateCatalog, validateSeed } from "./validation.js";
 
 export type CoreOptions = {
   seed: SiteSeed; config?: CoreConfig; repository?: Repository;
   messenger: Messenger; illustrator: Illustrator; interpreter: ReplyInterpreter;
-  validateEvent: (value: unknown) => DisposalEvent;
+  validateEvent?: (value: unknown) => DisposalEvent;
+  inboundRepliesMocked?: boolean;
   clock?: () => Date;
 };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24);
@@ -18,14 +20,13 @@ const active = (a: AlertRecord) => a.state === "open" || a.state === "acknowledg
 function nextId(s: CoreState, prefix: string) { return `${prefix}_${s.epoch}_${++s.sequence}`; }
 function feed(s: CoreState, at: string, type: FeedRecord["type"], ref: FeedRecord["ref"], summary: string, mocked?: boolean) {
   const id = ++s.sequence;
-  s.feed.push({ cursor: String(id).padStart(12, "0"), at, type, ref, summary, demo: s.config.profile === "demo", ...(mocked === undefined ? {} : { mocked }) });
+  s.feed.push({ cursor: String(id).padStart(12, "0"), at, type, ref, summary: `${summary}${mocked ? " (mocked)" : ""}`, demo: s.config.profile === "demo" });
 }
 function queueMessage(s: CoreState, at: string, a: AlertRecord, kind: Parameters<Messenger["send"]>[0]["kind"], body: string) {
   const id = nextId(s, "message");
   s.jobs.push({ job_id: id, epoch: s.epoch, kind: "message", status: "pending", created_at: at, message: { to: a.contact, body, alertId: a.alert_id, kind } });
-  s.messages.push({ message_id: id, alert_id: a.alert_id, body, direction: "outbound", at, delivery_status: "pending" });
+  s.messages.push({ message_id: id, alert_id: a.alert_id, body, direction: "outbound", kind, at, delivery_status: "pending" });
 }
-function contact(s: CoreState, id: string | undefined) { return s.seed.contacts.find(c => c.contactId === id); }
 function inventoryKey(s: CoreState, binId: string, now: number) {
   const inv = binInventory(s, binId, now);
   return digest({ binId, epoch: s.epoch, emptying: inv.last_confirmed_emptying?.emptying_id, items: inv.items, unknown: inv.unknown_content_count, count: inv.observed_count, volume: inv.estimated_volume_ml });
@@ -36,8 +37,9 @@ function openSummaries(s: CoreState, from: ContactRef): OpenAlertSummary[] {
 
 export function createCore(options: CoreOptions) {
   const seed = validateSeed(options.seed);
-  const config = options.config ? configFor(options.config.profile, options.config) : configFor("normal");
-  const repository = options.repository ?? new MemoryRepository(initialState(seed, config));
+  const config = options.config ? configFor(options.config.profile, options.config) : configFromSite("normal", seed.config_profiles.normal);
+  const validateEvent = options.validateEvent ?? createEventValidator();
+  const repository: Repository = options.repository ?? new MemoryRepository(initialState(seed, config));
   const now = () => (options.clock?.() ?? new Date()).toISOString();
 
   async function evaluate() {
@@ -49,14 +51,12 @@ export function createCore(options: CoreOptions) {
         for (const businessId of businesses) {
           const metric = itemMetric(s, item.catalog_item_id, businessId, t);
           if (!metric.alert_eligible || s.alerts.some(a => a.kind === "recommendation" && a.item_id === item.catalog_item_id && a.business_id === businessId)) continue;
-          const business = s.seed.businesses.find(b => b.business_id === businessId)!;
           const latest = Object.values(s.events).filter(e => e.item_id === item.catalog_item_id && e.business_id === businessId && e.correctness === "incorrect" && instant(e.raw.occurred_at) <= t).sort((a, b) => instant(b.raw.occurred_at) - instant(a.raw.occurred_at))[0];
           const bin = s.seed.bins.find(b => b.bin_id === latest?.raw.bin_id);
-          const station = s.seed.stations.find(st => st.station_id === bin?.station_id);
-          const to = contact(s, station?.location === "in_store" ? business.property_manager_contact_id : business.manager_contact_id);
+          const to = recommendationContact(s, businessId, bin?.station_id);
           if (!to) continue; // Missing routing is surfaced in configuration; never guess a contact.
           const a: AlertRecord = { alert_id: nextId(s, "alert"), kind: "recommendation", item_id: item.catalog_item_id, business_id: businessId, contact: to, state: "open", created_at: at, follow_up_queued: false,
-            body: `${item.name}: ${metric.correct_sorting_percent!.toFixed(1)}% correctly sorted across ${metric.assessed_event_count} assessed disposals (${metric.recent_assessed_event_count} recent). Under this site's rules it belongs in ${item.correct_destination}. Please place a sign near where customers collect this item explaining its correct bin. Reply when the sign is installed.` };
+            body: `${item.name}: ${metric.correct_sorting_percent!.toFixed(1)}% correctly sorted across ${metric.assessed_event_count} assessed disposals (${metric.recent_assessed_event_count} recent). Under this site's rules it belongs in ${item.destination}. Please place a sign near where customers collect this item explaining its correct bin. Reply when the sign is installed.` };
           s.alerts.push(a); queueMessage(s, at, a, "recommendation", `[${a.alert_id}] ${a.body}`);
           feed(s, at, "alert_opened", { alert_id: a.alert_id, item_id: item.catalog_item_id }, a.body);
         }
@@ -64,7 +64,7 @@ export function createCore(options: CoreOptions) {
       for (const bin of s.seed.bins) {
         const inv = binInventory(s, bin.bin_id, t);
         const to = contact(s, bin.emptying_contact_id);
-        if (to && inv.estimated_fullness >= s.config.fullnessThreshold && !s.alerts.some(a => a.kind === "emptying" && a.bin_id === bin.bin_id && active(a))) {
+        if (to && s.config.fullnessThreshold !== null && inv.estimated_fullness >= s.config.fullnessThreshold && !s.alerts.some(a => a.kind === "emptying" && a.bin_id === bin.bin_id && active(a))) {
           const a: AlertRecord = { alert_id: nextId(s, "alert"), kind: "emptying", bin_id: bin.bin_id, contact: to, state: "open", created_at: at, follow_up_queued: false,
             body: `${bin.name} (${bin.bin_id}) is estimated at ${(100 * inv.estimated_fullness).toFixed(0)}% of capacity from observed deposits. Please empty it and reply with the bin ID to confirm completion.` };
           s.alerts.push(a); queueMessage(s, at, a, "emptying_request", `[${a.alert_id}] ${a.body}`);
@@ -72,7 +72,7 @@ export function createCore(options: CoreOptions) {
         }
         const key = inventoryKey(s, bin.bin_id, t);
         const id = `image_${key}`;
-        const latest = s.images[bin.bin_id];
+        const latest = Object.hasOwn(s.images, bin.bin_id) ? s.images[bin.bin_id] : undefined;
         const waiting = s.jobs.some(j => j.kind === "image" && j.snapshot?.binId === bin.bin_id && (j.status === "pending" || j.status === "sending"));
         if (!waiting && !s.jobs.some(j => j.job_id === id) && (!latest || t - instant(latest.result.generatedAt) >= s.config.illustrationRefreshMs)) {
           const snapshot: BinInventorySnapshot = { snapshotId: id, binId: bin.bin_id, binType: bin.type, takenAt: at, estimatedFullness: inv.estimated_fullness, items: inv.items, unknownCount: inv.unknown_content_count };
@@ -135,7 +135,7 @@ export function createCore(options: CoreOptions) {
             // A reset or catalog/review update during generation invalidates this picture.
             const key = `image_${inventoryKey(s, job.snapshot!.binId, instant(now()))}`;
             if (key !== job.job_id) return;
-            s.images[job.snapshot!.binId] = { snapshot: job.snapshot!, result };
+            Object.defineProperty(s.images, job.snapshot!.binId, { value: { snapshot: job.snapshot!, result }, enumerable: true, writable: true, configurable: true });
             feed(s, result.generatedAt, "illustration_ready", { bin_id: job.snapshot!.binId }, "Generated illustration of estimated contents", result.mocked);
           });
         }
@@ -155,7 +155,7 @@ export function createCore(options: CoreOptions) {
   async function ingest(input: unknown) {
     const rawEvents = input && typeof input === "object" && "events" in input ? (input as { events: unknown }).events : [input];
     invariant(Array.isArray(rawEvents) && rawEvents.length > 0 && rawEvents.length <= 100, "Supply 1–100 events");
-    const events = rawEvents.map(options.validateEvent);
+    const events = rawEvents.map(validateEvent);
     const at = now();
     const results = await repository.transaction(s => {
       // Validate the complete batch before making any change.
@@ -168,8 +168,8 @@ export function createCore(options: CoreOptions) {
       return events.map(raw => {
         if (Object.hasOwn(s.events, raw.event_id)) return { event_id: raw.event_id, status: "duplicate" as const };
         const record = classify(s, { raw, received_at: at, item_id: null, business_id: null, actual_destination: null, expected_destination: null, correctness: "unassessable", review_status: "pending" });
-        s.events[raw.event_id] = record;
-        feed(s, at, "disposal", { event_id: raw.event_id, bin_id: raw.bin_id, item_id: record.item_id ?? undefined }, `${raw.item.label} → ${s.seed.bins.find(b => b.bin_id === raw.bin_id)!.type} (${record.correctness})`);
+        Object.defineProperty(s.events, raw.event_id, { value: record, enumerable: true, writable: true, configurable: true });
+        feed(s, at, "disposal", { event_id: raw.event_id, bin_id: raw.bin_id, item_id: record.item_id ?? undefined }, `${raw.item.label ?? "Unknown item"} → ${s.seed.bins.find(b => b.bin_id === raw.bin_id)!.type} (${record.correctness})${raw.source.mode === "labeled" ? " [labeled backup input]" : ""}`);
         if (record.review_status === "pending") feed(s, at, "review_queued", { event_id: raw.event_id }, "Area manager: identify source business");
         return { event_id: raw.event_id, status: "created" as const };
       });
@@ -186,10 +186,10 @@ export function createCore(options: CoreOptions) {
       if (Object.hasOwn(s.replies, replyKey)) return null;
       invariant(contact(s, reply.from.contactId), "Unknown manager contact", 403);
       s.replies[replyKey] = { reply, status: "processing" };
-      s.messages.push({ message_id: nextId(s, "reply"), alert_id: null, contact_id: reply.from.contactId, body: reply.body, direction: "inbound", at: reply.receivedAt, provider_message_id: reply.providerMessageId });
+      s.messages.push({ message_id: nextId(s, "reply"), alert_id: null, contact_id: reply.from.contactId, body: reply.body, direction: "inbound", kind: "reply", mocked: options.inboundRepliesMocked ?? false, at: reply.receivedAt, provider_message_id: reply.providerMessageId });
       const alerts = openSummaries(s, reply.from);
       feed(s, now(), "reply_received", {}, "Manager reply received");
-      return { epoch: s.epoch, alerts };
+      return { epoch: s.epoch, alerts, feedCursor: s.feed.at(-1)!.cursor };
     });
     if (!reserved) return { status: "duplicate" };
     let interpreted: Awaited<ReturnType<ReplyInterpreter["interpret"]>>;
@@ -201,6 +201,8 @@ export function createCore(options: CoreOptions) {
       invariant(s.epoch === reserved.epoch, "Demo state changed while processing reply", 409);
       const entry = s.replies[replyKey];
       const a = s.alerts.find(a => a.alert_id === interpreted.alertId && active(a) && a.contact.contactId === reply.from.contactId && reserved.alerts.some(open => open.alertId === a.alert_id));
+      const replyFeed = s.feed.find(f => f.cursor === reserved.feedCursor)!;
+      replyFeed.summary = `Manager: ${reply.body}${options.inboundRepliesMocked ? " (mocked)" : ""}`;
       const inbound = s.messages.find(m => m.direction === "inbound" && m.provider_message_id === reply.providerMessageId)!;
       const clarify = () => {
         entry.status = "needs_clarification";
@@ -210,7 +212,7 @@ export function createCore(options: CoreOptions) {
           const target = a ?? candidates[0];
           if (a || candidates.length === 1) {
             target.responded_at = reply.receivedAt;
-            inbound.alert_id = target.alert_id;
+            inbound.alert_id = target.alert_id; replyFeed.ref.alert_id = target.alert_id;
           }
           queueMessage(s, now(), target, "clarification", `Please name the alert or bin and confirm whether the action is completed. Open alerts: ${candidates.map(a => a.alert_id).join(", ")}.`);
         }
@@ -225,7 +227,7 @@ export function createCore(options: CoreOptions) {
         if (last && value < instant(last.emptied_at)) return clarify();
       }
       a.responded_at = reply.receivedAt;
-      inbound.alert_id = a.alert_id;
+      inbound.alert_id = a.alert_id; replyFeed.ref.alert_id = a.alert_id;
       if (interpreted.intent === "acknowledged") a.state = "acknowledged";
       else if (interpreted.intent === "action_confirmed") {
         a.state = "action_confirmed";
@@ -247,22 +249,21 @@ export function createCore(options: CoreOptions) {
 
   return {
     ingest, handleReply, tick,
-    async getFeed(after = "") {
+    async close() { await repository.close?.(); },
+    async getFeed(after = ""): Promise<FeedResponse> {
       invariant(after === "" || /^\d{1,20}$/.test(after), "Invalid feed cursor");
       await tick();
-      return repository.transaction(s => ({ items: s.feed.filter(f => !after || BigInt(f.cursor) > BigInt(after)).slice(0, 200), cursor: s.feed.filter(f => !after || BigInt(f.cursor) > BigInt(after)).slice(0, 200).at(-1)?.cursor ?? after, demo: s.config.profile === "demo" }));
-    },
-    async getBins() { return repository.transaction(s => s.seed.bins.map(b => ({ ...binInventory(s, b.bin_id, instant(now())), illustration_jobs: s.jobs.filter(j => j.kind === "image" && j.snapshot?.binId === b.bin_id).map(j => ({ job_id: j.job_id, status: j.status, error: j.error })) }))); },
-    async getItems(id?: string) {
       return repository.transaction(s => {
-        if (id) invariant(s.seed.catalog.some(c => c.catalog_item_id === id), "Unknown item", 404);
-        return s.seed.catalog.filter(c => !id || c.catalog_item_id === id).map(c => {
-          const businessIds = new Set<string | null>([c.business_id]);
-          for (const e of Object.values(s.events)) if (e.item_id === c.catalog_item_id && e.business_id) businessIds.add(e.business_id);
-          return { ...c, metrics: [...businessIds].map(b => itemMetric(s, c.catalog_item_id, b, instant(now()))), interventions: s.interventions.filter(i => i.item_id === c.catalog_item_id).map(i => ({ ...i, comparison: comparison(s, i.item_id, i.business_id, i.confirmed_at, instant(now())) })) };
-        });
+        const items = s.feed.filter(f => !after || BigInt(f.cursor) > BigInt(after)).slice(0, 200);
+        return { items, next_cursor: items.at(-1)?.cursor ?? (after || "000000000000") };
       });
     },
+    async getBins() { return repository.transaction(s => s.seed.bins.map(b => projectBin(s, b.bin_id, instant(now())))); },
+    async getItems() { return repository.transaction(s => s.seed.catalog.map(c => projectItem(s, c.catalog_item_id, instant(now())))); },
+    async getItem(id: string) { return repository.transaction(s => {
+      invariant(s.seed.catalog.some(c => c.catalog_item_id === id), "Unknown item", 404);
+      return projectItemDetail(s, id, instant(now()));
+    }); },
     async getCatalog() { return repository.transaction(s => s.seed.catalog); },
     async upsertCatalog(input: unknown) {
       const item = validateCatalog(input);
@@ -277,7 +278,7 @@ export function createCore(options: CoreOptions) {
       });
       await tick(); return result;
     },
-    async getReviews() { return repository.transaction(s => Object.values(s.events).filter(e => e.review_status === "pending" || e.review_status === "unresolved")); },
+    async getReviews() { return repository.transaction(s => Object.values(s.events).filter(e => e.review_status === "pending" || e.review_status === "unresolved").map(projectReview)); },
     async review(eventId: string, businessId: string | null) {
       invariant(businessId === null || validId(businessId), "Invalid business identifier");
       const result = await repository.transaction(s => {
@@ -287,11 +288,11 @@ export function createCore(options: CoreOptions) {
         invariant(!item?.business_id || businessId === null || businessId === item.business_id, "Business conflicts with identified catalog item", 409);
         e.reviewed_business_id = businessId; classify(s, e);
         feed(s, now(), "review_resolved", { event_id: eventId }, businessId ? "Business assigned by area manager" : "Origin left unresolved");
-        return e;
+        return projectReview(e);
       });
       await tick(); return result;
     },
-    async getAlerts() { return repository.transaction(s => s.alerts.map(a => ({ ...a, messages: s.messages.filter(m => m.alert_id === a.alert_id || (m.alert_id === null && m.contact_id === a.contact.contactId)) }))); },
+    async getAlerts() { return repository.transaction(s => s.alerts.map(a => projectAlert(s, a))); },
     async resetDemo() {
       await repository.transaction(s => {
         invariant(s.config.profile === "demo", "Demo reset disabled outside demo profile", 403);

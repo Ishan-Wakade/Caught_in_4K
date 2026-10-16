@@ -80,13 +80,13 @@ Produce the `/api/feed` items in contract §3 for every state change the dashboa
 
 ## Implementation handoff (Agent I)
 
-Core implementation, API handlers, SQL migration, local stubs, and tests now live
-in this ownership area. Read `README.md` for setup, configuration assumptions,
-response bodies, reliability limits, and verification scope. Read `HANDOFF.md`
-for requests to E/S/J. Shared types, schema, fixtures and integration factories
-were still unpublished at implementation time; final contract alignment is pending.
+Aligned to E's real contracts package and fixtures. Read `README.md` for setup,
+profile conversion, API shapes, persistence limits and tests. `HANDOFF.md` lists
+remaining S/J integration work. Shared schemas are imported, never copied. Core
+and API tests no longer use an external type harness.
 
 Additional variables for E to collect: `CORE_STORAGE`, `RECYCLONE_ROOT`,
-`CORE_SITE_CONFIG_PATH`, `CORE_EVENT_SCHEMA_PATH`, `CORE_CONFIG_JSON`, and optional
-`MANAGER_API_TOKEN`. The API wiring also reads S's `MESSENGER_MODE` and
+`CORE_SITE_CONFIG_PATH`, `CORE_CONFIG_JSON`, and optional `MANAGER_API_TOKEN`.
+`CORE_TEST_DATABASE_URL` enables isolated network PostgreSQL tests.
+`CORE_EVENT_SCHEMA_PATH` is retired. The API also reads S's `MESSENGER_MODE` and
 `ILLUSTRATOR_MODE`. Never silently substitute mocks when live mode is requested.

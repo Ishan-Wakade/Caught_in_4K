@@ -13,9 +13,9 @@ test("Postgres migration, persistence across repository instances and transactio
   const pool: SqlPool = { async connect() { return { async query(sql, values) { return db.query(sql, values); }, release() {} }; } };
   const seed = initialState(testSeed, configFor("demo"));
   try {
-    const first = new PostgresRepository(pool, testSeed.site_id, seed); await first.migrate();
+    const first = new PostgresRepository(pool, testSeed.site.site_id, seed); await first.migrate();
     await first.transaction(s => { s.sequence = 42; });
-    const restarted = new PostgresRepository(pool, testSeed.site_id, seed);
+    const restarted = new PostgresRepository(pool, testSeed.site.site_id, seed);
     assert.equal(await restarted.transaction(s => s.sequence), 42);
     await assert.rejects(first.transaction(s => { s.sequence = 999; throw new Error("abort"); }), /abort/);
     assert.equal(await restarted.transaction(s => s.sequence), 42);

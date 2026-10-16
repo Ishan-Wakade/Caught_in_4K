@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { readFile } from "node:fs/promises";
 import type { CoreState } from "./model.js";
 export interface Repository {
+  close?(): Promise<void>;
   transaction<T>(change: (state: CoreState) => T | Promise<T>): Promise<T>;
 }
 export class MemoryRepository implements Repository {
@@ -24,9 +25,10 @@ export type SqlClient = {
   query(sql: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
   release(): void;
 };
-export type SqlPool = { connect(): Promise<SqlClient> };
+export type SqlPool = { connect(): Promise<SqlClient>; end?(): Promise<void> };
 export class PostgresRepository implements Repository {
   constructor(private pool: SqlPool, private siteId: string, private initial: CoreState) {}
+  async close(): Promise<void> { await this.pool.end?.(); }
   async migrate(): Promise<void> {
     const client = await this.pool.connect();
     try { await client.query(await readFile(new URL("../migrations/001_core_state.sql", import.meta.url), "utf8")); }
@@ -53,7 +55,7 @@ export class PostgresRepository implements Repository {
 
 export async function connectPostgres(connectionString: string, state: CoreState): Promise<PostgresRepository> {
   const pool = new Pool({ connectionString, max: 3 });
-  const repository = new PostgresRepository(pool, state.seed.site_id, state);
-  await repository.migrate();
-  return repository;
+  const repository = new PostgresRepository(pool, state.seed.site.site_id, state);
+  try { await repository.migrate(); return repository; }
+  catch (error) { await pool.end(); throw error; }
 }

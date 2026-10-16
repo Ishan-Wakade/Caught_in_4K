@@ -20,11 +20,16 @@ if (process.env.MESSENGER_MODE !== "live") {
 }
 
 const messenger = createMessenger();
-const result = await messenger.send({
-  to: { contactId: phone, phone },
-  body,
-  alertId: "manual-test",
-  kind: "clarification",
-});
-
-console.log("Sent:", result);
+try {
+  const result = await messenger.send({
+    to: { contactId: phone, phone },
+    body,
+    alertId: "manual-test",
+    kind: "clarification",
+  });
+  console.log("Sent:", result);
+} catch (err) {
+  console.error("Failed:", err.message);
+  if (process.env.DEBUG) console.error(err); // full cause chain, only when asked for
+  process.exit(1);
+}

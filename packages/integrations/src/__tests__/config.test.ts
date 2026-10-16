@@ -13,7 +13,7 @@ describe("config", () => {
 
   it("refuses to construct a live messenger without credentials", () => {
     const env = { MESSENGER_MODE: "live" } as NodeJS.ProcessEnv;
-    expect(() => createMessenger(env)).toThrow(/PHOTON_API_KEY/);
+    expect(() => createMessenger(env)).toThrow(/PHOTON_PROJECT_ID/);
   });
 
   it("refuses to construct a live illustrator without credentials", () => {
@@ -21,11 +21,12 @@ describe("config", () => {
     expect(() => createIllustrator(env)).toThrow(/GROK_API_KEY/);
   });
 
-  it("reports live mode once credentials are present", () => {
+  it("reports live mode once top-level credentials are present (channel-specific vars are checked lazily on send)", () => {
     const env = {
       MESSENGER_MODE: "live",
-      PHOTON_API_KEY: "key",
-      PHOTON_CHANNEL: "sms",
+      PHOTON_PROJECT_ID: "proj_1",
+      PHOTON_PROJECT_SECRET: "secret",
+      PHOTON_CHANNEL: "imessage",
     } as NodeJS.ProcessEnv;
     expect(createMessenger(env)).toBeDefined();
     expect(getActiveModes(env).messenger).toBe("live");

@@ -16,12 +16,13 @@ function readMode(value: string | undefined, fallback: "mock" | "live"): "mock" 
 export function createMessenger(env: NodeJS.ProcessEnv = process.env): Messenger {
   const mode = readMode(env.MESSENGER_MODE, "mock");
   if (mode === "mock") return new MockMessenger();
-  const apiKey = env.PHOTON_API_KEY;
-  const channel = env.PHOTON_CHANNEL;
-  if (!apiKey || !channel) {
-    throw new Error("MESSENGER_MODE=live requires PHOTON_API_KEY and PHOTON_CHANNEL to be set.");
+  if (!env.PHOTON_PROJECT_ID || !env.PHOTON_PROJECT_SECRET || !env.PHOTON_CHANNEL) {
+    throw new Error("MESSENGER_MODE=live requires PHOTON_PROJECT_ID, PHOTON_PROJECT_SECRET, and PHOTON_CHANNEL to be set.");
   }
-  return new PhotonMessenger({ apiKey, channel });
+  // PhotonMessenger reads env itself (via getPhotonProvider) when send() is
+  // first called; channel-specific vars (e.g. WHATSAPP_ACCESS_TOKEN) are
+  // validated lazily there rather than duplicated here.
+  return new PhotonMessenger();
 }
 
 export function createIllustrator(env: NodeJS.ProcessEnv = process.env): Illustrator {

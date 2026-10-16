@@ -1,10 +1,10 @@
 // Shared by webhook/route.ts and mock-reply/route.ts so both enter the exact
 // same path (contract §5/§6). Not itself a route — Next's App Router only
 // treats files named route.ts as endpoints.
-import crypto from "node:crypto";
 import {
   InMemoryReplyDedupeStore,
   type InboundReply,
+  type Message,
   type ReplyDedupeStore,
   type ReplySink,
 } from "@recyclone/integrations";
@@ -15,38 +15,25 @@ import { getReplySink } from "./_replySink";
 // store before relying on it across multiple instances or restarts.
 const dedupeStore: ReplyDedupeStore = new InMemoryReplyDedupeStore();
 
-export function verifyPhotonSignature(_rawBody: string, _signatureHeader: string | null): boolean {
-  // Photon's signature scheme is unconfirmed — no docs reviewed yet (see
-  // packages/integrations/AGENTS.md "Open questions"). Until PHOTON_WEBHOOK_SECRET
-  // and the real scheme are confirmed, verification is a no-op that always
-  // passes; flip this once the real scheme is known, rather than silently
-  // trusting unverified webhooks in production.
-  if (!process.env.PHOTON_WEBHOOK_SECRET) return true;
-  // TODO once Photon docs are reviewed, replace with the real HMAC/signature check, e.g.:
-  // const expected = crypto.createHmac("sha256", process.env.PHOTON_WEBHOOK_SECRET).update(_rawBody).digest("hex");
-  // return _signatureHeader === expected;
-  return true;
+/**
+ * Pulls plain reply text out of a Spectrum Message's content. Managers are
+ * expected to reply with ordinary text/markdown; any other content type
+ * (attachment, reaction, poll, …) has no text to interpret and comes back
+ * as "", which RuleBasedReplyInterpreter correctly reads as "unclear".
+ */
+function extractReplyText(content: Message["content"]): string {
+  if (content.type === "text") return content.text;
+  if (content.type === "markdown") return content.markdown;
+  return "";
 }
 
-/**
- * Best-guess normalization of Photon's inbound webhook payload. The real
- * field names are unconfirmed; adjust this mapping once Photon's webhook
- * reference is checked (see packages/integrations/AGENTS.md).
- */
-export function normalizePhotonWebhookPayload(body: unknown): InboundReply {
-  const b = body as Record<string, unknown>;
-  const messageId = String(b.message_id ?? b.id ?? crypto.randomUUID());
-  const contactId = String(
-    (b.from as Record<string, unknown> | undefined)?.contact_id ?? b.contact_id ?? b.from ?? "unknown",
-  );
-  const text = String(b.text ?? b.body ?? "");
-  const receivedAt = String(b.received_at ?? b.timestamp ?? new Date().toISOString());
-
+/** Builds the InboundReply contract §5 shape from a real Spectrum inbound message. */
+export function toInboundReply(message: Message): InboundReply {
   return {
-    providerMessageId: messageId,
-    from: { contactId, phone: (b.from as Record<string, unknown> | undefined)?.phone as string | undefined },
-    body: text,
-    receivedAt,
+    providerMessageId: message.id,
+    from: { contactId: message.sender?.id ?? "unknown" },
+    body: extractReplyText(message.content),
+    receivedAt: message.timestamp.toISOString(),
   };
 }
 

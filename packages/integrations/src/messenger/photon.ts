@@ -1,30 +1,29 @@
 import type { Messenger, OutboundMessage, SendResult } from "../types.js";
+import { getPhotonProvider } from "./photonApp.js";
 
-export type PhotonMessengerConfig = {
-  apiKey: string;
-  channel: string;
-};
-
-// Real adapter skeleton. Photon 2.0's actual send endpoint, auth header, and
-// request/response shape are unconfirmed (no docs reviewed yet) — see
-// packages/integrations/AGENTS.md "Open questions" before wiring this up.
-// MESSENGER_MODE=live routes here; until the TODOs below are resolved this
-// throws instead of silently pretending to send.
+// Real adapter, built against spectrum-ts's actual d.ts (there is no plain
+// REST "send a message" endpoint — see packages/integrations/AGENTS.md).
+// space.create() both resolves an existing conversation and creates a new
+// one from a participant, so a fresh space is requested on every send
+// rather than caching one — cheap and correct for 1:1 manager contacts.
 export class PhotonMessenger implements Messenger {
-  constructor(private readonly config: PhotonMessengerConfig) {}
+  async send(msg: OutboundMessage): Promise<SendResult> {
+    const platformUserId = msg.to.phone ?? msg.to.handle;
+    if (!platformUserId) {
+      throw new Error(`OutboundMessage.to (contactId=${msg.to.contactId}) has neither phone nor handle set.`);
+    }
 
-  async send(_msg: OutboundMessage): Promise<SendResult> {
-    throw new Error(
-      "PhotonMessenger is not implemented: Photon 2.0's send endpoint and auth scheme " +
-        "have not been confirmed against their docs. Set MESSENGER_MODE=mock, or finish " +
-        "this adapter once PHOTON_API_KEY / PHOTON_CHANNEL and the API reference are available.",
-    );
-    // TODO once Photon docs are reviewed:
-    // const res = await fetch(PHOTON_SEND_URL, {
-    //   method: "POST",
-    //   headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-    //   body: JSON.stringify({ channel: this.config.channel, to: _msg.to, text: _msg.body }),
-    // });
-    // ...map res to SendResult, mocked: false
+    const provider = await getPhotonProvider();
+    const space = await provider.space.create(platformUserId);
+    const sent = await space.send(msg.body);
+    if (!sent) {
+      throw new Error(`space.send returned no message for contactId=${msg.to.contactId} (kind=${msg.kind}).`);
+    }
+
+    return {
+      providerMessageId: sent.id,
+      sentAt: sent.timestamp.toISOString(),
+      mocked: false,
+    };
   }
 }

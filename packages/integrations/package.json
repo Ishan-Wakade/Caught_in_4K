@@ -13,7 +13,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "register-webhook": "node scripts/register-webhook.mjs"
+    "register-webhook": "node scripts/register-webhook.mjs",
+    "send-test-message": "node scripts/send-test-message.mjs",
+    "listen-webhook": "node scripts/listen-webhook.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -1,0 +1,25 @@
+{
+  "name": "@recyclone/contracts",
+  "version": "1.0.0-draft",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./event-id": "./src/event-id.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p . && tsc -p tsconfig.nodenext.json",
+    "gen:schema": "tsx scripts/gen-schema.ts",
+    "check:python": "uv run --with jsonschema python scripts/check_python.py"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

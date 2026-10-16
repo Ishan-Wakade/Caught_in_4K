@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt_[0-9a-f]{16}$"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "camera_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clip_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "track_id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "recorded",
+            "live",
+            "labeled"
+          ]
+        }
+      },
+      "required": [
+        "camera_id",
+        "clip_id",
+        "track_id",
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "bin_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "clip_offset_s": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "destination_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "item": {
+      "type": "object",
+      "properties": {
+        "catalog_item_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "catalog_item_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "catalog_item_id",
+              "score"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "catalog_item_id",
+        "label",
+        "confidence",
+        "candidates"
+      ],
+      "additionalProperties": false
+    },
+    "business": {
+      "type": "object",
+      "properties": {
+        "business_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "logo_text",
+              "reference_match"
+            ]
+          }
+        }
+      },
+      "required": [
+        "business_id",
+        "confidence",
+        "basis"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "crop",
+              "frame"
+            ]
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 1
+          },
+          "frame": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "kind",
+          "uri",
+          "frame"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "event_id",
+    "source",
+    "bin_id",
+    "occurred_at",
+    "clip_offset_s",
+    "destination_confidence",
+    "item",
+    "business",
+    "evidence"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "properties": {
+              "mode": {
+                "const": "recorded"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "clip_offset_s": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "properties": {
+              "mode": {
+                "const": "live"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "clip_offset_s": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "$id": "https://github.com/Ishan-Wakade/Recyclone/contracts/disposal-event.schema.json",
+  "title": "DisposalEvent",
+  "description": "One item that entered one bin (contracts/README.md §1). Generated from contracts/src/event.ts — do not edit by hand. allOf restates the cross-field rules in checkEventInvariants. Serialize with allow_nan=False: NaN/Infinity are not JSON."
+}

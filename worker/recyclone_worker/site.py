@@ -44,13 +44,18 @@ def _get_json(url: str, timeout: float):
         return json.loads(resp.read())
 
 
-def load_catalog_ids(api_base: str | None, fixture_path: Path = CONTRACTS / "fixtures/demo-site.json") -> set[str]:
-    """Catalog IDs from core's GET /api/catalog (source of truth, contract §6), else the fixture."""
+def load_catalog(api_base: str | None, fixture_path: Path = CONTRACTS / "fixtures/demo-site.json") -> dict[str, str | None]:
+    """catalog_item_id -> business_id, from core's GET /api/catalog (source of truth, contract §6), else the fixture."""
     if api_base:
         try:
-            return {i["catalog_item_id"] for i in _get_json(api_base.rstrip("/") + "/api/catalog", 3.0)}
+            items = _get_json(api_base.rstrip("/") + "/api/catalog", 3.0)
+            return {i["catalog_item_id"]: i.get("business_id") for i in items}
         except Exception as e:  # noqa: BLE001
             print(f"note: GET /api/catalog failed ({type(e).__name__}); using the fixture catalog", file=sys.stderr)
     else:
         print("note: no API_BASE_URL; using the fixture catalog", file=sys.stderr)
-    return {i["catalog_item_id"] for i in json.loads(Path(fixture_path).read_text())["catalog"]}
+    return {i["catalog_item_id"]: i["business_id"] for i in json.loads(Path(fixture_path).read_text())["catalog"]}
+
+
+def load_catalog_ids(api_base: str | None, fixture_path: Path = CONTRACTS / "fixtures/demo-site.json") -> set[str]:
+    return set(load_catalog(api_base, fixture_path))

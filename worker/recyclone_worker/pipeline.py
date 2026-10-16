@@ -11,7 +11,7 @@ import numpy as np
 from . import entry
 from .client import EventSink
 from .events import build_event, validate_event
-from .identify import Embedder, Gallery, identify
+from .identify import Embedder, Gallery, business_from_candidates, identify
 from .site import Site
 from .tracking import Tracker
 
@@ -38,10 +38,12 @@ def clamp_crop(frame: np.ndarray, box) -> np.ndarray | None:
 
 class Pipeline:
     def __init__(self, site: Site, tracker: Tracker, embedder: Embedder, gallery: Gallery, sink: EventSink, *,
-                 clip_id: str, started_at: datetime, evidence_dir: Path, gone_after_frames: int = GONE_AFTER_FRAMES, on_frame=None):
+                 clip_id: str, started_at: datetime, evidence_dir: Path, gone_after_frames: int = GONE_AFTER_FRAMES, on_frame=None,
+                 catalog_business: dict[str, str | None] | None = None):
         self.site, self.tracker, self.embedder, self.gallery, self.sink = site, tracker, embedder, gallery, sink
         self.clip_id, self.started_at, self.evidence_dir = clip_id, started_at, Path(evidence_dir)
         self.gone_after_frames, self.on_frame = gone_after_frames, on_frame
+        self.catalog_business = catalog_business or {}
 
     def run(self, source) -> list[dict]:
         states: dict[int, _TrackState] = {}
@@ -87,11 +89,13 @@ class Pipeline:
             (self.evidence_dir / self.clip_id).mkdir(parents=True, exist_ok=True)
             cv2.imwrite(str(self.evidence_dir / rel), last)
             evidence = [{"kind": "crop", "uri": f"evidence/{rel}", "frame": frame_idx}]
+        item = identify([c for _, _, c in s.crops], self.embedder, self.gallery)
         event = build_event(
             camera_id=self.site.camera_id, clip_id=self.clip_id, track_id=track_id, bin_id=bin_id,
             started_at=self.started_at, offset_s=s.last_offset, destination_confidence=round(confidence, 4),
-            item=identify([c for _, _, c in s.crops], self.embedder, self.gallery), evidence=evidence,
+            item=item, evidence=evidence,
         )
+        event["business"] = business_from_candidates(item, self.catalog_business)
         validate_event(event)
         sent.append(event)
         self.sink.send(event)

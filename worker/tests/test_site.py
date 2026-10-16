@@ -30,3 +30,9 @@ def test_catalog_from_api_with_fallback(monkeypatch, contracts_dir, capsys):
     monkeypatch.setattr(site_mod, "_get_json", down)
     ids = load_catalog_ids("http://api", contracts_dir / "fixtures/demo-site.json")
     assert "item_beanco_cup" in ids and "fixture" in capsys.readouterr().err
+
+
+def test_catalog_businesses(contracts_dir, capsys):
+    from recyclone_worker.site import load_catalog
+    cat = load_catalog(None, contracts_dir / "fixtures/demo-site.json")
+    assert cat["item_beanco_cup"] == "biz_beanco" and cat["item_generic_can"] is None

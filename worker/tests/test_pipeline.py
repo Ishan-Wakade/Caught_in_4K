@@ -131,3 +131,18 @@ def test_evidence_is_the_last_frame_seen(tmp_path):
     script = {k: [Track(3, box_at(*p, half=60 - 5 * k), "cup")] for k, p in enumerate(pts)}  # shrinks as it falls
     events, _ = run(script, tmp_path=tmp_path)
     assert events[0]["evidence"][0]["frame"] == len(pts) - 1
+
+
+def test_business_evidence_reaches_the_event(tmp_path):
+    from fakes import BLUE
+    g = Gallery()
+    g.add("item_generic_cup", FakeEmbedder().embed(solid(RED)))
+    g.add("item_beanco_cup", FakeEmbedder().embed(solid((40, 0, 255))))  # close to red: a runner-up
+    sink = MemorySink()
+    p = Pipeline(SITE, ScriptedTracker(script_for(walk_into(TRASH_CENTER))), FakeEmbedder(), g, sink,
+                 clip_id="clip_t", started_at=STARTED, evidence_dir=tmp_path,
+                 catalog_business={"item_generic_cup": None, "item_beanco_cup": "biz_beanco"})
+    e = p.run(frames(40))[0]
+    assert e["item"]["catalog_item_id"] == "item_generic_cup"
+    assert e["business"]["business_id"] == "biz_beanco" and e["business"]["basis"] == ["reference_match"]
+    validate_event(e)

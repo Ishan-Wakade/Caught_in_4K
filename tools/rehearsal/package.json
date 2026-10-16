@@ -1,0 +1,17 @@
+{
+  "name": "@recyclone/rehearsal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local stand-in for apps/web's API routes: real @recyclone/core, in-memory, demo profile, mock adapters (Agent E).",
+  "scripts": {
+    "start": "tsx server.ts"
+  },
+  "dependencies": {
+    "@recyclone/contracts": "workspace:*",
+    "@recyclone/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0"
+  }
+}

@@ -24,6 +24,13 @@ Environment (see the root `.env.example`): `API_BASE_URL`, `WORKER_INGEST_TOKEN`
 | `... run ... --dry-run --no-stream` | Print events instead of posting (no API needed) |
 | `uv run recyclone-worker replay-labeled --file ../contracts/fixtures/demo-events.jsonl` | Stage backup: post hand-labeled events. Call `POST /api/demo/reset` first, and never mix with a live run. |
 | `uv run recyclone-worker flush` | Resend events queued in `state/outbox.jsonl` while the API was down |
+| `uv run recyclone-worker calibrate --clip demo.mp4` | Draw each bin opening on a frame; saves the regions into `contracts/fixtures/demo-site.json` |
+| `uv run recyclone-worker label --clip demo.mp4 --clip-id clip_demo_v1` | Hand-label every drop (keys in the window, answers in the terminal) → `contracts/fixtures/demo-events.jsonl` |
+| `... run ... --events-out state/run.jsonl` then `uv run recyclone-worker evaluate --labels ../contracts/fixtures/demo-events.jsonl --predicted state/run.jsonl` | Counting, wrong-bin, item and assessable rates vs the hand labels |
+| `uv run recyclone-worker suggest-thresholds --gallery state/gallery.npz` | Calibrate core's confidence thresholds for CLIP (TACO litter as not-in-catalog examples) |
+| `... run ... --tracker motion` | Background-subtraction tracker near the bins, for items YOLO can't name (wrappers, bags) |
+
+Filming plan and the full after-filming sequence: `docs/demo/shot-list.md`. Local end-to-end rehearsal against the real core: `pnpm --filter @recyclone/rehearsal start` (see `tools/rehearsal/server.ts`).
 
 The stream and evidence URLs are for `<img src=...>` on the presenter's laptop only: there is no CORS header, so `fetch()` from the dashboard cannot read them, and requests whose `Host` is not localhost get 403.
 
@@ -42,6 +49,7 @@ Delivery never stops the run:
 
 - Real: tracking (YOLO11n + ByteTrack on the Mac GPU, about 50 fps at imgsz 960, measured 16 Oct; people, worn items and furniture dropped), bin regions from `demo-site.json`, deterministic IDs, contract validation, background delivery with outbox, MJPEG stream, evidence crops (the last frame before the item vanished).
 - Waiting on footage: bin regions in `demo-site.json` are placeholders until the demo camera is set up; reference gallery needs the enrollment clip.
-- Not built: logo/text reading (business is always sent as unknown), a live camera source, one-authoritative-camera handling across several cameras.
+- Business evidence comes from reference matching only (a branded item among the top candidates); there is no logo/text reading.
+- Not built: a live camera source, one-authoritative-camera handling across several cameras.
 - `throw_score()` (bin entry) is a simple path heuristic, tested against falling in, falling at the rim, being held near and carried away, passing over, and standing still. Tune it on the real footage.
 - Known gap: if the tracker switches IDs mid-throw, one item can produce two events.

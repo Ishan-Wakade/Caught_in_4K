@@ -216,6 +216,19 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  tools/rehearsal:
+    dependencies:
+      '@recyclone/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@recyclone/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      tsx:
+        specifier: ^4.20.0
+        version: 4.23.15
+
 packages:
 
   '@electric-sql/pglite@0.3.16':

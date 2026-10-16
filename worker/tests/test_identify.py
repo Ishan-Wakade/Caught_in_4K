@@ -74,3 +74,33 @@ def test_enroll_from_segments(tmp_path):
     assert n == 8
     assert g.ids.count("item_red") == 4 and g.ids.count("item_blue") == 4
     assert identify([solid(BLUE)], emb, g)["catalog_item_id"] == "item_blue"
+
+
+# --- business evidence from reference matching (enables the review-queue scenario) -------------
+
+from recyclone_worker.identify import business_from_candidates
+
+CATALOG_BIZ = {"item_shakeshack_cup": "biz_shakeshack", "item_generic_cup": None, "item_napkin": None}
+
+
+def _item(*cands):
+    c = [{"catalog_item_id": i, "score": s} for i, s in cands]
+    return {"catalog_item_id": c[0]["catalog_item_id"] if c else None, "label": None,
+            "confidence": c[0]["score"] if c else None, "candidates": c}
+
+
+def test_branded_top_candidate_gives_its_business():
+    assert business_from_candidates(_item(("item_shakeshack_cup", 0.8), ("item_generic_cup", 0.5)), CATALOG_BIZ) == \
+        {"business_id": "biz_shakeshack", "confidence": 0.8, "basis": ["reference_match"]}
+
+
+def test_generic_top_with_branded_runner_up_is_weak_evidence():
+    assert business_from_candidates(_item(("item_generic_cup", 0.7), ("item_shakeshack_cup", 0.45)), CATALOG_BIZ) == \
+        {"business_id": "biz_shakeshack", "confidence": 0.45, "basis": ["reference_match"]}
+
+
+def test_no_branded_candidate_means_no_business():
+    none = {"business_id": None, "confidence": None, "basis": []}
+    assert business_from_candidates(_item(("item_generic_cup", 0.7), ("item_napkin", 0.2)), CATALOG_BIZ) == none
+    assert business_from_candidates(_item(), CATALOG_BIZ) == none
+    assert business_from_candidates(_item(("item_not_in_catalog", 0.9)), CATALOG_BIZ) == none

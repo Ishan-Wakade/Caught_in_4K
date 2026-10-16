@@ -1,0 +1,12 @@
+.superpowers/
+node_modules/
+.next/
+.vercel/
+.env
+.env.local
+__pycache__/
+.venv/
+worker/data/
+worker/weights/
+worker/evidence/
+*.pt

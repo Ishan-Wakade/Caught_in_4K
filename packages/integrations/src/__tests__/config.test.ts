@@ -13,7 +13,7 @@ describe("config", () => {
 
   it("refuses to construct a live messenger without credentials", () => {
     const env = { MESSENGER_MODE: "live" } as NodeJS.ProcessEnv;
-    expect(() => createMessenger(env)).toThrow(/PHOTON_PROJECT_ID/);
+    expect(() => createMessenger(env)).toThrow(/SPECTRUM_PROJECT_ID/);
   });
 
   it("refuses to construct a live illustrator without credentials", () => {
@@ -24,8 +24,8 @@ describe("config", () => {
   it("reports live mode once top-level credentials are present (channel-specific vars are checked lazily on send)", () => {
     const env = {
       MESSENGER_MODE: "live",
-      PHOTON_PROJECT_ID: "proj_1",
-      PHOTON_PROJECT_SECRET: "secret",
+      SPECTRUM_PROJECT_ID: "proj_1",
+      SPECTRUM_PROJECT_SECRET: "secret",
       PHOTON_CHANNEL: "imessage",
     } as NodeJS.ProcessEnv;
     expect(createMessenger(env)).toBeDefined();

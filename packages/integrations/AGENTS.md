@@ -38,7 +38,7 @@ Photon 2.0 is spectrum-ts (`photon.codes`), a messaging SDK, not a plain REST AP
 
 ## Environment variables
 
-`PHOTON_PROJECT_ID`, `PHOTON_PROJECT_SECRET` (Spectrum project credentials), `PHOTON_CHANNEL` (`imessage` | `whatsapp_business`), `PHOTON_WEBHOOK_SECRET` (verifies inbound `X-Spectrum-Signature`), `MESSENGER_MODE` (`mock` | `live`). If `PHOTON_CHANNEL=whatsapp_business`: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, optional `WHATSAPP_APP_SECRET`. Separately: `GROK_API_KEY`, `ILLUSTRATOR_MODE` (`mock` | `live`).
+`SPECTRUM_PROJECT_ID`, `SPECTRUM_PROJECT_SECRET` (Spectrum project credentials), `PHOTON_CHANNEL` (`imessage` | `whatsapp_business`), `PHOTON_WEBHOOK_SECRET` (verifies inbound `X-Spectrum-Signature`), `MESSENGER_MODE` (`mock` | `live`). If `PHOTON_CHANNEL=whatsapp_business`: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, optional `WHATSAPP_APP_SECRET`. Separately: `GROK_API_KEY`, `ILLUSTRATOR_MODE` (`mock` | `live`).
 
 ## Build log
 
@@ -50,10 +50,14 @@ Status as of this scaffold, so nobody mistakes a stub for a working integration:
 - **`GrokIllustrator` is still a stub that throws** — Grok Imagine's API hasn't been checked yet.
 - No root `package.json` / `pnpm-workspace.yaml` exist yet (E's files), so this package is self-contained for now: its own `package.json`, `tsconfig.json`, deps (`spectrum-ts`) and devDependencies (`typescript`, `vitest`, `@types/node`). Run `npm install && npm test` inside `packages/integrations/` directly. Once E wires the pnpm workspace, re-verify these still resolve as `@recyclone/integrations`.
 
+### Resolved
+
+- **Project credentials exist**: `SPECTRUM_PROJECT_ID` / `SPECTRUM_PROJECT_SECRET` (top of the repo's `.env`, gitignored — not reproduced here).
+- **Webhook registration is a one-time call**: `POST https://spectrum.photon.codes/projects/$SPECTRUM_PROJECT_ID/webhooks/` (basic auth `$SPECTRUM_PROJECT_ID:$SPECTRUM_PROJECT_SECRET`, body `{"webhookUrl": "..."}`). Wrapped in `npm run register-webhook -- <url>` (`scripts/register-webhook.mjs`) — run it once a public URL for `/api/photon/webhook` exists (a deployed `apps/web`, or a local tunnel during development; tunnel URLs change on restart, so re-run it each time one does). **Check that call's response for a signing secret** and set it as `PHOTON_WEBHOOK_SECRET` — the docs excerpt we have doesn't show the response shape, so this needs eyes-on when it's actually run.
+
 ### Open questions (need a human to supply this; not decidable from the repo)
 
 1. **Confirm the channel.** This code defaults to `imessage` because that's what the quickstart docs happened to show — the team needs to actually decide (`imessage` vs `whatsapp_business` vs another provider) and confirm iMessage really needs no extra per-channel config beyond the project credentials (as the quickstart's zero-arg `imessage.config()` implies).
-2. **Credentials** — `PHOTON_PROJECT_ID`, `PHOTON_PROJECT_SECRET`, `PHOTON_WEBHOOK_SECRET`, and (if WhatsApp) `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` — or confirmation the demo stays mock-only.
-3. **Grok Imagine API reference** — endpoint, auth, request/response shape — needed to replace the `GrokIllustrator` stub.
-4. **Contact routing** — how `ContactRef.phone`/`handle` maps to a real recipient (phone number for iMessage/WhatsApp) for each restaurant/property manager; produced by the area manager's data entry (root `AGENTS.md`), not by S, but S's adapter needs the mapping confirmed.
-5. **A webhook URL registered with Photon** once `apps/web` is deployed (or tunneled locally) — needed before any real inbound reply can reach `/api/photon/webhook`.
+2. **Grok Imagine API reference** — endpoint, auth, request/response shape — needed to replace the `GrokIllustrator` stub.
+3. **Contact routing** — how `ContactRef.phone`/`handle` maps to a real recipient (phone number for iMessage/WhatsApp) for each restaurant/property manager; produced by the area manager's data entry (root `AGENTS.md`), not by S, but S's adapter needs the mapping confirmed.
+4. **If `PHOTON_CHANNEL=whatsapp_business`**: `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` credentials — only needed if that channel is chosen over `imessage`.

@@ -15,8 +15,8 @@ async function buildProviderConfig(channel: PhotonChannel, env: NodeJS.ProcessEn
   if (channel === "imessage") {
     const { imessage } = await import("spectrum-ts/providers/imessage");
     // The quickstart shows imessage.config() with no arguments — Photon's
-    // hosted bridge is provisioned at the project level (PHOTON_PROJECT_ID/
-    // PHOTON_PROJECT_SECRET), not per-channel. Confirm this is really
+    // hosted bridge is provisioned at the project level (SPECTRUM_PROJECT_ID/
+    // SPECTRUM_PROJECT_SECRET), not per-channel. Confirm this is really
     // zero-config for this project before relying on it.
     return imessage.config();
   }
@@ -44,10 +44,10 @@ let appPromise: Promise<SpectrumInstance> | null = null;
 export function getPhotonApp(env: NodeJS.ProcessEnv = process.env): Promise<SpectrumInstance> {
   if (!appPromise) {
     appPromise = (async () => {
-      const projectId = env.PHOTON_PROJECT_ID;
-      const projectSecret = env.PHOTON_PROJECT_SECRET;
+      const projectId = env.SPECTRUM_PROJECT_ID;
+      const projectSecret = env.SPECTRUM_PROJECT_SECRET;
       if (!projectId || !projectSecret) {
-        throw new Error("PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET are required to construct the Photon app.");
+        throw new Error("SPECTRUM_PROJECT_ID and SPECTRUM_PROJECT_SECRET are required to construct the Photon app.");
       }
       const channel = readChannel(env);
       const providerConfig = await buildProviderConfig(channel, env);

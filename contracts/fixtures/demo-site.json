@@ -15,6 +15,10 @@
     {
       "business_id": "biz_greenbowl",
       "name": "Green Bowl"
+    },
+    {
+      "business_id": "biz_shakeshack",
+      "name": "Shake Shack"
     }
   ],
   "contacts": [
@@ -47,6 +51,14 @@
       "name": "Area manager",
       "role": "area_manager",
       "business_id": null,
+      "phone": null,
+      "handle": null
+    },
+    {
+      "contact_id": "ct_shakeshack_mgr",
+      "name": "Shake Shack manager",
+      "role": "restaurant_manager",
+      "business_id": "biz_shakeshack",
       "phone": null,
       "handle": null
     }
@@ -202,6 +214,85 @@
       "condition_rule": null,
       "volume_ml": 400,
       "volume_source": "assumption: loosely crumpled bag"
+    },
+    {
+      "catalog_item_id": "item_shakeshack_cup",
+      "name": "Shake Shack clear cup with lid and straw",
+      "business_id": "biz_shakeshack",
+      "reference_photos": [],
+      "branding_text": [
+        "SHAKE SHACK"
+      ],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 700,
+      "volume_source": "assumption: 24 oz cold cup, uncrushed"
+    },
+    {
+      "catalog_item_id": "item_shakeshack_box",
+      "name": "Shake Shack kraft burger box",
+      "business_id": "biz_shakeshack",
+      "reference_photos": [],
+      "branding_text": [
+        "SHAKE SHACK"
+      ],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 1200,
+      "volume_source": "assumption: outer box volume"
+    },
+    {
+      "catalog_item_id": "item_sauce_cup",
+      "name": "Small clear sauce cup with lid",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 60,
+      "volume_source": "assumption: 2 oz portion cup"
+    },
+    {
+      "catalog_item_id": "item_goldfish_bag",
+      "name": "Goldfish snack bag",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [
+        "Goldfish",
+        "Pepperidge Farm"
+      ],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 300,
+      "volume_source": "assumption: crumpled single-serve bag"
+    },
+    {
+      "catalog_item_id": "item_biscoff_wrapper",
+      "name": "Lotus Biscoff cookie wrapper",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [
+        "Biscoff",
+        "Lotus"
+      ],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 100,
+      "volume_source": "assumption: crumpled wrapper"
+    },
+    {
+      "catalog_item_id": "item_granola_wrapper",
+      "name": "Quaker Chewy granola bar wrapper",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [
+        "Quaker",
+        "Chewy"
+      ],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 120,
+      "volume_source": "assumption: crumpled wrapper"
     }
   ],
   "config_profiles": {

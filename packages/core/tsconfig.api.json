@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler" },
+  "include": ["../../apps/web/app/api/**/*.ts"],
+  "exclude": ["../../apps/web/app/api/photon/**"]
+}

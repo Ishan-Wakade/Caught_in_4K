@@ -77,3 +77,16 @@ Produce the `/api/feed` items in contract §3 for every state change the dashboa
 ## Environment variables
 
 `DATABASE_URL`, `WORKER_INGEST_TOKEN`, `CONFIG_PROFILE` (`normal` | `demo`).
+
+## Implementation handoff (Agent I)
+
+Core implementation, API handlers, SQL migration, local stubs, and tests now live
+in this ownership area. Read `README.md` for setup, configuration assumptions,
+response bodies, reliability limits, and verification scope. Read `HANDOFF.md`
+for requests to E/S/J. Shared types, schema, fixtures and integration factories
+were still unpublished at implementation time; final contract alignment is pending.
+
+Additional variables for E to collect: `CORE_STORAGE`, `RECYCLONE_ROOT`,
+`CORE_SITE_CONFIG_PATH`, `CORE_EVENT_SCHEMA_PATH`, `CORE_CONFIG_JSON`, and optional
+`MANAGER_API_TOKEN`. The API wiring also reads S's `MESSENGER_MODE` and
+`ILLUSTRATOR_MODE`. Never silently substitute mocks when live mode is requested.

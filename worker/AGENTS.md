@@ -51,6 +51,28 @@ a white receipt missed in a dark noisy scene; one item counted twice when its tr
 thrown into the same bin at the same moment counted once; worst on fast throws with motion blur (bin
 rule 4/7, core-identified 2/8). Fixes must be checked on NEW held-out seeds, not these.
 
+## Real-footage experiments (16 Oct, Eymen's 5 handheld phone clips, not yet wired into `cli.py`)
+
+Clips IMG_9096/9097 (wall slot) and IMG_9100/9101/9102 (recycling bin), one drop each; bin boxes and true
+drop frames are hand-given in a local, git-ignored config (`worker/state/real/bins.json`). These 5 clips are
+**dev data**: the rules below were tuned while looking at them, so the numbers are not a held-out accuracy.
+
+- `scripts/real_viz.py`: plain YOLO11n + CLIP per frame. Found the item in only 18–89% of frames: detection,
+  not recognition, is the bottleneck on real footage.
+- `scripts/hand_pipeline.py` (Eymen's design): pose skeleton + given bin boxes + CLIP on the hand crop
+  (holding vs empty). 2/5 drops, 7 false: over the bin the crop sees the bin interior, and the wrist is lost
+  when only a forearm is in view.
+- `scripts/item_tracker.py` (current best): FastSAM proposes class-agnostic regions, CLIP decides item vs
+  background (no YOLO classes), camera motion is removed (optical flow + RANSAC), and **only objects brought
+  by a person count**: the skeleton's arm decides which object each hand holds (at most one per hand per
+  frame), fragments of one object are merged into one item (nested boxes / hand-over, checked against the
+  item's held-time look), bin contents seen before the drop are remembered and never counted. Drop = a carried
+  item vanishes in, or comes to rest in, a bin box; vetoed if a hand holds it again outside the bin.
+  Result: 1 item per clip (2 in 9102), **5/5 drops into the right bin within ±1.5 s, 0 false**; 3/5 within
+  ±0.5 s (the drop is decided when the item vanishes, up to 0.8 s off the release); category right 4/5 (the
+  crumpled paper bag came out "wrapper"). FastSAM weights download to `worker/weights/` on first run.
+  Needs: a visible arm at some point while the item is held, and bin boxes per camera.
+
 ## Evaluation
 
 - Hand-label the demo clip into `contracts/fixtures/demo-events.jsonl` (item, bin, business where knowable, timestamp).

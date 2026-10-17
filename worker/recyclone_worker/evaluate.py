@@ -14,7 +14,8 @@ def _t(e: dict) -> float:
     return float(e["clip_offset_s"])
 
 
-def evaluate(labels: list[dict], predicted: list[dict], tolerance_s: float = 1.5, destinations: dict[str, str] | None = None) -> dict:
+def evaluate(labels: list[dict], predicted: list[dict], tolerance_s: float = 1.5, destinations: dict[str, str] | None = None,
+             details: bool = False) -> dict:
     free = sorted(range(len(labels)), key=lambda i: _t(labels[i]))
     pairs, leftovers = [], []
 
@@ -26,21 +27,26 @@ def evaluate(labels: list[dict], predicted: list[dict], tolerance_s: float = 1.5
                 best = (d, i)
         return best
 
-    for p in sorted(predicted, key=_t):  # first pass: right moment, right bin
+    order = sorted(range(len(predicted)), key=lambda j: _t(predicted[j]))
+    pair_idx, extra_idx = [], []
+    for j in order:  # first pass: right moment, right bin
+        p = predicted[j]
         hit = nearest(p, same_bin=True)
         if hit:
             free.remove(hit[1])
             pairs.append((labels[hit[1]], p))
+            pair_idx.append((hit[1], j))
         else:
-            leftovers.append(p)
+            leftovers.append(j)
     wrong_bin, extra = 0, 0
-    for p in leftovers:  # second pass: right moment, wrong bin
-        hit = nearest(p, same_bin=False)
+    for j in leftovers:  # second pass: right moment, wrong bin
+        hit = nearest(predicted[j], same_bin=False)
         if hit:
             free.remove(hit[1])
             wrong_bin += 1
         else:
             extra += 1
+            extra_idx.append(j)
     item_known = [(l, p) for l, p in pairs if l["item"]["catalog_item_id"] is not None]
     return {
         "labeled": len(labels),
@@ -57,7 +63,7 @@ def evaluate(labels: list[dict], predicted: list[dict], tolerance_s: float = 1.5
                             and destinations.get(l["item"]["catalog_item_id"]) == destinations.get(p["item"]["catalog_item_id"])
                             for l, p in item_known),
         "tolerance_s": tolerance_s,
-    }
+    } | ({"missed_labels": sorted(free), "extra_events": sorted(extra_idx), "matched_pairs": sorted(pair_idx)} if details else {})
 
 
 def format_report(r: dict) -> str:

@@ -54,3 +54,10 @@ def test_bin_rule_right_even_with_wrong_brand():
     preds = [ev(5, "bin_t", "item_generic_cup"), ev(10, "bin_t", "item_box")]
     r = evaluate(labels, preds, destinations=dest)
     assert r["item_correct"] == 0 and r["rule_correct"] == 1
+
+
+def test_details_name_the_missed_labels_and_extra_events():
+    labels = [ev(5, "bin_t", "a"), ev(20, "bin_r", "b")]
+    preds = [ev(5.1, "bin_t", "a"), ev(30, "bin_t", None)]
+    r = evaluate(labels, preds, details=True)
+    assert r["missed_labels"] == [1] and r["extra_events"] == [1] and r["matched_pairs"] == [(0, 0)]

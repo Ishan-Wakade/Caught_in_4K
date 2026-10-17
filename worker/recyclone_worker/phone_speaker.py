@@ -2,7 +2,10 @@
 that opened the speaker page over the same Wi-Fi.
 
 GET /s/<token>/              the page: tap once to allow sound, then it plays each sentence as it is said
-GET /s/<token>/events        server-sent events, one per sentence: {"id", "text", "audio"}
+GET /s/<token>/poll?after=N  long poll (what the page uses): waits up to POLL_S for sentences after N, plain JSON
+                             ("after=now" answers at once with the current id); works through proxies and tunnels
+GET /s/<token>/events        server-sent events, one per sentence: {"id", "text", "audio"} (a Cloudflare quick tunnel
+                             holds this stream back, so the page polls instead)
 GET /s/<token>/a/<key>.m4a   that sentence's audio (the `say` render converted to AAC, which iOS decodes)
 
 Bound to every interface so a phone can reach it; every path carries a random token printed at start, and only
@@ -24,6 +27,33 @@ from pathlib import Path
 KEEP = 50  # sentences kept for reconnecting phones
 PING_S = 15.0  # keeps idle connections (and Wi-Fi power saving) from closing the stream
 KEY = re.compile(r"[0-9a-f]{16}")
+POLL_S = 10.0  # a long poll answers at the next sentence or after this long with none
+TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+
+
+def tunnel_url(line: str) -> str | None:
+    m = TUNNEL_URL.search(line)
+    return m.group(0) if m else None
+
+
+def start_tunnel(port: int, wait_s: float = 30.0) -> tuple[subprocess.Popen | None, str | None]:
+    """A Cloudflare quick tunnel to the speaker: an https URL the phone reaches over any network (hotspots that are
+    IPv6-only, venue Wi-Fi that isolates devices). Needs `cloudflared`; (None, None) without it."""
+    try:
+        proc = subprocess.Popen(["cloudflared", "tunnel", "--no-autoupdate", "--url", f"http://localhost:{port}"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    except OSError:
+        return None, None
+    deadline = time.monotonic() + wait_s
+    while time.monotonic() < deadline and proc.stderr is not None:
+        line = proc.stderr.readline()
+        if not line:
+            break
+        if (u := tunnel_url(line)) is not None:
+            threading.Thread(target=lambda: [None for _ in proc.stderr], daemon=True).start()  # keep draining its log
+            return proc, u
+    proc.terminate()
+    return None, None
 
 
 def _afconvert(src: Path, dst: Path) -> bool:
@@ -87,6 +117,8 @@ class PhoneSpeaker:
         server = self
 
         class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"  # chunked events: proxies and tunnels pass them on at once
+
             def do_GET(self):
                 path = urllib.parse.urlparse(self.path).path
                 parts = path.split("/")  # "", "s", token, rest...
@@ -97,6 +129,8 @@ class PhoneSpeaker:
                     return self._send(200, "text/html; charset=utf-8", PAGE.encode())
                 if rest == "events":
                     return self._events()
+                if rest == "poll":
+                    return self._poll(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("after", ["now"])[0])
                 if rest.startswith("a/") and rest.endswith(".m4a"):
                     f = server.audio.get(rest[2:-4])
                     if f is not None and f.is_file():
@@ -111,6 +145,16 @@ class PhoneSpeaker:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _poll(self, after: str):
+                if not after.isdigit():  # a phone that just opened the page starts from now
+                    body = {"last": server.last_id(), "messages": []}
+                else:
+                    msgs = server.after(int(after), POLL_S)
+                    now = time.monotonic()
+                    body = {"last": msgs[-1]["id"] if msgs else int(after), "messages": [
+                        {"id": m["id"], "text": m["text"], "audio": m["audio"], "age_s": round(now - m["at"], 2)} for m in msgs]}
+                self._send(200, "application/json", json.dumps(body).encode())
+
             def _events(self):
                 # a reconnect resumes after the last sentence it got; a new phone hears only what is said from now on
                 header = self.headers.get("Last-Event-ID", "")
@@ -118,19 +162,26 @@ class PhoneSpeaker:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Accel-Buffering", "no")
+                self.send_header("Transfer-Encoding", "chunked")
                 self.end_headers()
+                self.close_connection = True
+
+                def chunk(b: bytes) -> None:
+                    self.wfile.write(f"{len(b):x}\r\n".encode() + b + b"\r\n")
+                    self.wfile.flush()
+
                 try:
-                    self.wfile.write(b"retry: 1000\n\n")
+                    chunk(b"retry: 1000\n\n")
                     while True:
                         new = server.after(last, PING_S)
+                        out = b""
                         for m in new:
                             data = {"id": m["id"], "text": m["text"], "audio": m["audio"],
                                     "age_s": round(time.monotonic() - m["at"], 2)}
-                            self.wfile.write(f"id: {m['id']}\ndata: {json.dumps(data)}\n\n".encode())
+                            out += f"id: {m['id']}\ndata: {json.dumps(data)}\n\n".encode()
                             last = m["id"]
-                        if not new:
-                            self.wfile.write(b": ping\n\n")
-                        self.wfile.flush()
+                        chunk(out or b": ping\n\n")
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     return
 
@@ -282,14 +333,25 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-function listen() {
-  const es = new EventSource("events");
-  es.onopen = () => { $("state").textContent = "Connected. Listening for the guide…"; };
-  es.onerror = () => { $("state").textContent = "Reconnecting to the Mac…"; };
-  es.onmessage = (ev) => {
-    const m = JSON.parse(ev.data), got = performance.now() / 1000 - m.age_s;
-    queue = queue.then(() => (performance.now() / 1000 - got > STALE_S ? null : play(m)));
-  };
+// Long poll (not EventSource): a tunnel or proxy can hold an event stream back, but passes each poll's answer at once.
+async function listen() {
+  let after = "now";
+  for (;;) {
+    try {
+      const r = await fetch(`poll?after=${after}`, { cache: "no-store" });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      $("state").textContent = "Connected. Listening for the guide…";
+      for (const m of j.messages) {
+        const got = performance.now() / 1000 - m.age_s;
+        queue = queue.then(() => (performance.now() / 1000 - got > STALE_S ? null : play(m)));
+      }
+      after = j.last;
+    } catch (e) {
+      $("state").textContent = "Reconnecting to the Mac…";
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
 }
 $("go").onclick = async () => {
   ctx = new (window.AudioContext || window.webkitAudioContext)();

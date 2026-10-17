@@ -319,15 +319,22 @@ def cmd_guide(args, make_guide_parts=None) -> int:
     from .voice import ElevenLabsVoice, SayVoice, SilentVoice, elevenlabs_config, mix_audio
 
     homography = np.array(json.loads(Path(args.homography).read_text())) if args.homography else None
-    live = args.source.isdigit() or "://" in args.source
+    live = args.source.isdigit() or "://" in args.source or args.source.startswith("avf:")
     table = gm.load_bin_table(Path(args.bins))
-    speaker = None
+    speaker = tunnel = None
     if args.speaker != "mac":  # a second phone plays the voice (recyclone_worker/phone_speaker.py)
-        from .phone_speaker import PhoneSpeaker, lan_urls
+        from .phone_speaker import PhoneSpeaker, lan_urls, start_tunnel
 
         speaker = PhoneSpeaker(args.speaker_port)
         speaker.start()
-        print("phone speaker: open on the speaker phone (same Wi-Fi), tap once:", file=sys.stderr)
+        if args.speaker_tunnel:
+            tunnel, public = start_tunnel(speaker.port)
+            if public:
+                print(f"phone speaker (any network, via Cloudflare tunnel): open on the speaker phone, tap once:\n"
+                      f"  {public}/s/{speaker.token}/", file=sys.stderr)
+            else:
+                print("note: could not start a Cloudflare tunnel (is cloudflared installed?); use a LAN URL", file=sys.stderr)
+        print("phone speaker on the same Wi-Fi:", file=sys.stderr)
         for url in lan_urls(speaker.port, speaker.token):
             print(f"  {url}", file=sys.stderr)
         if not (live or args.realtime):
@@ -418,6 +425,8 @@ def cmd_guide(args, make_guide_parts=None) -> int:
         voice.close()
         if speaker:
             speaker.stop()
+        if tunnel is not None:
+            tunnel.terminate()
     said = guide.said
     if args.render and tmp is not None:
         mix_audio(tmp, Path(args.render), voice.spoken)
@@ -562,6 +571,8 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     gd.add_argument("--realtime", action="store_true", help="for a file: play at clip speed and speak aloud")
     gd.add_argument("--speaker", choices=["mac", "phone", "both"], default="mac",
                     help="where the voice plays: this Mac, a second phone that opens the printed URL, or both")
+    gd.add_argument("--speaker-tunnel", action="store_true",
+                    help="also give the speaker page a public https URL (Cloudflare quick tunnel): works on any network")
     gd.add_argument("--speaker-port", type=int, default=int(os.environ.get("SPEAKER_PORT", "8766")))
     gd.add_argument("--render", help="write the annotated video with the voice mixed in to this .mp4")
     gd.add_argument("--no-stream", action="store_true")
@@ -625,6 +636,14 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
 
         for i, w, h in list_cameras():
             print(f"--source {i}   {w}x{h}")
+        from .sources import avf_devices
+
+        try:  # an iPhone through Continuity Camera is only listed here (OpenCV does not ask macOS for it)
+            for i, name in avf_devices():
+                if "capture screen" not in name.lower():
+                    print(f"--source avf:{i}   {name}" + ("   (or --source avf:iphone)" if "iphone camera" in name.lower() else ""))
+        except Exception:  # noqa: BLE001 - no ffmpeg: OpenCV's list above is all there is
+            pass
         return 0
     if args.cmd == "run-station":
         return cmd_run_station(args, analyze_items)

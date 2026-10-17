@@ -1,0 +1,6 @@
+# apps/web local ignores (owner: J). The root .gitignore is E's.
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.env*.local

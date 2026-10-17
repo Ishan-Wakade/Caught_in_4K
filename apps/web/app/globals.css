@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* Tokens from the Claude Design export ("Recyclone dashboard"). */
+@theme {
+  --font-display: var(--font-bricolage), "Trebuchet MS", sans-serif;
+  --font-sans: var(--font-dm-sans), "Segoe UI", sans-serif;
+  --font-mono: var(--font-dm-mono), "Courier New", monospace;
+
+  --color-paper: #f5f0e6;
+  --color-paper-deep: #efe8da;
+  --color-sage: #e8eedf;
+  --color-mint: #e3ebdd;
+  --color-card: #fffdf8;
+  --color-night: #2c3229;
+
+  --color-ink: #2f332b;
+  --color-ink-2: #4e5348;
+  --color-muted: #5e6357;
+  --color-muted-2: #6b6f63;
+  --color-rule: #ddd3c0;
+  --color-rule-soft: #e6decf;
+  --color-rule-sage: #c9d6be;
+
+  --color-forest: #3f5a32;
+  --color-forest-deep: #2f4a2a;
+  --color-leaf: #8fae80;
+  --color-leaf-soft: #d3dfcb;
+  --color-clay: #c8694a;
+  --color-clay-deep: #a4502f;
+  --color-clay-light: #f2a78a;
+
+  --color-trash: #5a5c58;
+  --color-trash-ink: #45473f;
+  --color-recycling: #4a77a3;
+  --color-recycling-ink: #2f5c88;
+  --color-compost: #4a8539;
+  --color-compost-ink: #3b6f2d;
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* In the base layer so utility classes (e.g. link colours on the dark Live header) win. */
+@layer base {
+  a {
+    color: var(--color-forest);
+  }
+  a:hover {
+    color: var(--color-forest-deep);
+  }
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+.text-pretty {
+  text-wrap: pretty;
+}
+
+@keyframes rise-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-rise-in { animation: rise-in 220ms ease-out; }

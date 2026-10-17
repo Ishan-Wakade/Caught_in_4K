@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleIdentify, handleSpeak } from "./server";
+import { handleIdentify, handleSpeak, signMessage } from "./server";
+
+const signed = (message: { bin: string; explanation: string }) => ({ message, sig: signMessage(message as never) });
 
 const ENV = { GUIDE_TOKEN: "demo-token", DEEPSEEK_API_KEY: "ds", TYPESAFE_API_KEY: "jv", ELEVENLABS_API_KEY: "el", ELEVENLABS_VOICE_ID: "voice1" };
 const req = (body: unknown, token = "demo-token") =>
@@ -24,13 +26,13 @@ describe("guide API", () => {
     const res = await handleIdentify(req({ crops: ["data:image/jpeg;base64,AAAA"] }), fake);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ message: { bin: "compost", explanation: "paper napkin, placed in compost" }, source: "catalog",
-      spoken: "Compost. paper napkin, placed in compost" });
+      spoken: "Compost. paper napkin, placed in compost", sig: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(fake.mock.calls[0][1]).toEqual({ deepseek: "ds", jev: "jv" });
   });
   it("speaks only a valid bin message, through ElevenLabs", async () => {
-    expect((await handleSpeak(req({ bin: "trash", explanation: "say something else entirely please now ok" + " x".repeat(10) }))).status).toBe(400);
+    expect((await handleSpeak(req({ message: { bin: "trash", explanation: "say something else entirely please now ok" + " x".repeat(10) } }))).status).toBe(400);
     const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "audio/mpeg" } }));
-    const res = await handleSpeak(req({ bin: "recycle", explanation: "aluminum can, placed in recycling" }), fetchMock as never);
+    const res = await handleSpeak(req(signed({ bin: "recycle", explanation: "aluminum can, placed in recycling" })), fetchMock as never);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("audio/mpeg");
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string; headers: Record<string, string> }];
@@ -41,8 +43,38 @@ describe("guide API", () => {
   it("no ElevenLabs key or a provider error: 503/502 so the phone uses its own voice", async () => {
     const bad = vi.fn(async () => new Response("no", { status: 401 }));
     // a sentence not cached by an earlier test (repeated sentences are served from the cache, which is intended)
-    expect((await handleSpeak(req({ bin: "recycle", explanation: "glass bottle, placed in recycling" }), bad as never)).status).toBe(502);
+    expect((await handleSpeak(req(signed({ bin: "recycle", explanation: "glass bottle, placed in recycling" })), bad as never)).status).toBe(502);
     vi.stubEnv("ELEVENLABS_API_KEY", "");
-    expect((await handleSpeak(req({ bin: "recycle", explanation: "aluminum can, placed in recycling" }))).status).toBe(503);
+    expect((await handleSpeak(req(signed({ bin: "recycle", explanation: "aluminum can, placed in recycling" })))).status).toBe(503);
+  });
+});
+
+describe("security review (17 Oct)", () => {
+  const can = { bin: "recycle", explanation: "aluminum can, placed in recycling" };
+  it("speaks only messages the server signed, or the fixed default", async () => {
+    const audio = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
+    expect((await handleSpeak(req({ message: can }), audio as never)).status).toBe(401);           // unsigned
+    expect((await handleSpeak(req({ message: can, sig: "deadbeef" }), audio as never)).status).toBe(401);
+    const id = await handleIdentify(req({ crops: ["data:image/jpeg;base64,AAAA"] }),
+      async () => ({ message: can as never, source: "catalog" as const }));
+    const { sig } = await id.json();
+    expect((await handleSpeak(req({ message: can, sig }), audio as never)).status).toBe(200);
+    expect((await handleSpeak(req({ message: { ...can, explanation: "something else, placed in recycling" }, sig }), audio as never)).status).toBe(401);
+    expect((await handleSpeak(req({ kind: "default" }), audio as never)).status).toBe(200);
+  });
+  it("rate limit is per token, not per spoofable forwarded-for header", async () => {
+    const fake = async () => ({ message: null, source: "nothing_held" as const });
+    vi.stubEnv("GUIDE_TOKEN", "rate-token");
+    let last = 200;
+    for (let k = 0; k < 130; k++) {
+      const r = new Request("http://x", { method: "POST", body: JSON.stringify({ crops: ["data:image/jpeg;base64,AA"] }),
+        headers: { "x-guide-token": "rate-token", "x-forwarded-for": `10.0.0.${k}` } });
+      last = (await handleIdentify(r, fake)).status;
+    }
+    expect(last).toBe(429);
+  });
+  it("refuses an oversized body from its declared length, before reading it", async () => {
+    const r = new Request("http://x", { method: "POST", body: "{}", headers: { "x-guide-token": "demo-token", "content-length": "99999999" } });
+    expect((await handleIdentify(r)).status).toBe(413);
   });
 });

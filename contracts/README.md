@@ -86,6 +86,19 @@ Rules:
 - `destination_confidence` is the confidence that the item actually entered `bin_id`. The worker does not send events for items only seen near a bin or in a hand.
 - `evidence[].uri` is relative to the worker's evidence directory; the worker serves it (see §4).
 
+### 1.1 Proposed generic type (v1.1, optional)
+
+When the worker cannot match an item to the catalog (`catalog_item_id: null`) but can describe it, it adds
+`item.proposed_type`: a generic type id built from material + form (`gen_textile_mask`), a short name, material,
+form, condition (`clean` | `food_residue` | `liquid` | `unknown`), `hazardous`, and a **suggested** bin
+(`trash` | `recycling` | `compost` | `special` for drop-off/not curbside, or null) with its confidence and the
+local-rules text it used (`rule_source`). It is a proposal, never a rule:
+
+- Core stores proposals per `generic_type_id` and does **not** score such events as correct or wrong until the area
+  manager approves the type (which turns it into a catalog item with a bin rule). Owner: I.
+- The dashboard lists proposals for approval (name, crops, suggested bin, confidence, rule source). Owner: J.
+- The field is optional and nullable: events without it are unchanged; older core code ignores nothing it needs.
+
 ## 2. HTTP API (owned by I, served from `apps/web/app/api/`)
 
 | Method | Path | Caller | Purpose |

@@ -15,12 +15,36 @@ export const EventSourceSchema = z.object({
   mode: z.enum(["recorded", "live", "labeled"]),
 });
 
+/**
+ * A generic item type the worker proposes for an item the catalog does not have (contracts/README.md §1).
+ * A proposal, never a rule: core keeps such events out of correctness scoring until the area manager approves
+ * the type (then it becomes a catalog item with a bin rule).
+ */
+export const ProposedTypeSchema = z.object({
+  /** Stable id from material + form, e.g. "gen_textile_mask"; the same kind of item always gets the same id. */
+  generic_type_id: z.string().regex(/^gen_[a-z0-9_]+$/),
+  /** Short human name, e.g. "disposable face mask". */
+  name: z.string().min(1),
+  material: z.enum(["plastic_film", "rigid_plastic", "paper", "cardboard", "metal", "glass", "organic", "textile", "foam", "mixed", "unknown"]),
+  /** Shape or use, e.g. "cup", "bag", "mask"; free text. */
+  form: z.string().min(1),
+  condition: z.enum(["clean", "food_residue", "liquid", "unknown"]),
+  hazardous: z.boolean(),
+  /** Suggested bin under the site's local rules; "special" = drop-off / not curbside; null = no suggestion. */
+  suggested_destination: z.enum(["trash", "recycling", "compost", "special"]).nullable(),
+  suggestion_confidence: confidence.nullable(),
+  /** Which local rules text the suggestion used, e.g. "cambridge-ma-2022". */
+  rule_source: z.string().min(1).nullable(),
+});
+
 export const ItemGuessSchema = z.object({
   catalog_item_id: z.string().min(1).nullable(),
   /** Detector's free-text guess; never used for scoring. */
   label: z.string().nullable(),
   confidence: confidence.nullable(),
   candidates: z.array(z.object({ catalog_item_id: z.string().min(1), score: confidence })),
+  /** Optional: only when catalog_item_id is null and the item could be described (v1.1). */
+  proposed_type: ProposedTypeSchema.nullable().optional(),
 });
 
 export const BusinessGuessSchema = z.object({

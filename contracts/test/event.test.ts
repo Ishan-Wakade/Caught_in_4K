@@ -15,6 +15,32 @@ describe("DisposalEventSchema", () => {
     expect(() => DisposalEventSchema.parse(e)).not.toThrow();
   });
 
+  const proposed = {
+    generic_type_id: "gen_textile_mask", name: "disposable face mask", material: "textile", form: "mask",
+    condition: "clean", hazardous: false, suggested_destination: "trash", suggestion_confidence: 0.82,
+    rule_source: "cambridge-ma-2022",
+  } as const;
+
+  it("accepts an unknown item with a proposed generic type (v1.1), and events without the field", () => {
+    const e = withPatch((e) => {
+      e.item = { catalog_item_id: null, label: "disposable face mask", confidence: null, candidates: [], proposed_type: { ...proposed } };
+    });
+    expect(() => DisposalEventSchema.parse(e)).not.toThrow();
+    expect(() => DisposalEventSchema.parse(withPatch((e) => (e.item.proposed_type = null)))).not.toThrow();
+  });
+
+  it.each([
+    ["generic_type_id", "face mask"],
+    ["material", "cloth"],
+    ["suggested_destination", "landfill"],
+    ["suggestion_confidence", 1.5],
+  ])("rejects a proposed type with bad %s", (field, value) => {
+    const e = withPatch((e) => {
+      e.item = { catalog_item_id: null, label: null, confidence: null, candidates: [], proposed_type: { ...proposed, [field]: value } as never };
+    });
+    expect(() => DisposalEventSchema.parse(e)).toThrow();
+  });
+
   it("rejects timestamp without timezone", () => {
     const e = withPatch((e) => (e.occurred_at = "2026-10-17T15:02:41"));
     expect(() => DisposalEventSchema.parse(e)).toThrow();

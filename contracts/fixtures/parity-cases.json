@@ -408,5 +408,101 @@
         }
       ]
     }
+  },
+  {
+    "name": "unknown item with proposed generic type",
+    "valid": true,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": null,
+        "label": "disposable face mask",
+        "confidence": null,
+        "candidates": [],
+        "proposed_type": {
+          "generic_type_id": "gen_textile_mask",
+          "name": "disposable face mask",
+          "material": "textile",
+          "form": "mask",
+          "condition": "clean",
+          "hazardous": false,
+          "suggested_destination": "trash",
+          "suggestion_confidence": 0.82,
+          "rule_source": "cambridge-ma-2022"
+        }
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
+  },
+  {
+    "name": "proposed type with unknown material",
+    "valid": false,
+    "event": {
+      "event_id": "evt_83e663dafa4ee079",
+      "source": {
+        "camera_id": "cam_patio_1",
+        "clip_id": "clip_demo_v1",
+        "track_id": 17,
+        "mode": "recorded"
+      },
+      "bin_id": "bin_patio_trash",
+      "occurred_at": "2026-10-17T15:02:41.300Z",
+      "clip_offset_s": 41.3,
+      "destination_confidence": 0.92,
+      "item": {
+        "catalog_item_id": null,
+        "label": "disposable face mask",
+        "confidence": null,
+        "candidates": [],
+        "proposed_type": {
+          "generic_type_id": "gen_textile_mask",
+          "name": "disposable face mask",
+          "material": "cloth",
+          "form": "mask",
+          "condition": "clean",
+          "hazardous": false,
+          "suggested_destination": "trash",
+          "suggestion_confidence": 0.82,
+          "rule_source": "cambridge-ma-2022"
+        }
+      },
+      "business": {
+        "business_id": "biz_beanco",
+        "confidence": 0.74,
+        "basis": [
+          "logo_text"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "crop",
+          "uri": "evidence/clip_demo_v1/17_entry.jpg",
+          "frame": 1239
+        }
+      ]
+    }
   }
 ]

@@ -222,6 +222,88 @@ def cmd_run_items(args, analyze_items=None) -> int:
     return 0
 
 
+def cmd_run_station(args, analyze_items=None) -> int:
+    """Several cameras of one station (multicam.py): each camera through the item tracker, unchanged; drops merged
+    across cameras and reported by the camera the person faced; a combined view with the active camera marked."""
+    import subprocess
+
+    from .item_playback import ItemPlayback
+    from .items import analyze, keyframe_boxes, site_bin_boxes
+    from .multicam import CameraRun, StationPlayback, fuse, load_station, station_started_at
+
+    station = load_station(Path(args.station))
+    catalog = load_catalog(os.environ.get("API_BASE_URL"))
+    cams = []
+    for c in station["cameras"]:
+        video = Path(c["video"]).expanduser()
+        if c.get("bins"):
+            bins_for = (lambda spec: lambda size, n: {b["bin_id"]: keyframe_boxes(b, n) for b in spec})(c["bins"])
+        else:
+            site = load_site(c["camera_id"])
+            bins_for = (lambda regions: lambda size, n: site_bin_boxes(regions, size, n))(site.regions)
+        print(f"analyzing {c['camera_id']}: {video} ...", file=sys.stderr)
+        analysis = (analyze_items or analyze)(video, Path(args.items_cache), bins_for)
+        cams.append(CameraRun(c["camera_id"], analysis, float(c.get("offset_s", 0.0)), video))
+        views = {v: cams[-1].facing.count(v) for v in ("front", "back", "unknown", "none")}
+        print(f"  {c['camera_id']}: {len(analysis.events)} drop(s); person facing it {views['front']} frames, back {views['back']}", file=sys.stderr)
+    fused = fuse(cams)
+    print(f"station: {sum(len(c.analysis.events) for c in cams)} camera drop(s) -> {len(fused)} drop(s)", file=sys.stderr)
+    if args.namer == "deepseek":
+        from .namer import DeepSeekNamer, pick_views, read_crops
+
+        llm = DeepSeekNamer(WORKER_DIR / "state/vlm-cache")
+        by_id = {c.camera_id: c for c in cams}
+        for d in fused:  # named once per physical drop, from the camera that reports it
+            c = by_id[d["camera_id"]]
+            a = c.analysis
+            views = pick_views(a.tracks, a.per_frame, a.data, a.bins, d["drop"]["item_id"], d["drop"]["frame"])
+            d["drop"]["llm"] = llm.name(read_crops(c.video, views))
+    sink = PrintingSink() if args.dry_run else make_sink(args)
+    if not args.dry_run and not args.no_background:
+        sink = BackgroundSink(sink)
+    if args.events_out:
+        sink = FileSink(sink, Path(args.events_out))
+    started_at = station_started_at(cams, args.realtime)
+    playbacks = {c.camera_id: ItemPlayback(c.analysis, sink, camera_id=c.camera_id, clip_id=args.clip_id,
+                                           started_at=started_at + timedelta(seconds=c.offset_s),
+                                           evidence_dir=Path(args.evidence_dir), catalog_business=catalog) for c in cams}
+    stream, writer = None, None
+    if not args.no_stream:
+        from .stream import StreamServer
+
+        stream = StreamServer(int(os.environ.get("WORKER_PORT", "8765")), Path(args.evidence_dir))
+        stream.start()
+        print(f"stream: http://localhost:{stream.port}/stream.mjpg", file=sys.stderr)
+
+    def on_frame(grid):
+        nonlocal writer
+        if stream:
+            stream.publish(grid)
+        if args.render:
+            if writer is None:
+                h, w = grid.shape[:2]
+                fps = max(c.fps for c in cams)
+                writer = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+                                           "-r", str(fps), "-i", "-", "-c:v", "libx264", "-crf", "26", "-preset", "veryfast",
+                                           "-pix_fmt", "yuv420p", str(args.render)], stdin=subprocess.PIPE)
+            writer.stdin.write(np.ascontiguousarray(grid).tobytes())
+
+    try:
+        events = StationPlayback(cams, fused, playbacks, on_frame=on_frame if (stream or args.render) else None,
+                                 realtime=args.realtime).run()
+    finally:
+        if stream:
+            stream.stop()
+        if writer:
+            writer.stdin.close()
+            writer.wait()
+        if hasattr(sink, "close"):
+            sink.close()
+    print(f"{len(events)} event(s) from station {station['station_id']}", file=sys.stderr)
+    summarize(sink.stats)
+    return 0
+
+
 def cmd_enroll(args, make_tracker, make_embedder) -> int:
     from .enroll import enroll_from_segments
 
@@ -344,6 +426,18 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
                           "'' to turn off")
     run.add_argument("--item-bins", help="--tracker items: bin boxes per frame (item-tracker config) for a moving camera; "
                                          "default: the camera's fixed bin regions from demo-site.json")
+    st = sub.add_parser("run-station", help="several cameras of one station: drops merged, reported by the camera the person faces")
+    st.add_argument("--station", required=True, help='JSON: {"station_id", "cameras": [{"camera_id", "video", "offset_s", "bins"}]}')
+    st.add_argument("--clip-id", required=True)
+    st.add_argument("--items-cache", default=str(WORKER_DIR / "state/items-cache"))
+    st.add_argument("--namer", choices=["clip", "deepseek"], default="clip")
+    st.add_argument("--evidence-dir", default=str(WORKER_DIR / "evidence"))
+    st.add_argument("--dry-run", action="store_true")
+    st.add_argument("--realtime", action="store_true")
+    st.add_argument("--no-stream", action="store_true")
+    st.add_argument("--no-background", action="store_true")
+    st.add_argument("--events-out")
+    st.add_argument("--render", help="also write the combined camera view to this .mp4")
     enroll = sub.add_parser("enroll", help="build reference gallery from an enrollment clip")
     enroll.add_argument("--clip", required=True)
     enroll.add_argument("--segments", required=True, help='JSON: [{"catalog_item_id", "start_s", "end_s"}]')
@@ -382,6 +476,8 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
         p.add_argument("--clip-weights", default=str(DEFAULT_CLIP))
     args = ap.parse_args(argv)
 
+    if args.cmd == "run-station":
+        return cmd_run_station(args, analyze_items)
     if args.cmd == "run" and args.tracker == "items":
         return cmd_run_items(args, analyze_items)
     if args.cmd in ("run", "enroll"):

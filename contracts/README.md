@@ -165,7 +165,7 @@ Every implementation returns `mocked: true` when it is the mock, so the dashboar
 
 These settle the places where two areas meet. Change them only through a contract PR.
 
-**Business attribution.** The worker always sends raw candidates and confidences and never applies thresholds; it sends `null` only when it has no candidate at all. Core alone applies thresholds, in this order:
+**Business attribution.** The worker always sends raw candidates and confidences and never applies thresholds; it sends `null` only when it has no candidate at all. One exception, for choosing *which evidence* to report: when no registered product matches at or above the profile's `item_confidence_threshold`, the worker reports a **generic category** instead (catalog items with `business_id: null`, e.g. `item_generic_wrapper`). It sets `item.label` to the matched description and `item.confidence` to the classifier's probability, and keeps the weak product matches in `candidates`. Core then applies the same threshold and the category's bin rule as for any item. Core alone applies thresholds, in this order:
 1. If the item is identified (`catalog_item_id` at or above core's item threshold) and that catalog item has a `business_id`, the catalog's business wins.
 2. Otherwise, if the event's own `business` is at or above core's business threshold (e.g. from a logo on generic-looking packaging), use it.
 3. Otherwise, if the event has a business guess below the threshold, the origin is uncertain → review queue (scenario 4). Example: an unbranded cup with a faint logo match.

@@ -59,3 +59,8 @@ def load_catalog(api_base: str | None, fixture_path: Path = CONTRACTS / "fixture
 
 def load_catalog_ids(api_base: str | None, fixture_path: Path = CONTRACTS / "fixtures/demo-site.json") -> set[str]:
     return set(load_catalog(api_base, fixture_path))
+
+
+def load_profile(profile: str, fixture_path: Path = CONTRACTS / "fixtures/demo-site.json") -> dict:
+    """The config profile ("normal" | "demo") core also loads, for thresholds the worker needs."""
+    return json.loads(Path(fixture_path).read_text())["config_profiles"][profile]

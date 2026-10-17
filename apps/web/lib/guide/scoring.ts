@@ -88,6 +88,8 @@ export function defaultTrash(data: GuideData, what?: string | null): GuideMessag
 }
 
 type Person = { votes: number[]; nVotes: number; lastHeld: number; firstHeld: number | null };
+/** One hand crop's CLIP verdict (debug view): P(item), the most likely category and its share of P(item). */
+export type HandScore = { pItem: number; top: string; topShare: number };
 
 /**
  * guide_identify.ItemWatcher without the LLM path: each observation of a person's hands adds the best hand's
@@ -97,6 +99,7 @@ type Person = { votes: number[]; nVotes: number; lastHeld: number; firstHeld: nu
 export class Watcher {
   private people = new Map<number, Person>();
   private lastObserved = new Map<number, number>();
+  private lastScores = new Map<number, HandScore[]>();
 
   constructor(private data: GuideData) {}
 
@@ -109,8 +112,15 @@ export class Watcher {
   observe(id: number, t: number, embeddings: ArrayLike<number>[]): void {
     if (!this.due(id, t)) return;
     this.lastObserved.set(id, t);
-    if (!embeddings.length) return;
+    if (!embeddings.length) {
+      this.lastScores.set(id, []);
+      return;
+    }
     const scored = embeddings.map((e) => score(e, this.data));
+    this.lastScores.set(id, scored.map(({ pItem, pCat }) => {
+      const top = pCat.reduce((best, v, i) => (v > pCat[best] ? i : best), 0);
+      return { pItem, top: this.data.cats[top], topShare: pItem > 0 ? pCat[top] / pItem : 0 };
+    }));
     const k = scored.reduce((best, s, i) => (s.pItem > scored[best].pItem ? i : best), 0);
     const { pItem, pCat } = scored[k];
     if (pItem < this.data.constants.item_p) return;
@@ -160,8 +170,14 @@ export class Watcher {
     if (p && t - p.lastHeld > after) this.people.delete(id);
   }
 
+  /** The CLIP verdicts of this person's hands at their last observation (same order as the crops), for debugging. */
+  scores(id: number): HandScore[] {
+    return this.lastScores.get(id) ?? [];
+  }
+
   forget(id: number): void {
     this.people.delete(id);
     this.lastObserved.delete(id);
+    this.lastScores.delete(id);
   }
 }

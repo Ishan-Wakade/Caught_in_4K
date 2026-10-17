@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LogoMark } from "@/components/shell/Logo";
 import { PageNav } from "@/components/shell/SiteHeader";
-import { usePageVisible, useBrowserGuide, type GuideStatus } from "@/hooks/useBrowserGuide";
+import { isDebugView, usePageVisible, useBrowserGuide, type GuideStatus } from "@/hooks/useBrowserGuide";
 import { APP_NAME } from "@/lib/config";
 import { BIN_HEX } from "@/lib/format";
 import type { Banner, Progress } from "@/lib/guide/engine";
@@ -82,7 +82,9 @@ export default function CameraPage() {
   const visible = usePageVisible();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { status, progress, people, banner, error, smart, sound, enableSound } = useBrowserGuide(visible, videoRef, canvasRef);
+  // Read once, before the key is erased from the address bar; only the hook's effects and the debug panel use it.
+  const [debug] = useState(isDebugView);
+  const { status, progress, people, banner, error, smart, sound, enableSound, debugInfo } = useBrowserGuide(visible, videoRef, canvasRef, debug);
   const shown = useHeldBanner(status === "live" ? banner : null);
   const dot = status === "live" ? "bg-compost" : status === "loading" || status === "starting" ? "bg-muted-2" : "bg-clay";
 
@@ -119,6 +121,12 @@ export default function CameraPage() {
         >
           {sound ? "🔊 Sound on" : "🔇 Sound off"}
         </button>
+      ) : null}
+
+      {debugInfo ? (
+        <pre className="absolute top-20 left-10 z-10 max-w-[min(90vw,780px)] rounded-md bg-black/60 px-3 py-2 font-mono text-[13px] leading-snug whitespace-pre-wrap text-card">
+          {[`debug · ${debugInfo.ms}`, ...(debugInfo.lines.length ? debugInfo.lines : ["no person"])].join("\n")}
+        </pre>
       ) : null}
 
       <div aria-live="polite">

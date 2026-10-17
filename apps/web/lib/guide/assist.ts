@@ -21,7 +21,15 @@ export type Speak = { message: GuideMessage; source: string; body: object };
 export type Decision = { banner: Shown | null; speak: Speak | null };
 export type ClipAnswer = { id: string; message: GuideMessage } | null;
 
-type Item = { start: number; crops: string[]; lastCrop: number; state: "collecting" | "asking" | "done"; result: Asked | null; spoken: boolean };
+type Item = {
+  start: number; crops: string[]; lastCrop: number; state: "collecting" | "asking" | "done"; result: Asked | null; spoken: boolean;
+  askedMs: number | null; latencyMs: number | null; gaveUp: boolean;
+};
+/** Where one person's current item is in the server path (the /camera debug view). */
+export type AssistInfo = {
+  state: Item["state"]; crops: number; asked: boolean; latencyMs: number | null; gaveUp: boolean;
+  result: { source: string; message: GuideMessage | null } | null;
+};
 
 const TRASH: Asked = { message: defaultTrash(null), source: "default", sig: null };
 
@@ -34,7 +42,7 @@ export class Assist {
   step(id: number, start: number, t: number, clip: ClipAnswer, crop: () => string[]): Decision {
     let item = this.items.get(id);
     if (!item || item.start !== start) {
-      item = { start, crops: [], lastCrop: -1e9, state: "collecting", result: null, spoken: false };
+      item = { start, crops: [], lastCrop: -1e9, state: "collecting", result: null, spoken: false, askedMs: null, latencyMs: null, gaveUp: false };
       this.items.set(id, item);
     }
     const held = t - start;
@@ -46,7 +54,8 @@ export class Assist {
     if (item.state !== "done" && held >= GIVE_UP_AFTER_S) {
       // Too slow (or no crop could be sent): decide now; a late server answer is ignored for this item.
       item.state = "done";
-      item.result = clip ? { message: clip.message, source: "clip", sig: null } : TRASH;
+      item.gaveUp = true;
+      item.result = clip ?{ message: clip.message, source: "clip", sig: null } : TRASH;
     }
 
     const r = item.state === "done" ? item.result : null;
@@ -68,9 +77,21 @@ export class Assist {
     this.items.delete(id);
   }
 
+  info(id: number): AssistInfo | null {
+    const item = this.items.get(id);
+    if (!item) return null;
+    return {
+      state: item.state, crops: item.crops.length, asked: item.askedMs !== null, latencyMs: item.latencyMs, gaveUp: item.gaveUp,
+      result: item.result ? { source: item.result.source, message: item.result.message } : null,
+    };
+  }
+
   private ask(item: Item): void {
     item.state = "asking";
+    const asked = performance.now();
+    item.askedMs = asked;
     const done = (r: Asked) => {
+      item.latencyMs = performance.now() - asked;
       if (item.state !== "asking") return;
       item.state = "done";
       item.result = r;

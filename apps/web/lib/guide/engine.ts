@@ -7,7 +7,8 @@ import type { InferenceSession, Tensor } from "onnxruntime-web";
 import { PersonTracker, POSE_SIZE, decodePose, letterbox } from "./pose";
 import { Watcher, defaultTrash, handBox, type Box, type GuideData, type GuideMessage, type Keypoints } from "./scoring";
 import { headBox, type Box as AreaBox } from "./approach";
-import { Assist, fromCoco, type Asked, type Speak } from "./assist";
+import { Assist, fromCoco, type Asked, type AssistInfo, type Speak } from "./assist";
+import type { CropResult } from "./redact";
 
 type Ort = typeof import("onnxruntime-web");
 
@@ -28,12 +29,22 @@ export type Progress = { loaded: number; total: number };
 export type GuidePerson = { id: number; kp: Keypoints; hands: Box[]; holding: boolean };
 /** source: "clip" (on this device), "llm" / "catalog" (DeepSeek + Jev on the server), "default" (trash fallback). */
 export type Banner = { message: GuideMessage; fallback: boolean; source?: string };
-export type GuideFrame = { people: GuidePerson[]; banner: Banner | null; poseMs: number; clipMs: number; speak: Speak[] };
+/** What the model saw for one hand this frame (the /camera debug view): CLIP's verdict and what redaction did. */
+export type HandDebug = {
+  box: Box; pItem: number | null; top: string | null; topShare: number | null;
+  crop: (Omit<CropResult, "url"> & { sent: boolean }) | null;
+};
+export type PersonDebug = { id: number; holding: boolean; heldFor: number; clip: string | null; assist: AssistInfo | null; hands: HandDebug[] };
+export type GuideFrame = {
+  people: GuidePerson[]; banner: Banner | null; poseMs: number; clipMs: number; speak: Speak[]; debug: PersonDebug[];
+  /** Head boxes blacked out of outgoing crops (server path only). */
+  heads: Array<{ box: AreaBox; reliable: boolean }>;
+};
 /** The server path (needs the demo key): ask DeepSeek + Jev about each held item, from face-redacted crops only. */
 export type AssistDeps = {
   identify: (crops: string[]) => Promise<Asked>;
-  /** JPEG data URL of `box` with every head blacked out, or null if it must not leave the device. */
-  capture: (video: HTMLVideoElement, box: AreaBox, heads: Array<{ box: AreaBox; reliable: boolean }>) => string | null;
+  /** JPEG data URL of `box` with every head blacked out (url null if it must not leave the device, with the reason). */
+  capture: (video: HTMLVideoElement, box: AreaBox, heads: Array<{ box: AreaBox; reliable: boolean }>) => CropResult;
 };
 
 /** Model bytes from the browser cache, else downloaded (with progress) and cached for the next visit. */
@@ -217,22 +228,35 @@ export class GuideSession {
     let banner: Banner | null = null;
     let longest = 0;
     const speak: Speak[] = [];
+    const debug: PersonDebug[] = [];
+    const observed = new Set(due.map((p) => p.id));
     // Every head in the frame (all people), blacked out of any crop that leaves the device.
     const heads = this.assist ? found.map((f) => headBox(fromCoco(f.kp))).filter((h) => h !== null) : [];
     for (const p of people) {
       this.watcher.resetIfIdle(p.id, t, NEW_ITEM_AFTER_S);
       p.holding = this.watcher.holding(p.id, t);
-      if (!p.holding) continue;
+      const scores = observed.has(p.id) ? this.watcher.scores(p.id) : [];
+      const hands: HandDebug[] = p.hands.map((box, i) => ({
+        box, pItem: scores[i]?.pItem ?? null, top: scores[i]?.top ?? null, topShare: scores[i]?.topShare ?? null, crop: null,
+      }));
       const held = this.watcher.heldFor(p.id, t);
-      const answerId = this.watcher.answerId(p.id);
+      const answerId = p.holding ? this.watcher.answerId(p.id) : null;
+      const pd: PersonDebug = { id: p.id, holding: p.holding, heldFor: held, clip: answerId, assist: null, hands };
+      debug.push(pd);
+      if (!p.holding) continue;
       const answer = answerId ? this.watcher.answer(p.id) : null;
       let shown: Banner | null;
       if (this.assist && this.deps) {
         const deps = this.deps;
         const crops = () => p.hands
-          .map(([x0, y0, x1, y1]) => deps.capture(video, { x0, y0, x1, y1 }, heads))
+          .map(([x0, y0, x1, y1], i) => {
+            const r = deps.capture(video, { x0, y0, x1, y1 }, heads);
+            hands[i].crop = { sent: r.url !== null, reason: r.reason, black: r.black, faces: r.faces };
+            return r.url;
+          })
           .filter((c): c is string => c !== null);
         const d = this.assist.step(p.id, this.watcher.itemStart(p.id) ?? t, t, answerId && answer ? { id: answerId, message: answer } : null, crops);
+        pd.assist = this.assist.info(p.id);
         shown = d.banner;
         if (d.speak) speak.push(d.speak);
       } else {
@@ -244,6 +268,6 @@ export class GuideSession {
       }
       if (shown && held >= longest) [banner, longest] = [shown, held];
     }
-    return { people, banner, poseMs: t1 - t0, clipMs: t2 - t1, speak };
+    return { people, banner, poseMs: t1 - t0, clipMs: t2 - t1, speak, debug, heads };
   }
 }

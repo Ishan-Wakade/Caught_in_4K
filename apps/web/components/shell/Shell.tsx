@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { ScenesProvider, SCENE_PATH } from "@/hooks/useScenes";
 import { SCENES } from "@/lib/sceneDirector";
+import { DEMO_TOOLS } from "@/lib/config";
 import { DemoNotice } from "./DemoNotice";
 import { SiteHeader } from "./SiteHeader";
 import { Toast } from "./Toast";
 
-/** Keys 1/2/3 open the Live / Bins / Messages scenes (ignored while typing). */
+/** Presenter keys (demo tools only): 1/2/3 open Cameras / Bins / Messages (ignored while typing). */
 function SceneKeys() {
   const router = useRouter();
   useEffect(() => {
@@ -28,7 +29,7 @@ function SceneKeys() {
 export function Shell({ children }: { children: ReactNode }) {
   return (
     <ScenesProvider>
-      <SceneKeys />
+      {DEMO_TOOLS && <SceneKeys />}
       <div className="flex min-h-screen flex-col bg-paper text-ink">
         <DemoNotice />
         <SiteHeader />

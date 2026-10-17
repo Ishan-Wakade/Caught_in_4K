@@ -6,6 +6,10 @@ Read the root `AGENTS.md` and `contracts/README.md` first. J owns everything und
 
 The dashboard the judges see. Build against `contracts/fixtures/feed-sample.json` and mock responses until I's API is ready.
 
+## The site is the manager's product (user decision, 2026-10-16)
+
+The demo is a recorded video of the real system running (`docs/demo/video-script.md`), not a live walkthrough of the website. So the website is what a manager sees: one navigation (Overview · Cameras · Bins · Messages · Review queue · Catalog), with no Demo / Manage split. The presenter's tools ("Reset demo", the "Demo mode" label, keys `1`/`2`/`3`, the "reply as manager (mocked)" box) appear only with `NEXT_PUBLIC_DEMO_TOOLS=true`. Honesty labels for sample data, mocked services and backup input always stay. The scene behavior below still applies to Cameras / Bins / Messages.
+
 ## Demo screen (confirmed: layout B, full-screen scenes switched by the presenter)
 
 Three full-screen scenes with a visible tab bar:
@@ -34,7 +38,7 @@ Site overview (all bins, fullness, recurring mistakes, pending reviews, active a
 
 ## Honesty in the UI
 
-- A visible demo-mode banner when `demo: true`.
+- A visible demo-mode banner when `demo: true` and demo tools are on. Without demo tools the strip still says when data is sample data, backup input, or from mock services.
 - Visible "mocked" labels for any mocked integration, and a "labeled backup input" label when events have `source.mode = "labeled"`.
 - Uncertainty and insufficient-data states are shown, never hidden or turned into 0%.
 - Before/after comparisons never claim causation.
@@ -49,6 +53,7 @@ Site overview (all bins, fullness, recurring mistakes, pending reviews, active a
 
 - `NEXT_PUBLIC_WORKER_URL`: base URL of the CV worker (contract §4), e.g. `http://localhost:8000`. Unset → Live shows "stream not configured" and review evidence shows its path only.
 - `NEXT_PUBLIC_DATA_SOURCE` (J-local, `mock` | `api`, default `mock`): `mock` runs a scripted in-browser backend; `api` calls I's `/api/*` routes.
+- `NEXT_PUBLIC_DEMO_TOOLS` (J-local, `true` to enable, default off): presenter tools (see "The site is the manager's product"). E: please add it to the root `.env.example`.
 
 ## Implementation status (J, updated 2026-10-16)
 
@@ -56,7 +61,8 @@ What exists (branch `j/dashboard-scaffold`), and what is still provisional:
 
 - Next.js 16 App Router + Tailwind v4 + Vitest, inside the root pnpm workspace. Next.js 16 differs from older versions: check `node_modules/next/dist/docs/` before using an unfamiliar API. From `apps/web/`: `pnpm dev`, `pnpm test`, `pnpm typecheck` (web code only), `pnpm build`.
 - Every page shares one light header with the nav centred (user feedback: Live must not look like a different app). Live shows the footage as a rounded card, not full-bleed.
-- Routes: `/live`, `/bins`, `/messages` (demo scenes; keys `1`/`2`/`3`), `/` overview, `/items/[id]`, `/reviews`, `/catalog`. Old `/demo`, `/items`, `/recommendations` redirect. "Reset demo" sits in the demo notice strip.
+- Routes: `/` overview, `/live` (labeled "Cameras"), `/bins`, `/messages` (scenes; keys `1`/`2`/`3` with demo tools), `/items/[id]`, `/reviews`, `/catalog`. Old `/demo`, `/items`, `/recommendations` redirect. "Reset demo" sits in the notice strip, with demo tools only.
+- The overview's Restaurants table ends with a "Shared items" row for unbranded items, whose recommendations go to the area manager.
 - `dev`/`build` run with `--webpack`: core and contracts import siblings as `./x.js` while the files are `.ts`; only webpack honours `experimental.extensionAlias` (Turbopack ignores it).
 - `NEXT_PUBLIC_DATA_SOURCE=mock` (default) runs `lib/mock/` (a ~3-minute scripted run on E's demo site covering all six scenarios); `api` calls I's routes. Both produce the view models in `lib/view.ts`.
 - `lib/adapters/core.ts` converts the contract DTOs (`contracts/src/api.ts`, which core returns) into those view models. Tested against responses captured from a running core on E's site file (`lib/adapters/__fixtures__/core-responses.json`). Gaps the contract leaves, and how the UI fills them: per-item bin counts (the Bins page counts this session's feed), interventions on the item list (`lib/api.ts` fetches item details), outcome / labeled input / mocked on feed items (parsed from core's summary text).
@@ -65,7 +71,7 @@ What exists (branch `j/dashboard-scaffold`), and what is still provisional:
 - `lib/site.ts` reads business names, contact names, and demo-profile settings from `contracts/fixtures/demo-site.json`, because core's API does not return them.
 - Toast and unseen-tab logic: `lib/sceneDirector.ts` (pure, tested; never changes the page).
 - One app-wide `/api/feed` poller (`hooks/useFeed.tsx`, ~1 s) runs on every page, driving the backend's lazy time-based work. The first load is backlog and raises no toasts or tab dots.
-- The design's daily bar chart and restaurant-level percentage have no data source yet: the item page shows every drop seen this session instead, and the overview shows each restaurant's weakest item.
+- The design's daily bar chart and restaurant-level percentage have no data source yet: the item page shows every drop seen this session instead, and the overview lists each restaurant's items with their own scores (up to 3, weakest first; user feedback 2026-10-16: one "weakest item" number per restaurant was confusing).
 
 **Name (user decision, 2026-10-16):** the dashboard is called **Caught in 4K** on screen (`APP_NAME` in `lib/config.ts`). Code, packages and the repo keep "recyclone".
 

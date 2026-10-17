@@ -15,6 +15,13 @@ export function evidenceUrl(uri: string): string | null {
   return `${WORKER_URL}/evidence/${uri.replace(/^\/?(evidence\/)?/, "")}`;
 }
 
+/**
+ * `NEXT_PUBLIC_DEMO_TOOLS=true` turns on the presenter's tools: "Reset demo",
+ * keys 1/2/3, and the "reply as manager (mocked)" box. Off by default, so the
+ * site is what a manager sees (user decision, 2026-10-16).
+ */
+export const DEMO_TOOLS = process.env.NEXT_PUBLIC_DEMO_TOOLS === "true";
+
 export const FEED_POLL_MS = 1000;
 
 /** Product name shown in the UI (user's choice, 2026-10-16). Code and packages keep "recyclone". */

@@ -11,13 +11,12 @@ import { APP_NAME } from "@/lib/config";
 
 type NavLink = { href: string; label: string; scene?: "live" | "bins" | "messages"; match?: (p: string) => boolean };
 
-const DEMO: NavLink[] = [
-  { href: "/live", label: "Live", scene: "live" },
+// The manager's pages, in one list (user decision, 2026-10-16: no Demo / Manage split).
+const PAGES: NavLink[] = [
+  { href: "/", label: "Overview", match: (p) => p === "/" || p.startsWith("/items") },
+  { href: "/live", label: "Cameras", scene: "live" },
   { href: "/bins", label: "Bins", scene: "bins" },
   { href: "/messages", label: "Messages", scene: "messages" },
-];
-const MANAGE: NavLink[] = [
-  { href: "/", label: "Overview", match: (p) => p === "/" || p.startsWith("/items") },
   { href: "/reviews", label: "Review queue" },
   { href: "/catalog", label: "Catalog" },
 ];
@@ -33,7 +32,7 @@ function useClock(): string {
   return now;
 }
 
-/** One navigation for the whole app: demo scenes and management pages (from the design). */
+/** One navigation for the whole app (from the design). */
 export function SiteHeader() {
   const path = usePathname();
   const { unseen } = useScenes();
@@ -64,16 +63,12 @@ export function SiteHeader() {
   // Three columns so the nav stays centred on every page, whatever sits either side.
   return (
     <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-7 border-b border-rule-soft px-10 py-2.5">
-      <Link href="/live" aria-label={`${APP_NAME}, demo start`} className="flex min-h-11 items-center gap-2.5 justify-self-start text-forest-deep no-underline hover:text-forest-deep">
+      <Link href="/" aria-label={`${APP_NAME}, overview`} className="flex min-h-11 items-center gap-2.5 justify-self-start text-forest-deep no-underline hover:text-forest-deep">
         <LogoMark />
         <span className="font-display text-2xl leading-none font-extrabold">{APP_NAME}</span>
       </Link>
       <nav aria-label="Pages" className="flex flex-wrap items-center justify-center">
-        <span className="pr-1.5 text-xs text-muted-2">Demo</span>
-        {DEMO.map(link)}
-        <span aria-hidden="true" className="mx-4 h-[22px] w-px bg-rule" />
-        <span className="pr-1.5 text-xs text-muted-2">Manage</span>
-        {MANAGE.map(link)}
+        {PAGES.map(link)}
       </nav>
       <span className="justify-self-end font-mono text-[17px] text-muted tabular-nums">{clock}</span>
     </header>

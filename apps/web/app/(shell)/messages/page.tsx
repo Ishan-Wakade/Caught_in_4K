@@ -9,7 +9,7 @@ import { ALERT_STATE_LABEL, BIN_LABEL, dayTime, fullnessPercent, shortTime } fro
 import type { Alert, AlertMessage, BinStatus, ItemSummary } from "@/lib/types";
 import { LogoMark } from "@/components/shell/Logo";
 import { Dot, Empty, LoadError, Mono } from "@/components/ui";
-import { APP_NAME } from "@/lib/config";
+import { APP_NAME, DEMO_TOOLS } from "@/lib/config";
 
 const isClosed = (a: Alert) => a.state === "action_confirmed" || a.state === "emptied";
 
@@ -189,7 +189,7 @@ function Phone({ alert, mocked }: { alert: Alert; mocked: boolean }) {
             ))}
             <div ref={bottom} />
           </div>
-          {mocked && !isClosed(alert) && (
+          {mocked && DEMO_TOOLS && !isClosed(alert) && (
             <div className="border-t border-rule-soft bg-paper px-3 pt-2 pb-4">
               <div className="mb-1.5 flex flex-wrap gap-1.5">
                 {QUICK[alert.kind].map((q) => (
@@ -231,7 +231,7 @@ function Phone({ alert, mocked }: { alert: Alert; mocked: boolean }) {
       </div>
       <figcaption className="max-w-[450px] text-center text-xs text-muted-2">
         {mocked
-          ? `The ${alert.contact.name}'s phone, as they'd see it · mock texting service, no real phone receives these${isClosed(alert) ? "" : " · typing here stands in for their reply"}`
+          ? `The ${alert.contact.name}'s phone, as they'd see it · mock texting service, no real phone receives these${DEMO_TOOLS && !isClosed(alert) ? " · typing here stands in for their reply" : ""}`
           : `The ${alert.contact.name}'s phone, as they see it · sent through Photon`}
       </figcaption>
     </figure>

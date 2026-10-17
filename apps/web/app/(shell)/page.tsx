@@ -32,12 +32,23 @@ export default function OverviewPage() {
     .sort((a, b) => (pct(a) ?? 101) - (pct(b) ?? 101));
   const changes = allItems.filter((i) => i.interventions.length > 0);
 
-  const restaurants = SITE.businesses.map((b) => {
-    const theirs = allItems.filter((i) => i.business_id === b.business_id && i.assessed_count > 0);
-    const lowest = [...theirs].sort((x, y) => (pct(x) ?? 101) - (pct(y) ?? 101))[0];
-    const latest: Alert | undefined = allAlerts.find((a) => a.contact.business_id === b.business_id);
-    return { b, lowest, drops: theirs.reduce((n, i) => n + i.assessed_count, 0), latest };
-  });
+  // Core scores items, not restaurants, so each row lists its items (weakest first) rather than one number.
+  const row = (key: string, name: string, theirs: ItemSummary[], latest: Alert | undefined) => {
+    const sorted = [...theirs].sort((x, y) => (pct(x) ?? 101) - (pct(y) ?? 101));
+    return { key, name, items: sorted, drops: theirs.reduce((n, i) => n + i.assessed_count, 0), latest };
+  };
+  const restaurants = SITE.businesses.map((b) =>
+    row(
+      b.business_id,
+      b.name,
+      allItems.filter((i) => i.business_id === b.business_id && i.assessed_count > 0),
+      allAlerts.find((a) => a.contact.business_id === b.business_id),
+    ),
+  );
+  // Unbranded items have no restaurant; their recommendations go to the area manager.
+  const shared = allItems.filter((i) => !i.business_id && i.assessed_count > 0);
+  if (shared.length)
+    restaurants.push(row("shared", "Shared items", shared, allAlerts.find((a) => a.kind === "recommendation" && !a.contact.business_id)));
 
   return (
     <div className="flex flex-1 flex-col">
@@ -105,38 +116,54 @@ export default function OverviewPage() {
           <section aria-labelledby="rest-h" className="flex min-w-0 flex-[1.5_1_560px] flex-col">
             <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1">
               <h2 id="rest-h" className="m-0 font-display text-2xl font-bold">Restaurants</h2>
-              <span className="text-[13px] text-muted">their weakest item · goal {SITE.config_profiles.demo.correct_threshold_pct ?? "—"}% for every item</span>
+              <span className="text-[13px] text-muted">each item scored on its own · goal {SITE.config_profiles.demo.correct_threshold_pct ?? "—"}% for every item</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] border-collapse text-base">
                 <thead>
                   <tr className="text-left">
                     <th scope="col" className="py-1.5 pr-3 text-xs font-medium text-muted">Restaurant</th>
-                    <th scope="col" className="px-3 py-1.5 text-xs font-medium text-muted">Sorted correctly</th>
-                    <th scope="col" className="px-3 py-1.5 text-right text-xs font-medium text-muted">Drops</th>
+                    <th scope="col" className="px-3 py-1.5 text-xs font-medium text-muted">Items · sorted correctly</th>
                     <th scope="col" className="py-1.5 pl-5 text-xs font-medium text-muted">Latest text</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {restaurants.map(({ b, lowest, drops, latest }, i) => {
-                    const p = lowest ? pct(lowest) : null;
-                    const below = p !== null && lowest && p < lowest.threshold_percent;
+                  {restaurants.map(({ key, name, items: theirs, drops, latest }, i) => {
+                    const shown = theirs.slice(0, 3);
                     return (
-                      <tr key={b.business_id} className={`border-t border-rule ${i === restaurants.length - 1 ? "border-b" : ""}`}>
-                        <th scope="row" className="py-3 pr-3 text-left font-display text-[21px] font-bold">{b.name}</th>
+                      <tr key={key} className={`border-t border-rule align-top ${i === restaurants.length - 1 ? "border-b" : ""}`}>
+                        <th scope="row" className="py-3 pr-3 text-left font-display text-[21px] font-bold">
+                          {name}
+                          <span className="block font-sans text-xs font-normal text-muted">
+                            {key === "shared" ? "no restaurant · texts go to the area manager · " : ""}
+                            {drops} {drops === 1 ? "drop" : "drops"}
+                          </span>
+                        </th>
                         <td className="p-3">
-                          {lowest ? (
-                            <Link href={`/items/${lowest.catalog_item_id}`} className="flex items-baseline gap-2.5 text-ink no-underline hover:text-ink">
-                              <span className={`font-display leading-none font-extrabold ${p === null ? "text-xl font-bold text-muted" : `text-[40px] ${below ? "text-clay-deep" : ""}`}`}>
-                                {scoreLabel(lowest.score)}
-                              </span>
-                              <span className={`text-[13px] ${below ? "text-clay-deep" : "text-muted"}`}>{lowest.name.replace(`${b.name} `, "")}</span>
-                            </Link>
-                          ) : (
-                            <span className="text-sm text-muted">no drops yet</span>
-                          )}
+                          {shown.length === 0 && <span className="text-sm text-muted">no drops yet</span>}
+                          <div className="flex flex-col gap-1.5">
+                            {shown.map((it) => {
+                              const p = pct(it);
+                              const below = p !== null && p < it.threshold_percent;
+                              return (
+                                <Link key={it.catalog_item_id} href={`/items/${it.catalog_item_id}`} className="flex items-baseline gap-2.5 text-ink no-underline hover:text-ink">
+                                  <span className={`min-w-[3.6ch] font-display leading-none font-extrabold ${p === null ? "text-base font-bold text-muted" : `text-[28px] ${below ? "text-clay-deep" : ""}`}`}>
+                                    {scoreLabel(it.score)}
+                                  </span>
+                                  <span className={`text-[15px] ${below ? "text-clay-deep" : "text-ink-2"}`}>{it.name.replace(`${name} `, "")}</span>
+                                  <span className="text-[13px] whitespace-nowrap text-muted">
+                                    · {it.assessed_count} {it.assessed_count === 1 ? "drop" : "drops"}
+                                  </span>
+                                </Link>
+                              );
+                            })}
+                            {theirs.length > shown.length && (
+                              <Link href="/catalog" className="text-[13px] font-bold">
+                                +{theirs.length - shown.length} more {theirs.length - shown.length === 1 ? "item" : "items"} →
+                              </Link>
+                            )}
+                          </div>
                         </td>
-                        <td className="p-3 text-right font-mono text-ink-2">{drops}</td>
                         <td className="py-3 pl-5">
                           {latest ? (
                             <Link href={`/messages?alert=${latest.alert_id}`} className="flex items-center gap-2 text-ink no-underline hover:text-ink">

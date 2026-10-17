@@ -112,7 +112,7 @@
           "bin_id": "bin_patio_trash",
           "item_id": "item_tacostop_box"
         },
-        "summary": "Taco Stop fiber clamshell → Trash (incorrect)",
+        "summary": "Taco Stop fiber clamshell → Trash (correct)",
         "demo": true
       },
       {
@@ -293,8 +293,8 @@
       "catalog_item_id": "item_tacostop_box",
       "name": "Taco Stop fiber clamshell",
       "business_id": "biz_tacostop",
-      "destination": "compost",
-      "correct_sorting_pct": 0.0,
+      "destination": "trash",
+      "correct_sorting_pct": 1.0,
       "status": "insufficient_data",
       "assessed_count": 1,
       "by_station": [
@@ -496,7 +496,7 @@
       "branding_text": [
         "TACO STOP"
       ],
-      "destination": "compost",
+      "destination": "trash",
       "condition_rule": null,
       "volume_ml": 900,
       "volume_source": "assumption: outer box volume"
@@ -509,7 +509,7 @@
       "branding_text": [
         "GREEN BOWL"
       ],
-      "destination": "compost",
+      "destination": "trash",
       "condition_rule": null,
       "volume_ml": 1000,
       "volume_source": "assumption: nominal bowl volume"

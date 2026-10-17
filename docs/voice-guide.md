@@ -1,0 +1,51 @@
+# Voice guide: how to run it (Phase 1)
+
+Current state of `recyclone-worker guide` (worker/). The product direction is in the root `AGENTS.md` and the
+roadmap (`docs/superpowers/specs/2026-10-17-voice-guidance-roadmap-design.md`); this page is only the how-to and
+the measured results so far.
+
+## Run
+
+```bash
+cd worker
+uv run recyclone-worker cameras                      # cameras this computer sees (iPhone via Continuity Camera too)
+uv run recyclone-worker guide --source 1 --area pick --show --cctv --render ~/Downloads/take1.mp4
+```
+
+- `--source`: camera index, `rtsp://` / `http://` URL of an IP camera, or a video file (`--realtime` to speak aloud).
+- `--area pick`: draw ONE box around all the bins on the first frame; the printed `--area x0,y0,x1,y1` can be reused.
+- `--show`: live window (q stops); `--cctv`: camera name + clock on the video; `--render`: annotated video with the
+  voice mixed in (also written on q / Ctrl-C).
+- `--homography file.json`: optional floor calibration (3x3, image pixels -> floor meters); without it, the person's
+  own height is the ruler.
+- `--namer deepseek` (default): new items via DeepSeek + Jev. Keys: `~/.config/recyclone/deepseek.env`
+  (`DEEPSEEK_API_KEY`), `~/.config/recyclone/jev.env` (`TYPESAFE_API_KEY`), never in the repo.
+
+## What it says
+
+JSON-forced `{"bin": "compost" | "trash" | "recycle" | "none", "explanation": ...}`, spoken as
+`"<Bin>. <explanation>"`, e.g. "Recycle. aluminum can, placed in recycling". Dangerous items (battery, electronics,
+chemicals): "None. <item> is dangerous to place in any of these bins. Place it in <drop-off> instead". Trash when
+below 50% confidence or no answer by arrival. Catalog bins: `worker/rules/cambridge-ma-2022.bins.json` (each row
+cites the city's guide).
+
+## Privacy
+
+Only item crops leave the machine (DeepSeek), and only after every person's head region and every face found by the
+YuNet detector are blacked out. If the detector is missing or a head cannot be sized, no crop is sent (the item is
+then announced as trash).
+
+## Filming checklist
+
+Phone fixed high in a corner, landscape, plugged in, not moved between takes; bins AND the floor in front of them AND
+people's feet in view; a 1 m tape square on the floor for calibration; a reference take holding each known item ~3 s;
+takes with known items, unknown items, a passer-by, two people, a fast approach; keep a few takes unseen for the final
+score.
+
+## Measured so far (dev only)
+
+10 hand-held phone clips, tuned while looking at them, not the fixed demo camera: told before the drop 7/10, right
+bin 5/7, median lead time 6.1 s (min 1.8 s), fast path 24-32 fps (camera 30). Close-ups with no feet in view are not
+announced, by design (an announcement as the item goes in would be too late). Wrong answers so far: a white paper
+bag called a napkin by DeepSeek, a paper card not identified in time. `uv run python scripts/eval_guide.py CONFIG.json
+--namer deepseek --render-dir DIR` reproduces the scoring.

@@ -4,11 +4,22 @@ import numpy as np
 
 
 class FakeEmbedder:
-    """Embeds an image as its normalized mean BGR color: same-colored crops match."""
+    """Embeds an image as its normalized mean BGR color: same-colored crops match.
+    Text containing "red"/"green"/"blue" embeds as that color, so prompts can be matched too."""
+
+    WORDS = {"red": (0, 0, 255), "green": (0, 255, 0), "blue": (255, 0, 0)}
 
     def embed(self, image: np.ndarray) -> np.ndarray:
         v = image.reshape(-1, 3).mean(axis=0).astype(np.float32) + 1e-3
         return v / np.linalg.norm(v)
+
+    def embed_text(self, texts: list[str]) -> np.ndarray:
+        out = []
+        for t in texts:
+            color = next((c for w, c in self.WORDS.items() if w in t), (1, 1, 1))
+            v = np.array(color, np.float32) + 1e-3
+            out.append(v / np.linalg.norm(v))
+        return np.stack(out)
 
 
 def solid(bgr: tuple[int, int, int], size: int = 32) -> np.ndarray:

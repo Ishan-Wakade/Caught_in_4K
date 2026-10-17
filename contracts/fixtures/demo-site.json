@@ -293,6 +293,105 @@
       "condition_rule": null,
       "volume_ml": 120,
       "volume_source": "assumption: crumpled wrapper"
+    },
+    {
+      "catalog_item_id": "item_generic_bottle",
+      "name": "Plastic bottle (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 500,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_container",
+      "name": "Plastic takeout container (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 750,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_paper_cup",
+      "name": "Paper coffee cup (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "trash",
+      "condition_rule": "plastic-lined paper cups are not accepted in recycling here",
+      "volume_ml": 350,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_box",
+      "name": "Paper takeout box (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "compost",
+      "condition_rule": "food-soiled paperboard goes to compost",
+      "volume_ml": 900,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_paper",
+      "name": "Clean paper or cardboard (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 200,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_glass",
+      "name": "Glass bottle or jar (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "recycling",
+      "condition_rule": null,
+      "volume_ml": 400,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_wrapper",
+      "name": "Snack wrapper or chip bag (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 150,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_utensil",
+      "name": "Plastic cutlery (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "trash",
+      "condition_rule": null,
+      "volume_ml": 20,
+      "volume_source": "assumption: typical size, generic category"
+    },
+    {
+      "catalog_item_id": "item_generic_food",
+      "name": "Food scraps (generic)",
+      "business_id": null,
+      "reference_photos": [],
+      "branding_text": [],
+      "destination": "compost",
+      "condition_rule": null,
+      "volume_ml": 300,
+      "volume_source": "assumption: typical size, generic category"
     }
   ],
   "config_profiles": {

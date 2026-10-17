@@ -36,3 +36,9 @@ def test_catalog_businesses(contracts_dir, capsys):
     from recyclone_worker.site import load_catalog
     cat = load_catalog(None, contracts_dir / "fixtures/demo-site.json")
     assert cat["item_beanco_cup"] == "biz_beanco" and cat["item_generic_can"] is None
+
+
+def test_profile_thresholds(contracts_dir):
+    from recyclone_worker.site import load_profile
+    demo = load_profile("demo", contracts_dir / "fixtures/demo-site.json")
+    assert 0 < demo["item_confidence_threshold"] <= 1

@@ -1,6 +1,6 @@
 """Dev-clip evaluation and annotated videos for the item tracker (logic: recyclone_worker/items.py).
 
-    uv run python scripts/item_tracker.py OUT_DIR CONFIG.json [--recompute] [--no-video] [--debug] [--test]
+    uv run python scripts/item_tracker.py OUT_DIR CONFIG.json [--recompute] [--no-video] [--debug] [--test] [--namer deepseek]
 
 Scores detected drops against the config's true drop frames (strict ±0.5 s, loose ±1.5 s) and writes
 OUT_DIR/item_summary.md, item_results.json and, unless --no-video, OUT_DIR/<name>_items.mp4.
@@ -14,7 +14,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from recyclone_worker.items import (MIN_AREA, at_fps, SKELETON, Clip, Scorer, decide, ego_motion, iou, item_boxes,
+from recyclone_worker.items import (CATALOG, WORKER, MIN_AREA, at_fps, SKELETON, Clip, Scorer, decide, ego_motion, iou, item_boxes,
                                     keyframe_boxes, perceive, track, weight)
 
 TOLERANCE = 15                      # strict: within 0.5 s of the true release
@@ -130,6 +130,15 @@ def main():
         motion = ego_motion(video, out_dir / "cache" / f"{name}_motion.npy")
         tracks, per_frame = track(data, bins, scorer, motion)
         events, roles = decide(tracks, data, bins, float(data["fps"]), motion, per_frame)
+        if "--namer" in sys.argv and sys.argv[sys.argv.index("--namer") + 1] == "deepseek":  # name each drop with the vision LLM
+            from recyclone_worker.namer import DeepSeekNamer, pick_views, read_crops
+
+            llm = DeepSeekNamer(WORKER / "state/vlm-cache")
+            for e in events:
+                answer = llm.name(read_crops(video, pick_views(tracks, per_frame, data, bins, e["item_id"], e["frame"])))
+                if answer is not None:
+                    e["item"] = answer["catalog_item_id"] or f"unknown ({answer['what']})"
+                    e["item_bin_rule"] = CATALOG.get(answer["catalog_item_id"], {}).get("destination")
         if "--no-video" not in sys.argv:
             render(video, out_dir / f"{name}_items.mp4", data, bins, tracks, per_frame, roles, events, debug="--debug" in sys.argv)
         count = {r: sum(v == r for v in roles.values()) for r in ("carried", "re-found", "already in bin")}

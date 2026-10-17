@@ -236,3 +236,61 @@ def test_a_drop_needs_an_item_seen_as_an_item_outside_the_bin():
     # a bin lid/hinge a hand passes over never looks like an item outside the bin (no category votes): no drop
     assert len(_carried_into_bin([2.0])) == 1
     assert _carried_into_bin([0.0]) == []
+
+
+# ---------------------------------------------------------------- 17 Oct: veto at the vanish spot, LLM naming, back view
+
+from recyclone_worker import namer  # noqa: E402
+
+
+def test_llm_answer_becomes_the_item_and_unknown_ids_are_refused(tmp_path):
+    llm = namer.DeepSeekNamer(tmp_path, use_key_file=False, catalog=[("item_napkin", "Paper napkin"), ("item_generic_cup", "Clear cup")])
+    assert llm.available is False and llm.name([np.zeros((8, 8, 3), np.uint8)]) is None  # no key, no cache: CLIP stays
+    good = llm._clean({"catalog_item_id": "item_napkin", "what": "crumpled napkin", "material": "paper", "confidence": 1.7})
+    assert good["catalog_item_id"] == "item_napkin" and good["confidence"] == 1.0
+    assert llm._clean({"catalog_item_id": "item_face_mask", "what": "mask"})["catalog_item_id"] is None  # never invents an id
+    item = namer.item_from_answer(good, {"candidates": [{"catalog_item_id": "item_generic_cup", "score": 0.6}]})
+    assert item["catalog_item_id"] == "item_napkin" and item["label"] == "crumpled napkin"
+    assert [c["catalog_item_id"] for c in item["candidates"]] == ["item_napkin", "item_generic_cup"]
+    none = namer.item_from_answer(llm._clean({"catalog_item_id": None, "what": "face mask", "confidence": 0.9}), {"candidates": []})
+    assert none["catalog_item_id"] is None and none["confidence"] is None and none["label"] == "face mask"
+
+
+def test_cached_llm_answers_replay_without_a_key(tmp_path):
+    crops = [np.full((20, 20, 3), 120, np.uint8)]
+    llm = namer.DeepSeekNamer(tmp_path, use_key_file=False, catalog=[("item_napkin", "Paper napkin")])
+    images = [namer._jpeg(c) for c in crops]
+    import hashlib
+    import json as _json
+    prompt = namer.PROMPT.format(n=1, catalog="item_napkin: Paper napkin")
+    key = hashlib.sha256(_json.dumps([namer.MODEL, prompt] + ([] if namer.THINKING else ["no-think"])).encode() + b"".join(images)).hexdigest()[:24]
+    (tmp_path / f"{key}.json").write_text(_json.dumps({"catalog_item_id": "item_napkin", "what": "napkin", "confidence": 0.8}))
+    assert llm.name(crops)["catalog_item_id"] == "item_napkin" and llm.usage["cached"] == 1
+
+
+def test_llm_item_is_used_by_playback(tmp_path):
+    a = fake_analysis()
+    a.events[0]["llm"] = {"catalog_item_id": "item_generic_box", "what": "kraft box", "material": "paper", "brand_visible": None, "confidence": 0.7}
+    sent, _ = play(a, tmp_path)
+    assert sent[0]["item"]["catalog_item_id"] == "item_generic_box" and sent[0]["item"]["label"] == "kraft box"
+    validate_event(sent[0])
+
+
+def test_back_view_drop_off_by_default_and_needs_an_arm_at_the_bin():
+    assert it.BACK_VIEW_DROPS is False
+    n = 40
+    kps = np.zeros((n, 17, 3), np.float32)
+    for i in range(n):  # a person's back: shoulders, hips, knees seen; the item last seen at frame 10 on the body
+        for j, (x, y) in {5: (100, 100), 6: (200, 100), 11: (110, 250), 12: (190, 250), 13: (110, 350), 14: (190, 350)}.items():
+            kps[i, j] = (x, y, 1.0)
+    app = np.zeros(512, np.float32)
+    app[0] = 1
+    t = {"id": 0, "frames": list(range(11)), "boxes": [[140, 150, 170, 190]] * 11, "appearance": app, "cat": np.array([2.0])}
+    bins = {"bin_t": [(260, 120, 360, 220)] * n}
+    data = {"kps": kps.copy()}
+    assert it.hidden_drops([t], data, bins, 30.0, {0: 0}, set(), {0: 2.0}) == []  # arm never reaches the bin
+    for i in range(12, 20):
+        data["kps"][i, 10] = (300, 170, 1.0)  # right wrist at the opening right after the item disappears
+    d = it.hidden_drops([t], data, bins, 30.0, {0: 0}, set(), {0: 2.0})
+    assert len(d) == 1 and d[0]["bin"] == "bin_t" and d[0]["how"] == "hidden by the body"
+    assert it.hidden_drops([t], data, bins, 30.0, {0: 0}, set(), {0: 0.0}) == []  # never seen as an item: no drop

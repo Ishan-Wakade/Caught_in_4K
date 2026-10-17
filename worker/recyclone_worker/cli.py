@@ -1,4 +1,4 @@
-"""recyclone-worker: run | enroll | replay-labeled | flush. See worker/README.md."""
+"""recyclone-worker: run | enroll | replay-labeled | flush | ... See worker/README.md."""
 
 import argparse
 import json
@@ -134,6 +134,66 @@ def cmd_run(args, make_tracker, make_embedder) -> int:
     return 0
 
 
+def item_bins_from_file(path: Path, clip_id: str):
+    """Bin boxes from an item-tracker config (scripts/item_tracker.py format), for a moving/handheld camera:
+    the entry named clip_id, or the whole file if it has a top-level "bins" list."""
+    from .items import keyframe_boxes
+
+    config = json.loads(Path(path).read_text())
+    spec = config.get(clip_id, config)
+    if "bins" not in spec:
+        raise SystemExit(f'{path} has no entry "{clip_id}" and no top-level "bins"')
+    return lambda size, n: {b["bin_id"]: keyframe_boxes(b, n) for b in spec["bins"]}
+
+
+def cmd_run_items(args, analyze_items=None) -> int:
+    """--tracker items: analyze the whole clip first (cached, ~2 fps), then play it at clip speed and send each
+    drop's event when the video reaches it (Eymen, 17 Oct: pre-process, play live)."""
+    from .item_playback import ItemPlayback
+    from .items import analyze, site_bin_boxes
+
+    source = RecordedClipSource(Path(args.clip))
+    site = load_site(args.camera)
+    if args.gallery:
+        print("note: --tracker items names items from text prompts; --gallery is ignored", file=sys.stderr)
+    bins_for = item_bins_from_file(Path(args.item_bins), args.clip_id) if args.item_bins \
+        else (lambda size, n: site_bin_boxes(site.regions, size, n))
+    t0 = time.monotonic()
+    print(f"analyzing {args.clip} (cached in {args.items_cache}; a new clip takes ~0.5 s per frame) ...", file=sys.stderr)
+    analysis = (analyze_items or analyze)(Path(args.clip), Path(args.items_cache), bins_for)
+    print(f"analysis: {len(analysis.events)} drop(s) in {time.monotonic() - t0:.0f} s", file=sys.stderr)
+    unknown_bins = {e["bin"] for e in analysis.events} - {r.bin_id for r in site.regions}
+    if unknown_bins:
+        print(f"WARNING: bins not in {args.camera}'s site config (core will reject them): {sorted(unknown_bins)}", file=sys.stderr)
+    catalog = load_catalog(os.environ.get("API_BASE_URL"))
+    stream = None
+    if not args.no_stream:
+        from .stream import StreamServer
+
+        stream = StreamServer(int(os.environ.get("WORKER_PORT", "8765")), Path(args.evidence_dir))
+        stream.start()
+        print(f"stream: http://localhost:{stream.port}/stream.mjpg", file=sys.stderr)
+    sink = PrintingSink() if args.dry_run else make_sink(args)
+    if not args.dry_run and not args.no_background:
+        sink = BackgroundSink(sink)
+    if args.events_out:
+        sink = FileSink(sink, Path(args.events_out))
+    started_at = datetime.now(UTC) if args.realtime else datetime.now(UTC) - timedelta(seconds=source.duration_s)
+    playback = ItemPlayback(analysis, sink, camera_id=site.camera_id, clip_id=args.clip_id, started_at=started_at,
+                            evidence_dir=Path(args.evidence_dir), catalog_business=catalog,
+                            on_frame=stream.publish if stream else None)
+    try:
+        events = playback.run(_realtime(source, source.fps) if args.realtime else source)
+    finally:
+        if stream:
+            stream.stop()
+        if hasattr(sink, "close"):
+            sink.close()
+    print(f"{len(events)} event(s) from {args.clip}", file=sys.stderr)
+    summarize(sink.stats)
+    return 0
+
+
 def cmd_enroll(args, make_tracker, make_embedder) -> int:
     from .enroll import enroll_from_segments
 
@@ -232,7 +292,7 @@ def cmd_flush(args) -> int:
     return 0 if left == 0 else 1
 
 
-def main(argv=None, *, make_tracker=None, make_embedder=None) -> int:
+def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None) -> int:
     ap = argparse.ArgumentParser(prog="recyclone-worker")
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run", help="process a recorded clip")
@@ -247,6 +307,9 @@ def main(argv=None, *, make_tracker=None, make_embedder=None) -> int:
     run.add_argument("--no-background", action="store_true", help="send events inline (debugging)")
     run.add_argument("--events-out", help="also write every event to this JSONL file (for `evaluate`)")
     run.add_argument("--no-categories", action="store_true", help="report unregistered items as unknown instead of a generic category")
+    run.add_argument("--items-cache", default=str(WORKER_DIR / "state/items-cache"), help="--tracker items: perception cache")
+    run.add_argument("--item-bins", help="--tracker items: bin boxes per frame (item-tracker config) for a moving camera; "
+                                         "default: the camera's fixed bin regions from demo-site.json")
     enroll = sub.add_parser("enroll", help="build reference gallery from an enrollment clip")
     enroll.add_argument("--clip", required=True)
     enroll.add_argument("--segments", required=True, help='JSON: [{"catalog_item_id", "start_s", "end_s"}]')
@@ -276,14 +339,17 @@ def main(argv=None, *, make_tracker=None, make_embedder=None) -> int:
     lab.add_argument("--clip-id", required=True)
     lab.add_argument("--camera", default="cam_patio_1")
     lab.add_argument("--out", default=str(WORKER_DIR.parent / "contracts/fixtures/demo-events.jsonl"))
-    for p in (run, enroll):
-        p.add_argument("--tracker", choices=["yolo", "world", "motion"], default="yolo",
-                       help="world = YOLO-World with packaging prompts; motion = background subtraction near the bins")
+    for p, choices in ((run, ["yolo", "world", "motion", "items"]), (enroll, ["yolo", "world", "motion"])):
+        p.add_argument("--tracker", choices=choices, default="yolo",
+                       help="world = YOLO-World with packaging prompts; motion = background subtraction near the bins; "
+                            "items (run only) = item tracker: analyze the clip first (~2 fps, cached), then play it back live")
         p.add_argument("--world-weights", default=str(WORKER_DIR / "weights/yolov8s-worldv2.pt"))
         p.add_argument("--yolo", default=str(DEFAULT_YOLO))
         p.add_argument("--clip-weights", default=str(DEFAULT_CLIP))
     args = ap.parse_args(argv)
 
+    if args.cmd == "run" and args.tracker == "items":
+        return cmd_run_items(args, analyze_items)
     if args.cmd in ("run", "enroll"):
         from .identify import ClipEmbedder
         from .tracking import YoloTracker

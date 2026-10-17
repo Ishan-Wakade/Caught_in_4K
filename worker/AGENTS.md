@@ -51,7 +51,7 @@ a white receipt missed in a dark noisy scene; one item counted twice when its tr
 thrown into the same bin at the same moment counted once; worst on fast throws with motion blur (bin
 rule 4/7, core-identified 2/8). Fixes must be checked on NEW held-out seeds, not these.
 
-## Real-footage experiments (16 Oct, Eymen's 5 handheld phone clips, not yet wired into `cli.py`)
+## Real-footage experiments (16 Oct, Eymen's 5 handheld phone clips)
 
 Clips IMG_9096/9097 (wall slot) and IMG_9100/9101/9102 (recycling bin), one drop each; bin boxes and true
 drop frames are hand-given in a local, git-ignored config (`worker/state/real/bins.json`). These 5 clips are
@@ -72,6 +72,87 @@ drop frames are hand-given in a local, git-ignored config (`worker/state/real/bi
   ±0.5 s (the drop is decided when the item vanishes, up to 0.8 s off the release); category right 4/5 (the
   crumpled paper bag came out "wrapper"). FastSAM weights download to `worker/weights/` on first run.
   Needs: a visible arm at some point while the item is held, and bin boxes per camera.
+
+## IoU evaluation and fixes (17 Oct, same 5 dev clips)
+
+Drop timing alone hid a tracking problem, so the item's box is now also scored by IoU against hand-checked boxes:
+39 frames (about 8 per clip while the item is in hand), each box from SAM 2.1 on a point placed by eye and checked
+on an overlay (3 SAM boxes were wrong and replaced by grid-read boxes). They live with the clip config
+(`"gt_boxes": {"frame": [x0, y0, x1, y1]}`), and `scripts/item_tracker.py` reports two numbers: the box a hand
+holds (what the drop decision follows) and the best of the item's boxes (was the right box found at all).
+
+Before: held box IoU >= 0.5 in **10/39** (mean 0.33), although the item's best box was right in 38/39. The hand
+was linked to the hand-crop proposal, the hand + item region or the arm, and one track jumped to a region twice
+its size (IMG_9097, frame 201: IoU 0.18 with its previous box, area x2.04), so that drop came 22 frames late.
+
+Changes (`recyclone_worker/items.py`):
+- `hold_touch` replaces `hold_share`: an item touches a hand when half of the SMALLER box overlaps the other (an
+  item bigger than the hand now counts); a segmented region beats the synthetic hand crop; a part (lid) gives way
+  to the whole object.
+- `MAX_GROWTH = 2.0`: frame-to-frame association refuses a box whose area more than doubles or halves. Chosen
+  from physics, not by score: 1.4 scored worse (a false drop), 1.6 and 2.0 differed only on IMG_9100.
+- `MAIN_SHARE` 0.25 → 0.2: with more correct holds, the crumpled bag in IMG_9102 (25 held frames) fell just under
+  the 0.25 bar (26). 0.2 and 0.15 give the same result, so it is not on an edge any more.
+
+After: held box **16/39** (mean 0.49); drops within ±0.5 s **4/5** (was 3/5), within ±1.5 s 5/5, 0 false.
+IMG_9097 +22 → +2 frames. IMG_9100 is still 27 frames early: the cup is hidden in the fist until the release,
+which no box can see. These are DEV numbers (tuned while looking at these clips); a held-out clip is still needed.
+
+## Generalization check: other places, other bins (17 Oct)
+
+Eymen asked for other places and bins, and no overfitting. Protocol: 3 splits, kept in local configs (git-ignored,
+videos not committed; YouTube clips are third-party, for evaluation only):
+- **dev**: Eymen's 5 phone clips (`state/real/bins.json`).
+- **dev-2**: the 2 YouTube clips Eymen sent (`state/heldout/youtube.json`): street with 3 recycling bins (the person
+  stands behind the bins; no item is ever visible, so the correct output is NO drop) and a beach bin (face mask into
+  the slot, f405; a wrapper in the other hand is not thrown). They were run FROZEN first, then studied, so they are dev now.
+- **test**: 3 more stock clips (`state/test/youtube_test.json`): park cup, container slot close-up (arms only), two
+  bins with no person in view. Truth was labeled by looking at the frames only; the model was run once, at the end,
+  after every rule was frozen. A 4th (airport) was dropped because its truth could not be told from the frames.
+
+| model | dev (5) | dev-2 (2) | test (3) |
+|---|---|---|---|
+| before IoU (b7463eb) | 5/5, 0 false | 0/1, 6 false | 0/3, 0 false |
+| IoU rules (5b0a01f) + time in seconds | 5/5, 0 false | 1/1, 4 false | 1/3, 0 false |
+| **final** (+ item seen outside a bin) | **5/5, 0 false** | **1/1, 0 false** | **1/3, 0 false** |
+
+Changes that generalize (none tuned to a number on a clip):
+- Durations are seconds, not frames (`at_fps`, constants given at 30 fps): the YouTube clips are 24 fps, cameras often 10-15.
+- `REQUIRE_SEEN_OUTSIDE`: a drop needs an item that was seen AS AN ITEM outside every bin. All 4 dev-2 false drops
+  were locks/hinges on bin tops that a hand passed over while the camera panned.
+- `item_boxes`: one box per item per frame (the region CLIP is surest is an item, segmented before hand crop),
+  used by the videos, the stream and the evidence crop: the shown box matches the true box in 31/39 dev frames.
+  Only items seen as items outside a bin are drawn (`data["_brought"]`), the same rule the drop decision uses.
+Tried and reverted: a wider "is it an item" vocabulary (TACO litter classes). Words like "a plastic lid" and "scrap
+metal" also describe bin hardware, so bin parts became items again (dev-2 back to 4 false drops, a dev drop lost).
+
+Limits shown by the test set: 2 of 3 misses are views with no visible arm (a person cut off by the frame, or an item
+dropped from above): the tracker only counts objects a person is seen carrying, by design. A fallback for armless
+views (the older motion tracker near the bins) is the next step. Categories are only the demo catalog's: a face mask
+came out "wrapper", a bag "paper cup"; out-of-catalog items need catalog entries (contract fixture), not more prompts.
+Bins must be marked once per camera (`demo-site.json` regions, or `--item-bins` keyframes for a moving camera).
+
+## Item tracker in `run` (17 Oct)
+
+`recyclone-worker run --tracker items` uses the item tracker (`recyclone_worker/items.py`, `item_playback.py`).
+Perception runs at ~2–3 fps on this Mac (measured 17 Oct on IMG_9100: FastSAM 200 ms, pose 26 ms, CLIP on ~50
+regions 233 ms per frame; a fresh 437-frame clip took 150 s), against a 30 fps camera, and the drop decision
+needs the whole clip (the veto looks 1.5 s ahead). **Eymen's decision (17 Oct): pre-process, play live.** The
+clip is analyzed first (cached per file in `state/items-cache/`), then played at clip speed; the annotated
+stream and each event go out when the video reaches the drop. Drops still come from the model, not hand
+labels; say "analyzed beforehand, played back" if asked, never "real-time detection".
+
+- `track_id` = the item's id (its first held track), so replays give the same `event_id`s (checked: a fresh and a
+  cached run of IMG_9100 gave the same id).
+- `item`: the item's CLIP category votes, normalized (raw scores, no threshold). No confident look outside a bin
+  → unknown (before 17 Oct, all-zero votes silently became the first category, "Shake Shack cup").
+- `destination_confidence`: share of the item's last 10 sightings (up to the drop) inside the chosen bin box. A
+  plain heuristic, not a calibrated probability; it was 1.0 on all 5 dev clips, so it does not yet separate
+  easy from hard drops.
+- Evidence crop: the item's last box before the drop, often a fragment of it (IMG_9100: the cup's rim).
+- The stream draws bin boxes, carried items and existing bin contents, never the skeleton.
+- Through the CLI, the 5 dev clips give the same drops as the script (277/220/361/230/198). The sauce cup's
+  category confidence is 0.35, below core's 0.5 item threshold, so core would mark it unassessable.
 
 ## Evaluation
 

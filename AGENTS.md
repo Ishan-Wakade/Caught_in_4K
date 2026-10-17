@@ -62,6 +62,8 @@ All wrong-bin events are in scope, including contamination of recycling and comp
 - No additional sponsor integration has been selected.
 - **Demo screen uses full-screen scenes that switch (layout B):** Live footage → Bins (Grok Imagine illustration plus estimated fullness per bin) after each drop → Messages (manager ↔ agent conversation) when an alert fires. Details in `apps/web/AGENTS.md`.
 - **The demo starts from preset bin sizes and configuration** and demonstrates one instance of every scenario (list below).
+- **Brand is not important (Eymen, 16 Oct).** The goal is the right bin category; identifying the exact product or its restaurant is a bonus, not a requirement. Items are recognized from text descriptions (no registration needed), and unbranded items are judged by their generic category's bin rule.
+- **Recommendations for unbranded items go to the area manager (Eymen, 16 Oct).** When a recurring mistake involves items with no source business, the recommendation is site/station-level and goes to the area manager (e.g. "plastic cups went into trash 2 of the last 3 times at the Patio bins; a sign above the bins could help"). Branded items keep going to their restaurant's manager. Core implements the routing (Agent I).
 
 ## Implementation assumptions (E's calls, not user decisions)
 
@@ -70,7 +72,7 @@ All wrong-bin events are in scope, including contamination of recycling and comp
 - The worker exposes an annotated video stream that the Live scene embeds; see `contracts/README.md`.
 - Demo scenarios to show, one each (provisional list, extend as needed):
   1. Correct disposal: item enters its correct bin.
-  2. Repeated wrong disposal: one item's correct-sorting percentage falls below the demo threshold → Photon recommendation to that item's restaurant manager → manager texts that the action was taken → intervention recorded.
+  2. Repeated wrong disposal: one item's correct-sorting percentage falls below the demo threshold → Photon recommendation (to the item's restaurant manager if it has a source business, otherwise to the area manager) → manager texts that the action was taken → intervention recorded.
   3. Bin fills: estimated fullness crosses the demo threshold → emptying request → manager confirms → only that bin's inventory resets.
   4. Uncertain origin: item enters a bin but its restaurant is unclear → area-manager review queue, no restaurant message is sent.
   5. Unknown item or unclear destination: event recorded as unassessable; it does not count as a mistake.

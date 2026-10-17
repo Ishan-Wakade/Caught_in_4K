@@ -73,6 +73,10 @@ class CategoryClassifier:
 
     def classify(self, crops: list[np.ndarray]) -> tuple[str, float, str]:
         """(catalog_item_id, probability, matched prompt)."""
+        return self.top(crops, 1)[0]
+
+    def top(self, crops: list[np.ndarray], k: int = 3) -> list[tuple[str, float, str]]:
+        """The k most likely items, best first: (catalog_item_id, probability, matched prompt)."""
         probs = self.probabilities(crops)
-        cid = max(probs, key=probs.get)
-        return cid, probs[cid], self._per_category(crops)[1][cid]
+        prompts = self._per_category(crops)[1]
+        return [(c, probs[c], prompts[c]) for c in sorted(probs, key=probs.get, reverse=True)[:k]]

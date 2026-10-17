@@ -156,3 +156,9 @@ def test_unregistered_item_gets_generic_category(tmp_path):
     e = p.run(frames(40))[0]  # frames are solid red
     assert e["item"]["catalog_item_id"] == "item_generic_wrapper" and e["item"]["label"] == "a red wrapper"
     validate_event(e)
+
+
+def test_identification_crop_is_padded(tmp_path):
+    from recyclone_worker.pipeline import pad_box
+    assert pad_box((100, 100, 200, 160), (1280, 720), 0.2) == (80, 88, 220, 172)
+    assert pad_box((0, 0, 50, 50), (1280, 720), 0.2) == (0, 0, 60, 60)  # clamped at the frame edge

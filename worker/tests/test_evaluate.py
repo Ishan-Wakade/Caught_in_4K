@@ -45,3 +45,12 @@ def test_labeled_event_is_contract_valid():
                             offset_s=1, bin_id="bin_patio_trash", catalog_item_id=None, business_id=None)
     validate_event(unknown)
     assert unknown["item"] == {"catalog_item_id": None, "label": None, "confidence": None, "candidates": []}
+
+
+def test_bin_rule_right_even_with_wrong_brand():
+    """Brand doesn't matter: a Shake Shack cup reported as a plain cup still gets the right bin rule."""
+    dest = {"item_ss_cup": "recycling", "item_generic_cup": "recycling", "item_box": "compost"}
+    labels = [ev(5, "bin_t", "item_ss_cup"), ev(10, "bin_t", "item_ss_cup")]
+    preds = [ev(5, "bin_t", "item_generic_cup"), ev(10, "bin_t", "item_box")]
+    r = evaluate(labels, preds, destinations=dest)
+    assert r["item_correct"] == 0 and r["rule_correct"] == 1

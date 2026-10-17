@@ -15,12 +15,17 @@ from .tracking import Track
 
 class MotionTracker:
     def __init__(self, regions: list[BinRegion], margin: float = 1.0, min_area_frac: float = 0.0003,
-                 max_area_frac: float = 0.02, max_jump_frac: float = 0.08, lost_after: int = 30):
+                 max_area_frac: float = 0.06, max_jump_frac: float = 0.08, lost_after: int = 30,
+                 max_side_frac: float = 0.35, merge_gap_frac: float = 0.05):
         self.regions, self.margin = regions, margin
         self.min_area_frac, self.max_area_frac = min_area_frac, max_area_frac
         self.max_jump_frac, self.lost_after = max_jump_frac, lost_after
+        self.max_side_frac, self.merge_gap_frac = max_side_frac, merge_gap_frac
         self.subtractor = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=32, detectShadows=False)
         self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        # Transparent or plain items only differ from the background at their edges and print, so the
+        # foreground comes in pieces. A wide dilation joins the pieces of one item into one blob.
+        self.join = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
         self.tracks: dict[int, tuple[float, float, int]] = {}  # id -> (cx, cy, last frame seen)
         self.next_id, self.frame_idx, self.band = 1, -1, None
 
@@ -40,14 +45,16 @@ class MotionTracker:
         mask = self.subtractor.apply(frame)
         mask = cv2.morphologyEx(cv2.threshold(mask, 200, 255, cv2.THRESH_BINARY)[1], cv2.MORPH_OPEN, self.kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
+        mask = cv2.dilate(mask, self.join)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        boxes = _merge_close([cv2.boundingRect(c) for c in contours], gap=self.merge_gap_frac * h)
         bx1, by1, bx2, by2 = self.band
         blobs = []
-        for c in contours:
-            x, y, bw, bh = cv2.boundingRect(c)
-            area = bw * bh
+        for x, y, bw, bh in boxes:
             cx, cy = x + bw / 2, y + bh / 2
-            if self.min_area_frac * w * h <= area <= self.max_area_frac * w * h and bx1 <= cx <= bx2 and by1 <= cy <= by2:
+            item_sized = (self.min_area_frac * w * h <= bw * bh <= self.max_area_frac * w * h
+                          and bw <= self.max_side_frac * w and bh <= self.max_side_frac * h)  # a body or arm is taller
+            if item_sized and bx1 <= cx <= bx2 and by1 <= cy <= by2:
                 blobs.append((cx, cy, (x, y, x + bw, y + bh)))
         return self._associate(blobs, max_jump=self.max_jump_frac * (w * w + h * h) ** 0.5)
 
@@ -67,3 +74,24 @@ class MotionTracker:
             out.append(Track(tid, tuple(float(v) for v in box), "motion"))
         self.tracks = {t: v for t, v in self.tracks.items() if self.frame_idx - v[2] <= self.lost_after}
         return out
+
+
+def _merge_close(boxes: list[tuple[int, int, int, int]], gap: float) -> list[tuple[int, int, int, int]]:
+    """Merge (x, y, w, h) boxes that overlap or lie within `gap` px: pieces of one item."""
+    boxes = [list(b) for b in boxes]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(boxes)):
+            for j in range(i + 1, len(boxes)):
+                ax, ay, aw, ah = boxes[i]
+                bx, by, bw, bh = boxes[j]
+                if ax - gap <= bx + bw and bx - gap <= ax + aw and ay - gap <= by + bh and by - gap <= ay + ah:
+                    x1, y1 = min(ax, bx), min(ay, by)
+                    boxes[i] = [x1, y1, max(ax + aw, bx + bw) - x1, max(ay + ah, by + bh) - y1]
+                    del boxes[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    return [tuple(b) for b in boxes]

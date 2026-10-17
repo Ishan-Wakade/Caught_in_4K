@@ -68,3 +68,36 @@ def test_cli_run_with_motion_tracker_end_to_end(tmp_path, capsys):
                      "--evidence-dir", str(tmp_path / "ev")], make_embedder=FakeEmbedder)
     events = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.startswith("{")]
     assert code == 0 and len(events) == 1 and events[0]["bin_id"] == "bin_patio_trash"
+
+
+def _moving(obj, steps=15, start=(250, 300), dy=12):
+    bg = background()
+    frames = [bg.copy() for _ in range(20)]
+    h, w = obj.shape[:2]
+    for k in range(steps):
+        f = bg.copy()
+        x, y = start[0], start[1] + dy * k
+        region = f[y:y + h, x:x + w]
+        mask = obj.any(axis=2)
+        region[mask] = obj[mask]
+        frames.append(f)
+    return frames
+
+
+def test_hollow_object_gets_one_full_box():
+    """A transparent cup: only its outline differs from the background. The box must still cover it."""
+    obj = np.zeros((90, 60, 3), np.uint8)
+    obj[:6], obj[-6:], obj[:, :6], obj[:, -6:] = 230, 230, 230, 230
+    out = run(_moving(obj))
+    boxes = [t.box for o in out[24:] for t in o]
+    assert boxes, "outline object was not tracked at all"
+    widths, heights = [b[2] - b[0] for b in boxes], [b[3] - b[1] for b in boxes]
+    assert max(widths) >= 50 and max(heights) >= 75
+    assert len({t.track_id for o in out[24:] for t in o}) == 1
+
+
+def test_wide_box_is_not_mistaken_for_a_person():
+    obj = np.full((110, 250, 3), 150, np.uint8)
+    obj[10:40, 20:120] = 60  # some print on the box
+    out = run(_moving(obj, start=(150, 300)))
+    assert any(o for o in out[24:])

@@ -30,6 +30,16 @@ class _TrackState:
     last_crop: tuple[int, np.ndarray] | None = None  # evidence: the moment it entered, not when held up close
 
 
+ID_PAD = 0.2  # identification sees a little context around the box: tracker boxes are often tight or partial
+
+
+def pad_box(box, frame_size: tuple[int, int], frac: float = ID_PAD) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = box
+    w, h = frame_size
+    dx, dy = (x2 - x1) * frac, (y2 - y1) * frac
+    return max(0, round(x1 - dx)), max(0, round(y1 - dy)), min(w, round(x2 + dx)), min(h, round(y2 + dy))
+
+
 def clamp_crop(frame: np.ndarray, box) -> np.ndarray | None:
     h, w = frame.shape[:2]
     x1, y1, x2, y2 = max(0, int(box[0])), max(0, int(box[1])), min(w, int(box[2])), min(h, int(box[3]))
@@ -59,7 +69,7 @@ class Pipeline:
                 x1, y1, x2, y2 = t.box
                 s.history.append(((x1 + x2) / 2, (y1 + y2) / 2))
                 s.last_seen, s.last_offset = idx, offset
-                crop = clamp_crop(frame, t.box)
+                crop = clamp_crop(frame, pad_box(t.box, (frame.shape[1], frame.shape[0])))
                 if crop is not None:
                     s.last_crop = (idx, crop)
                     s.crops.append((crop.shape[0] * crop.shape[1], idx, crop))  # visible (clamped) area

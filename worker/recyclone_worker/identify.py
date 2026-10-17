@@ -81,10 +81,14 @@ def identify(crops: list[np.ndarray], embedder: Embedder, gallery: Gallery, top_
     weak = ref["catalog_item_id"] is None or (reference_threshold is not None and ref["confidence"] < reference_threshold)
     if categories is None or not crops or not weak:
         return ref
-    cid, prob, prompt = categories.classify(crops)
-    score = round(min(max(prob, 0.0), 1.0), 4)
-    return {"catalog_item_id": cid, "label": prompt, "confidence": score,
-            "candidates": [{"catalog_item_id": cid, "score": score}] + [c for c in ref["candidates"] if c["catalog_item_id"] != cid]}
+    ranked = categories.top(crops, top_k)
+    cid, _, prompt = ranked[0]
+    category_candidates = [{"catalog_item_id": c, "score": round(min(max(p, 0.0), 1.0), 4)} for c, p, _ in ranked]
+    seen = {c["catalog_item_id"] for c in category_candidates}
+    # Runner-ups stay as evidence: a plain-cup match with a Shake Shack runner-up becomes weak business
+    # evidence (business_from_candidates), so core sends it to review instead of guessing the restaurant.
+    return {"catalog_item_id": cid, "label": prompt, "confidence": category_candidates[0]["score"],
+            "candidates": category_candidates + [c for c in ref["candidates"] if c["catalog_item_id"] not in seen]}
 
 
 def _reference(crops: list[np.ndarray], embedder: Embedder, gallery: Gallery, top_k: int) -> dict:

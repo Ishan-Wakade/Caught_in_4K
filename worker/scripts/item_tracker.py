@@ -12,12 +12,29 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 
-from recyclone_worker.items import (MIN_AREA, SKELETON, Clip, Scorer, center, decide, ego_motion,
+from recyclone_worker.items import (MIN_AREA, SKELETON, Clip, Scorer, center, decide, ego_motion, iou,
                                     keyframe_boxes, perceive, track, weight)
 
 TOLERANCE = 15                      # strict: within 0.5 s of the true release
 LOOSE = 45                          # loose: within 1.5 s (the right drop into the right bin)
+IOU_HIT = 0.5                       # a box matches the true item box at IoU >= 0.5 (the usual detection rule)
+
+
+def box_iou_scores(gt_boxes: dict, data: dict, per_frame: list) -> list[tuple[float, float]]:
+    """Per hand-checked frame: (IoU of the box a hand holds, best IoU of any box the tracker gave the item).
+
+    gt_boxes: {"frame": [x0, y0, x1, y1]} of the item a person carries (SAM from a hand-placed point, checked by eye).
+    "Held" is what the drop decision follows; "best" shows whether the right box was among the item's boxes at all."""
+    identity, links = data["_identity"], data["_links"]
+    out = []
+    for f, gt in sorted(gt_boxes.items(), key=lambda kv: int(kv[0])):
+        i = int(f)
+        boxes = {tid: b for tid, b, _ in per_frame[i] if tid in identity}
+        held = [boxes[tid] for _, tid, _ in links[i] if tid in boxes]
+        out.append((max((iou(gt, b) for b in held), default=0.0), max((iou(gt, b) for b in boxes.values()), default=0.0)))
+    return out
 
 
 def text(img, s, org, color, scale=1.0):
@@ -102,6 +119,7 @@ def main():
     scorer = Scorer(clip)
     results = {}
     rows, score = [], {"strict": [0, 0, 0], "loose": [0, 0, 0]}  # tp, fn, fp
+    iou_all = []
     for name, spec in config.items():
         video = Path(spec["video"]).expanduser()
         cache = out_dir / "cache" / f"{name}.npz"  # config name: several clips may share a file name (video.mp4)
@@ -122,6 +140,12 @@ def main():
                                       "category": t["category"], "role": roles[t["id"]], "item_id": data["_identity"][t["id"]]}
                                      for t in tracks if roles[t["id"]] in ("carried", "re-found")]}
         print(name, json.dumps(results[name]["events"]), count, flush=True)
+        if spec.get("gt_boxes"):
+            ious = box_iou_scores(spec["gt_boxes"], data, per_frame)
+            iou_all.extend(ious)
+            results[name]["box_iou"] = [[round(float(h), 3), round(float(b), 3)] for h, b in ious]
+            print(f"  box IoU held {np.mean([h for h, _ in ious]):.2f} (hit {sum(h >= IOU_HIT for h, _ in ious)}/{len(ious)}), "
+                  f"best {np.mean([b for _, b in ious]):.2f} (hit {sum(b >= IOU_HIT for _, b in ious)}/{len(ious)})", flush=True)
         truths = spec.get("truths") or ([spec["truth"]] if spec.get("truth") else [])
         if not truths and "truths" not in spec:
             continue
@@ -149,7 +173,12 @@ def main():
     for key in ("strict", "loose"):
         tp, fn, fp = score[key]
         lines.append(f"{key}: drops found {tp}/{tp + fn}, false drops {fp}.")
-    lines.append("DEV videos: the rules were tuned while looking at these 5 clips, so this is not a held-out accuracy.")
+    if iou_all:
+        h, b = [x for x, _ in iou_all], [y for _, y in iou_all]
+        lines.append(f"item box vs hand-checked box ({len(iou_all)} frames): held box mean IoU {np.mean(h):.2f}, "
+                     f"{sum(x >= IOU_HIT for x in h)}/{len(h)} at IoU>={IOU_HIT}; best item box mean IoU {np.mean(b):.2f}, "
+                     f"{sum(x >= IOU_HIT for x in b)}/{len(b)} at IoU>={IOU_HIT}.")
+    lines.append(f"DEV videos: the rules were tuned while looking at these {len(config)} clips, so this is not a held-out accuracy.")
     (out_dir / "item_results.json").write_text(json.dumps(results, indent=1))
     (out_dir / "item_summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

@@ -158,3 +158,54 @@ def test_cli_item_bins_file_and_unknown_bin_warning(tmp_path, capsys):
 def test_enroll_does_not_accept_the_items_tracker():
     with pytest.raises(SystemExit):
         cli.main(["enroll", "--clip", "x", "--segments", "y", "--out", "z", "--tracker", "items"])
+
+
+# ---------------------------------------------------------------- IoU rules in the item tracker (17 Oct)
+
+from recyclone_worker import items as it  # noqa: E402
+
+HAND = (100, 100, 200, 200)
+
+
+def test_a_large_item_covering_the_hand_is_held():
+    # the old rule needed half of the ITEM inside the hand region, so a box bigger than the hand was never held
+    big_item = (60, 60, 300, 260)
+    assert it.hold_touch(HAND, [(1, big_item, 0.95, 0)], set()) == 1
+    assert it.hold_share(HAND, [(1, big_item, 0.95, 0)], set()) is None
+
+
+def test_a_segmented_region_beats_the_hand_crop():
+    hand_crop, cup = (100, 100, 200, 200), (120, 120, 180, 190)
+    assert it.hold_touch(HAND, [(1, hand_crop, 1.0, 1), (2, cup, 0.9, 0)], set()) == 2
+    assert it.hold_touch(HAND, [(1, hand_crop, 1.0, 1)], set()) == 1  # nothing segmented: the crop is still used
+
+
+def test_a_part_gives_way_to_the_whole_object():
+    lid, cup = (105, 100, 185, 130), (100, 100, 190, 200)  # lid 2400 px², cup 9000 px²: within the 8x part-of limit
+    assert it.hold_touch(HAND, [(1, lid, 0.95, 0), (2, cup, 0.9, 0)], set()) == 2
+
+
+def test_overlap_small_is_one_when_nested_whatever_the_sizes():
+    assert it.overlap_small((0, 0, 10, 10), (-50, -50, 100, 100)) == 1.0
+    assert it.overlap_small((0, 0, 10, 10), (20, 20, 30, 30)) == 0.0
+
+
+def _two_frame_data(box0, box1):
+    emb = np.zeros((2, 512), np.float16)
+    emb[:, 0] = 1  # identical look: only geometry decides
+    return {"boxes": np.array([[0, *box0], [1, *box1]], np.float32), "src": np.zeros(2, np.int8), "emb": emb,
+            "kps": np.zeros((2, 17, 3), np.float32), "fps": np.float32(30), "size": np.array([640, 480])}
+
+
+class _ItemScorer:
+    cats = ["item_generic_cup"]
+
+    def __call__(self, emb):
+        return np.ones(len(emb), np.float32), np.ones((len(emb), 1), np.float32)
+
+
+def test_tracks_do_not_jump_to_a_region_twice_the_size():
+    still = np.tile(np.array([[1, 0, 0], [0, 1, 0]], np.float32), (2, 1, 1))
+    same = it.track(_two_frame_data((100, 100, 160, 160), (104, 102, 166, 162)), {}, _ItemScorer(), still)[0]
+    jump = it.track(_two_frame_data((100, 100, 160, 160), (90, 100, 200, 200)), {}, _ItemScorer(), still)[0]  # overlaps, 3.4x area
+    assert len(same) == 1 and len(jump) == 2

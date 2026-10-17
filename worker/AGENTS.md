@@ -73,6 +73,31 @@ drop frames are hand-given in a local, git-ignored config (`worker/state/real/bi
   crumpled paper bag came out "wrapper"). FastSAM weights download to `worker/weights/` on first run.
   Needs: a visible arm at some point while the item is held, and bin boxes per camera.
 
+## IoU evaluation and fixes (17 Oct, same 5 dev clips)
+
+Drop timing alone hid a tracking problem, so the item's box is now also scored by IoU against hand-checked boxes:
+39 frames (about 8 per clip while the item is in hand), each box from SAM 2.1 on a point placed by eye and checked
+on an overlay (3 SAM boxes were wrong and replaced by grid-read boxes). They live with the clip config
+(`"gt_boxes": {"frame": [x0, y0, x1, y1]}`), and `scripts/item_tracker.py` reports two numbers: the box a hand
+holds (what the drop decision follows) and the best of the item's boxes (was the right box found at all).
+
+Before: held box IoU >= 0.5 in **10/39** (mean 0.33), although the item's best box was right in 38/39. The hand
+was linked to the hand-crop proposal, the hand + item region or the arm, and one track jumped to a region twice
+its size (IMG_9097, frame 201: IoU 0.18 with its previous box, area x2.04), so that drop came 22 frames late.
+
+Changes (`recyclone_worker/items.py`):
+- `hold_touch` replaces `hold_share`: an item touches a hand when half of the SMALLER box overlaps the other (an
+  item bigger than the hand now counts); a segmented region beats the synthetic hand crop; a part (lid) gives way
+  to the whole object.
+- `MAX_GROWTH = 2.0`: frame-to-frame association refuses a box whose area more than doubles or halves. Chosen
+  from physics, not by score: 1.4 scored worse (a false drop), 1.6 and 2.0 differed only on IMG_9100.
+- `MAIN_SHARE` 0.25 → 0.2: with more correct holds, the crumpled bag in IMG_9102 (25 held frames) fell just under
+  the 0.25 bar (26). 0.2 and 0.15 give the same result, so it is not on an edge any more.
+
+After: held box **16/39** (mean 0.49); drops within ±0.5 s **4/5** (was 3/5), within ±1.5 s 5/5, 0 false.
+IMG_9097 +22 → +2 frames. IMG_9100 is still 27 frames early: the cup is hidden in the fist until the release,
+which no box can see. These are DEV numbers (tuned while looking at these clips); a held-out clip is still needed.
+
 ## Item tracker in `run` (17 Oct)
 
 `recyclone-worker run --tracker items` uses the item tracker (`recyclone_worker/items.py`, `item_playback.py`).

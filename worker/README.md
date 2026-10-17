@@ -55,6 +55,8 @@ Improving it:
 - Perception is cached in `OUT/cache/`, so after the first run a rule change re-scores in seconds
   (`--no-video` skips rendering). `--recompute` re-runs the models.
 - The knobs are the constants at the top of `recyclone_worker/items.py`, each with a one-line reason.
+- Box accuracy: add `"gt_boxes": {"120": [x0, y0, x1, y1], ...}` (the carried item, full-frame pixels) to a clip's
+  config and the summary reports IoU of the held box and of the item's best box (IoU >= 0.5 counts as a match).
 - Keep a **dev** set you tune on and a **test** set you only score at the end; numbers from clips you tuned
   on are not accuracy. Never commit videos or `state/` configs (people are in them).
 

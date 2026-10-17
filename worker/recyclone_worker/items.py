@@ -37,14 +37,18 @@ SKELETON = [(5, 7), (7, 9), (6, 8), (8, 10), (5, 6), (5, 11), (6, 12), (11, 12),
 MIN_AREA, MAX_AREA = 0.0015, 0.12   # region size as a share of the frame
 ITEM_P = 0.5                        # P(item) from CLIP needed to keep a region as an item
 MATCH_IOU, MATCH_SIM = 0.25, 0.85   # association: same look AND (overlap or near the camera-corrected spot)
+MAX_GROWTH = 2.0                    # association: a box that more than doubles (or halves) in area from one frame
+                                    #   to the next is another region, not the same object (17 Oct, IMG_9097)
 LOST_AFTER = 8                      # frames unseen before a track counts as gone
 WINDOW = 10                         # frames over which an item's own motion is measured
 OWN_MOTION = 0.6                    # an item that moves less than half this on its own is at rest ("left in bin")
 HAND_REACH = 1.3                    # hand region = hand crop grown by 30%
+TOUCH = 0.5                         # an item touches a hand when half of the smaller of the two boxes overlaps the other
+PART_OF = 0.7                       # a region this much inside another, similar-confidence one is a part of it
 ATTACH_MIN = 3                      # frames as the object in a hand before an item counts as brought by a person
 REID_SIM = 0.93                     # a track that starts where a carried item was last seen, looking like it,
 REID_GAP = 30                       #   within 1 s, continues that item (the arm may be out of view by then)
-MAIN_SHARE = 0.25                   # an object must be held >= 25% as long as the most-held object to count
+MAIN_SHARE = 0.2                    # an object must be held >= 20% as long as the most-held object to count
 STILL_MIN = 6                       # observations at rest inside a bin before "left in bin"
 VETO_FRAMES = 45                    # the item back in a hand, outside every bin, within 1.5 s: not a drop
 MERGE_FRAMES = 45                   # drops into one bin within 1.5 s are one drop (fragments of one item, or the hand)
@@ -289,7 +293,8 @@ def track(data: dict, bins: dict, scorer: Scorer, motion: np.ndarray) -> tuple[l
                 o = iou(pred, b)
                 c0, c1 = center(pred), center(b)
                 near = np.hypot(c0[0] - c1[0], c1[1] - c0[1]) < 0.6 * diag * (1 + 0.25 * (i - t["last"] - 1))
-                if sim >= MATCH_SIM and (o >= MATCH_IOU or near):
+                grow = max(1.0, (b[2] - b[0]) * (b[3] - b[1])) / max(1.0, (pred[2] - pred[0]) * (pred[3] - pred[1]))
+                if sim >= MATCH_SIM and (o >= MATCH_IOU or near) and 1 / MAX_GROWTH <= grow <= MAX_GROWTH:
                     pairs.append((o + sim, t["id"], k))
         used = set()
         for _, tid, k in sorted(pairs, reverse=True):
@@ -369,6 +374,47 @@ def inside_share(b, region) -> float:
     return ix * iy / max(1e-9, (b[2] - b[0]) * (b[3] - b[1]))
 
 
+def hold_share(region, cands, crop_only):
+    """Before 17 Oct: the region most inside the hand region (>= half of the ITEM inside it), hand-crop-only tracks
+    weighted 0.6. Measured on 39 hand-checked frames: the held box matched the item (IoU >= 0.5) in only 10."""
+    best, best_score = None, 0.0
+    for tid, b, p, _ in cands:
+        share = inside_share(b, region)
+        if share < 0.5:
+            continue
+        score = p * share * (0.6 if tid in crop_only else 1.0)
+        if score > best_score:
+            best, best_score = tid, score
+    return best
+
+
+def overlap_small(a, b) -> float:
+    """Intersection over the SMALLER box's area: 1.0 when one box lies inside the other, whatever their sizes."""
+    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+    return ix * iy / max(1e-9, min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1])))
+
+
+def hold_touch(region, cands, crop_only):
+    """The object a hand holds, from this frame's item regions (tid, box, p_item, src); src 0 = segmented region.
+
+    1. Touch: half of the smaller box (item or hand region) overlaps the other, so an item bigger than the hand counts.
+    2. A real segmented region beats the synthetic hand crop; the crop is used only when nothing segmented touches.
+    3. A part (lid, logo) mostly inside a similar-confidence, not much bigger region gives way to the whole object.
+    Measured 17 Oct on 39 hand-checked frames of the 5 dev clips: held box at IoU >= 0.5 in 16 (was 10)."""
+    c = [x for x in cands if overlap_small(x[1], region) >= TOUCH]
+    if any(x[3] == 0 for x in c):
+        c = [x for x in c if x[3] == 0]
+    area = lambda b: max(1.0, (b[2] - b[0]) * (b[3] - b[1]))  # noqa: E731
+    whole = [a for a in c if not any(o is not a and inside_share(a[1], o[1]) >= PART_OF and o[2] >= a[2] - 0.1
+                                     and area(o[1]) <= 8 * area(a[1]) for o in c)]
+    best = max(whole, key=lambda x: x[2] * overlap_small(x[1], region), default=None)
+    return best[0] if best else None
+
+
+HOLD_RULE = hold_touch
+
+
 def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.ndarray, per_frame: list) -> tuple[list[dict], dict]:
     """Only objects BROUGHT BY A PERSON count. The skeleton's arm decides which those are:
 
@@ -387,16 +433,10 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
     by_id = {t["id"]: t for t in tracks}
     crop_only = {t["id"] for t in tracks if all(s > 0 for s in t["src"])}
     held, links = {}, [[] for _ in range(n)]
+    src_at = {(t["id"], f): s for t in tracks for f, s in zip(t["frames"], t["src"])}
     for i in range(n):
         for side, region, wrist in hand_regions(data["kps"][i], w, h):
-            best, best_score = None, 0.0
-            for tid, b, p in per_frame[i]:
-                share = inside_share(b, region)
-                if share < 0.5:
-                    continue
-                score = p * share * (0.6 if tid in crop_only else 1.0)
-                if score > best_score:
-                    best, best_score = tid, score
+            best = HOLD_RULE(region, [(tid, b, p, src_at[(tid, i)]) for tid, b, p in per_frame[i]], crop_only)
             if best is not None:
                 held[best] = held.get(best, 0) + 1
                 links[i].append((side, best, wrist))

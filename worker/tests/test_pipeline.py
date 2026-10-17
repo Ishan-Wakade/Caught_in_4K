@@ -133,7 +133,7 @@ def test_evidence_is_the_last_frame_seen(tmp_path):
     assert events[0]["evidence"][0]["frame"] == len(pts) - 1
 
 
-def test_business_evidence_reaches_the_event(tmp_path):
+def test_runner_up_brand_is_not_sent(tmp_path):
     from fakes import BLUE
     g = Gallery()
     g.add("item_generic_cup", FakeEmbedder().embed(solid(RED)))
@@ -144,7 +144,7 @@ def test_business_evidence_reaches_the_event(tmp_path):
                  catalog_business={"item_generic_cup": None, "item_beanco_cup": "biz_beanco"})
     e = p.run(frames(40))[0]
     assert e["item"]["catalog_item_id"] == "item_generic_cup"
-    assert e["business"]["business_id"] == "biz_beanco" and e["business"]["basis"] == ["reference_match"]
+    assert e["business"]["business_id"] is None
     validate_event(e)
 
 

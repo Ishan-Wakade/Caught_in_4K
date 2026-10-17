@@ -2,8 +2,25 @@ import { readFile, access } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
 import type { Messenger, Illustrator, ReplyInterpreter } from "@recyclone/contracts";
-import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, createLocalMocks, validateSeed, type Core, type CoreConfig } from "@recyclone/core";
+import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, createLocalMocks, validateSeed, type Core, type CoreConfig, type SiteSeed } from "@recyclone/core";
 import { createMessenger, createIllustrator, createReplyInterpreter } from "@recyclone/integrations";
+
+/**
+ * Seed fixtures keep every contact's phone as null so real numbers never
+ * land in git (contract: demo-site.json is committed, phones are not).
+ * CONTACT_PHONES_JSON lets an operator supply them at runtime instead, e.g.
+ * CONTACT_PHONES_JSON={"ct_shakeshack_mgr":"+1...","ct_area_mgr":"+1..."}.
+ */
+function applyContactPhones(seed: SiteSeed, raw: string | undefined) {
+  if (!raw) return;
+  let phones: Record<string, string>;
+  try { phones = JSON.parse(raw); }
+  catch { throw new Error("CONTACT_PHONES_JSON must be valid JSON mapping contact_id to phone number"); }
+  for (const contact of seed.contacts) {
+    const phone = phones[contact.contact_id];
+    if (phone) contact.phone = phone;
+  }
+}
 
 type Adapters = { messenger: Messenger; illustrator: Illustrator; interpreter: ReplyInterpreter };
 const shared = globalThis as typeof globalThis & { recycloneCore?: Promise<Core>; recycloneAdapters?: Adapters };
@@ -29,6 +46,7 @@ async function initialize(): Promise<Core> {
   }
   const seedPath = process.env.CORE_SITE_CONFIG_PATH ?? resolve(workspace, "contracts/fixtures/demo-site.json");
   const seed = validateSeed(JSON.parse(await readFile(seedPath, "utf8")));
+  applyContactPhones(seed, process.env.CONTACT_PHONES_JSON);
   const overrides = process.env.CORE_CONFIG_JSON ? JSON.parse(process.env.CORE_CONFIG_JSON) as Partial<CoreConfig> : {};
   const config = configFromSite(profile, seed.config_profiles[profile], overrides);
   let adapters = shared.recycloneAdapters;

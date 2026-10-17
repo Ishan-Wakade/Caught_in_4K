@@ -75,7 +75,6 @@ What exists (branch `j/dashboard-scaffold`), and what is still provisional:
 
 **Requests to other owners (not edited by J):**
 
-- **S/I:** with core in demo memory mode and one open Bean Co. recommendation, `POST /api/photon/mock-reply` `{contactId: "ct_beanco_mgr", body: "DONE, sign is up at the counter"}` returns `needs_clarification` (core sends a clarification text) instead of recording an intervention, although "done" is a confirmation keyword. Likely the open-alert lookup passed to the interpreter is empty; not debugged by J.
 - **E (contract):** `BinSummary` has only `observed_count`; add per-item counts so the Bins page needn't rebuild them from the feed. `FeedItem` has no `outcome`, `source_mode` or `mocked`; core puts them in `summary` text ("(incorrect)", "[labeled backup input]", "(mocked)"), which J parses. `FeedResponse` has no `demo` flag. `AlertSummary` has no contact or business names (J reads them from the site file).
 - **I:** outbound message bodies still carry an `[alert_id]` prefix (J hides it), and `trigger` is the whole message body (J shows its first sentence).
 - **E:** clarify whether `evidence[].uri` includes the `evidence/` prefix (the §1 sample does; §4 serves `/evidence/<path>`). J accepts both.

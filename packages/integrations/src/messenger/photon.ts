@@ -7,10 +7,10 @@ type SendResult = Awaited<ReturnType<Messenger["send"]>>;
 type PhotonGrpcError = { grpcCode?: number; details?: string; message?: string };
 
 /**
- * Photon's iMessage bridge rejects un-allowlisted recipients with a raw gRPC
- * PERMISSION_DENIED (grpcCode 7) buried under several layers of SDK stack
- * frames. Surface that as an actionable message instead, since it's a
- * project-dashboard problem, not a code bug — the original error is kept as
+ * Photon's shared iMessage line rejects a recipient that hasn't texted it yet
+ * with a raw gRPC PERMISSION_DENIED (grpcCode 7) buried under several layers
+ * of SDK stack frames. Surface that as an actionable message instead, since
+ * the fix is on the phone, not in code — the original error is kept as
  * `cause` for anyone who does need the full trace.
  */
 export function asFriendlyPhotonError(err: unknown, platformUserId: string): Error {
@@ -19,8 +19,9 @@ export function asFriendlyPhotonError(err: unknown, platformUserId: string): Err
   if (e?.grpcCode === 7 || /not allowed/i.test(text)) {
     return new Error(
       `Photon rejected sending to "${platformUserId}": not allowed for this project. ` +
-        `This is a dashboard/allowlist state, not a code bug — confirm the number is actually ` +
-        `active (not just submitted) on the Photon project dashboard.`,
+        `This is not a code bug. On the shared iMessage line, a number can only receive texts after ` +
+        `it has texted the Photon line assigned to it (the dashboard shows it as "texts on +1…"). ` +
+        `Text that line once from this phone, then retry.`,
       { cause: err },
     );
   }

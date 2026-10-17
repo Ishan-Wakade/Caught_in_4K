@@ -15,7 +15,8 @@
     "test": "vitest run",
     "register-webhook": "node scripts/register-webhook.mjs",
     "send-test-message": "node scripts/send-test-message.mjs",
-    "listen-webhook": "node scripts/listen-webhook.mjs"
+    "listen-webhook": "node scripts/listen-webhook.mjs",
+    "demo:trigger": "node scripts/trigger-demo.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -177,6 +177,12 @@ Goal: from the corner camera's footage, announce the right bin before the person
    --render demo.mp4` speaks through the laptop (or a Bluetooth speaker placed on the bins) and records the
    annotated video with the voice.
 
+8. **Run it as a web app on Vercel (team, 17 Oct):** the phone is the camera AND runs the model in its browser
+   (`/guide`: MediaPipe skeleton + face detector, the guide's timing rules in TypeScript); item naming on the server
+   (DeepSeek, then Jev); voice through **ElevenLabs** (team, 17 Oct; the HackGT key was invalid, Eymen supplied a new
+   one), phone voice as fallback; a Bluetooth speaker on the bins paired to the camera phone. PR #25. Until Vercel
+   deployments are unblocked, it runs from Eymen's Mac through a Cloudflare tunnel (HTTPS, needed for the camera).
+
 ## 7. Settled after the review pass *(E's calls)*
 - **Speed, honestly:** the announcement path (skeleton, hand-crop CLIP, floor distance, trigger) is built causal —
   it only uses past frames, as on a live camera — and must run at or above the camera's frame rate on the demo

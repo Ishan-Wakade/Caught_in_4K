@@ -47,14 +47,11 @@ export function projectReview(e: EventRecord): ReviewItem {
     status: e.review_status === "resolved" ? "resolved" : e.review_status === "unresolved" ? "left_unresolved" : "pending", assigned_business_id: e.reviewed_business_id ?? null };
 }
 export function projectAlert(s: CoreState, a: AlertRecord): AlertSummary {
-  const messages = s.messages.filter(m => (m.alert_id === a.alert_id || (m.alert_id === null && m.contact_id === a.contact.contactId)) && (m.direction === "inbound" || m.delivery_status === "sent"));
-  const errors = s.jobs.filter(j => j.kind === "message" && j.message?.alertId === a.alert_id && j.status === "failed");
   return {
     alert_id: a.alert_id, kind: a.kind,
-    state: a.state === "resolved" ? "emptied" : a.state !== "open" ? a.state : messages.some(m => m.kind === "follow_up") ? "follow_up_sent" : a.sent_at ? "sent" : "open",
+    state: a.state === "resolved" ? "emptied" : a.state,
     item_id: a.item_id ?? null, bin_id: a.bin_id ?? null, contact_id: a.contact.contactId,
-    trigger: `${a.body}${errors.length ? " Delivery failed or uncertain; manual reconciliation required." : ""}`,
+    trigger: a.body,
     opened_at: a.created_at,
-    messages: messages.map(m => ({ message_id: m.message_id, direction: m.direction, kind: m.kind, body: m.body, at: m.at, mocked: m.mocked ?? false })),
   };
 }

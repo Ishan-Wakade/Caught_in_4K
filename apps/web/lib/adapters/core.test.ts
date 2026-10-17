@@ -35,15 +35,12 @@ describe("core adapter (contract DTOs)", () => {
     expect(items.find((i) => i.catalog_item_id === "item_beanco_cup")!.business_name).toBe("Bean Co.");
   });
 
-  it("names contacts, strips core's [alert_id] prefix and keeps message kinds", () => {
-    const { alerts, messenger_mocked } = core.adaptAlerts(s.alerts);
-    expect(messenger_mocked).toBe(true);
+  it("names contacts and derives a readable trigger", () => {
+    const { alerts } = core.adaptAlerts(s.alerts);
     const bean = alerts.find((a) => a.item_id === "item_beanco_cup")!;
     expect(bean.contact.name).toBe("Bean Co. manager");
     expect(bean.state).toBe("sent");
     expect(bean.trigger).toMatch(/^Bean Co\. clear cold cup: 33\.3% correctly sorted across 3 assessed disposals/);
-    expect(bean.messages[0].body.startsWith("[")).toBe(false);
-    expect(bean.messages[0].kind).toBe("recommendation");
     expect(alerts.find((a) => a.kind === "emptying")!.contact.name).toBe("Area manager");
   });
 

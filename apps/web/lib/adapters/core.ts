@@ -20,7 +20,6 @@ import { outcomeOf } from "../format";
 import { binCameraId, businessName, contactInfo, SITE, SITE_INFO, stationName } from "../site";
 import type {
   Alert,
-  AlertMessage,
   AlertsResponse,
   BinsResponse,
   CatalogItem,
@@ -152,9 +151,6 @@ export function adaptCatalog(r: ContractCatalogItem[]): CatalogResponse {
 
 // ---- alerts ------------------------------------------------------------------
 
-/** Core prefixes outbound bodies with "[alert_id] " for reply matching; hide it in the UI. */
-const stripPrefix = (body: string) => body.replace(/^\[[^\]]+\]\s*/, "");
-
 function alertState(a: AlertSummary): Alert["state"] {
   switch (a.state) {
     case "open":
@@ -174,20 +170,8 @@ function trigger(body: string): string {
 }
 
 export function adaptAlerts(r: AlertSummary[]): AlertsResponse {
-  let anyMocked = false;
   const alerts: Alert[] = r.map((a) => {
     const info = contactInfo(a.contact_id);
-    const messages: AlertMessage[] = a.messages.map((m) => {
-      if (m.mocked) anyMocked = true;
-      return {
-        message_id: m.message_id,
-        direction: m.direction,
-        kind: m.kind === "reply" ? undefined : m.kind,
-        body: stripPrefix(m.body),
-        at: m.at,
-        mocked: m.mocked,
-      };
-    });
     return {
       alert_id: a.alert_id,
       kind: a.kind,
@@ -198,11 +182,10 @@ export function adaptAlerts(r: AlertSummary[]): AlertsResponse {
       bin_id: a.bin_id ?? undefined,
       contact: { contact_id: a.contact_id, ...info },
       business_name: businessName(info.business_id),
-      messages,
     };
   });
   alerts.sort((x, y) => y.opened_at.localeCompare(x.opened_at));
-  return { alerts, messenger_mocked: anyMocked };
+  return { alerts };
 }
 
 // ---- reviews -----------------------------------------------------------------

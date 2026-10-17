@@ -167,15 +167,6 @@ export type AlertState =
   | "emptied"
   | "needs_clarification";
 
-export type AlertMessage = {
-  message_id: string;
-  direction: "outbound" | "inbound";
-  kind?: "recommendation" | "follow_up" | "emptying_request" | "clarification";
-  body: string;
-  at: string;
-  mocked: boolean;
-};
-
 export type Alert = {
   alert_id: string;
   kind: AlertKind;
@@ -187,11 +178,9 @@ export type Alert = {
   bin_id?: string;
   contact: { contact_id: string; name: string; role: string; business_id?: string | null };
   business_name?: string | null;
-  messages: AlertMessage[];
 };
 
-/** `messenger_mocked` decides whether the mock reply box is shown. */
-export type AlertsResponse = { alerts: Alert[]; messenger_mocked: boolean };
+export type AlertsResponse = { alerts: Alert[] };
 
 // ---- Reviews --------------------------------------------------------------
 
@@ -210,9 +199,6 @@ export type ReviewItem = {
 export type ReviewsResponse = { reviews: ReviewItem[] };
 
 export type ReviewDecision = { action: "assign"; business_id: string } | { action: "leave_unresolved" };
-
-/** Body of `POST /api/photon/mock-reply` (contract §6). */
-export type MockReply = { contactId: string; body: string };
 
 // ---- Site settings shown in the UI -----------------------------------------
 

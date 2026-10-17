@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockBackend, interpret } from "./backend";
-import { FOLLOW_UP_AFTER_MS } from "./fixtures";
+import { MockBackend } from "./backend";
 import { SCRIPT_LENGTH_S } from "./script";
 
 function run(untilS: number, opts: { stepS?: number } = {}) {
@@ -19,7 +18,7 @@ describe("MockBackend scripted run", () => {
   it("covers every demo scenario's feed types", () => {
     const { b } = run(SCRIPT_LENGTH_S + 1);
     const types = new Set(b.feed(null).items.map((i) => i.type));
-    for (const t of ["disposal", "alert_opened", "message_sent", "reply_received", "intervention_recorded", "bin_emptied", "illustration_ready", "review_queued"]) {
+    for (const t of ["disposal", "alert_opened", "illustration_ready", "review_queued"]) {
       expect(types, t).toContain(t);
     }
   });
@@ -47,7 +46,7 @@ describe("MockBackend scripted run", () => {
     expect(rec.business_name).toBe("Bean Co.");
   });
 
-  it("uncertain origin goes to review and messages nobody about it", () => {
+  it("uncertain origin goes to review and alerts nobody about it", () => {
     const { b } = run(30);
     const r = b.reviews().reviews;
     expect(r).toHaveLength(1);
@@ -62,38 +61,13 @@ describe("MockBackend scripted run", () => {
     expect(b.bins().bins.find((x) => x.bin_id === "bin_patio_compost")!.unknown_count).toBe(1);
   });
 
-  it("follow-up is sent after the no-reply interval and not before", () => {
-    // Recommendation opens at 23s; follow-up due at 23s + interval.
-    const due = 23 + FOLLOW_UP_AFTER_MS / 1000;
-    const before = run(due - 2).b.alertsList().alerts.find((a) => a.kind === "recommendation" && a.item_id === "item_beanco_cup")!;
-    expect(before.state).toBe("sent");
-    expect(before.messages.filter((m) => m.kind === "follow_up")).toHaveLength(0);
-    const after = run(due + 1).b.alertsList().alerts.find((a) => a.kind === "recommendation" && a.item_id === "item_beanco_cup")!;
-    expect(after.state).toBe("follow_up_sent");
-    expect(after.messages.filter((m) => m.kind === "follow_up")).toHaveLength(1);
-  });
-
-  it("emptying request goes to the bin's emptying contact and resets only that bin", () => {
-    const pre = run(50).b;
-    const trashPre = pre.bins().bins.find((x) => x.type === "trash")!;
-    expect(trashPre.estimated_fullness).toBeGreaterThanOrEqual(0.8);
-    expect(pre.alertsList().alerts.find((a) => a.kind === "emptying")!.contact.contact_id).toBe("ct_area_mgr");
-    const { b } = run(61);
-    const post = b.bins().bins;
-    const trash = post.find((x) => x.type === "trash")!;
-    expect(trash.estimated_fullness).toBe(0);
-    expect(trash.last_emptied_at).not.toBeNull();
-    expect(post.find((x) => x.type === "compost")!.observed_counts).toEqual(pre.bins().bins.find((x) => x.type === "compost")!.observed_counts);
-  });
-
-  it("an acknowledgement is not a confirmation; the later DONE records an intervention", () => {
-    const mid = run(155).b.alertsList().alerts.find((a) => a.item_id === "item_beanco_cup")!;
-    expect(mid.state).toBe("acknowledged");
-    const { b } = run(SCRIPT_LENGTH_S + 1);
-    const cup = b.item("item_beanco_cup")!;
-    expect(cup.interventions).toHaveLength(1);
-    expect(cup.interventions[0].before.assessed_count).toBe(3);
-    expect(cup.interventions[0].after.assessed_count).toBe(2);
+  it("emptying request goes to the bin's emptying contact and stays open as internal state", () => {
+    const { b } = run(50);
+    const trash = b.bins().bins.find((x) => x.type === "trash")!;
+    expect(trash.estimated_fullness).toBeGreaterThanOrEqual(0.8);
+    const alert = b.alertsList().alerts.find((a) => a.kind === "emptying")!;
+    expect(alert.contact.contact_id).toBe("ct_area_mgr");
+    expect(alert.state).toBe("sent");
   });
 
   it("items with no assessed events report insufficient data, not 0%", () => {
@@ -102,30 +76,10 @@ describe("MockBackend scripted run", () => {
     expect(bowl.score).toEqual({ status: "insufficient_data" });
   });
 
-  it("presenter reply before the scripted one wins and the script does not repeat it", () => {
-    let t = 0;
-    const b = new MockBackend(() => t);
-    for (; t <= 30_000; t += 1000) b.feed(null);
-    b.mockReply({ contactId: "ct_beanco_mgr", body: "ok thanks" });
-    expect(b.alertsList().alerts.find((a) => a.item_id === "item_beanco_cup")!.state).toBe("acknowledged");
-    b.mockReply({ contactId: "ct_beanco_mgr", body: "Sign is installed" });
-    for (; t <= (SCRIPT_LENGTH_S + 1) * 1000; t += 1000) b.feed(null);
-    expect(b.item("item_beanco_cup")!.interventions).toHaveLength(1);
-  });
-
   it("review assignment resolves the queued event", () => {
     const { b } = run(30);
     const r = b.reviews().reviews[0];
     b.decideReview(r.event_id, { action: "assign", business_id: "biz_beanco" });
     expect(b.reviews().reviews[0].status).toBe("resolved");
-  });
-});
-
-describe("interpret (mock)", () => {
-  it("treats acknowledgement as not a confirmation", () => {
-    expect(interpret("ok thanks", "recommendation")).toBe("acknowledged");
-    expect(interpret("Done, sign is up", "recommendation")).toBe("action_confirmed");
-    expect(interpret("emptied", "emptying")).toBe("bin_emptied");
-    expect(interpret("what?", "recommendation")).toBe("unclear");
   });
 });

@@ -102,17 +102,6 @@ export const ItemDetailSchema = ItemSummaryShape.extend({ interventions: z.array
 
 // ---- /api/alerts ----
 
-export const MessageKindSchema = z.enum(["recommendation", "follow_up", "emptying_request", "clarification", "reply"]);
-
-export const AlertMessageSchema = z.object({
-  message_id: id,
-  direction: z.enum(["outbound", "inbound"]),
-  kind: MessageKindSchema,
-  body: z.string(),
-  at: timestamp,
-  mocked: z.boolean(),
-});
-
 export const AlertSummarySchema = z.object({
   alert_id: id,
   kind: z.enum(["recommendation", "emptying"]),
@@ -123,7 +112,6 @@ export const AlertSummarySchema = z.object({
   /** Human-readable reason, e.g. "cup score 40% < 60%, 5 assessed events". */
   trigger: z.string(),
   opened_at: timestamp,
-  messages: z.array(AlertMessageSchema),
 });
 
 // ---- /api/reviews ----
@@ -145,5 +133,4 @@ export type BinSummary = z.infer<typeof BinSummarySchema>;
 export type ItemSummary = z.infer<typeof ItemSummarySchema>;
 export type ItemDetail = z.infer<typeof ItemDetailSchema>;
 export type AlertSummary = z.infer<typeof AlertSummarySchema>;
-export type AlertMessage = z.infer<typeof AlertMessageSchema>;
 export type ReviewItem = z.infer<typeof ReviewItemSchema>;

@@ -1,5 +1,5 @@
 // Rehearsal server: the same core the dashboard uses, wired like apps/web/app/api/_core/runtime.ts
-// (demo profile, in-memory storage, mock messenger/illustrator), behind plain node:http routes.
+// (demo profile, in-memory storage, mock illustrator), behind plain node:http routes.
 // For local end-to-end rehearsal of worker -> core only. Not deployed; binds to 127.0.0.1.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -15,7 +15,7 @@ async function makeCore() {
   const seed = validateSeed(JSON.parse(await readFile(resolve(root, "contracts/fixtures/demo-site.json"), "utf8")));
   const config = configFromSite("demo", seed.config_profiles.demo, {});
   const repository = new MemoryRepository(initialState(seed, config));
-  return createCore({ seed, config, repository, ...createLocalMocks(), inboundRepliesMocked: true, validateEvent: createEventValidator() });
+  return createCore({ seed, config, repository, ...createLocalMocks(), validateEvent: createEventValidator() });
 }
 
 let core = await makeCore();

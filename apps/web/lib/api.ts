@@ -17,7 +17,6 @@ import type {
   FeedResponse,
   ItemDetail,
   ItemsResponse,
-  MockReply,
   ReviewDecision,
   ReviewsResponse,
 } from "./types";
@@ -121,12 +120,6 @@ export const api = {
     if (useMock) return mockBackend().saveCatalogItem(item);
     await post("/api/catalog", core.toContractCatalog(item));
     catalogCache = null;
-  },
-
-  /** S's route; same path as a real Photon reply (contract §6). */
-  mockReply: async (reply: MockReply): Promise<void> => {
-    if (useMock) return mockBackend().mockReply(reply);
-    await post("/api/photon/mock-reply", reply);
   },
 
   resetDemo: async (): Promise<void> => {

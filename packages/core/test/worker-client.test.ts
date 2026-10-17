@@ -16,7 +16,7 @@ test("E's real Python HTTP client sends all fixtures through API/S mock adapters
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const dir = await mkdtemp(join(tmpdir(), "recyclone-worker-client-"));
   const shared = globalThis as typeof globalThis & { recycloneCore?: ReturnType<typeof getCore> };
-  Object.assign(process.env, { CONFIG_PROFILE: "demo", CORE_STORAGE: "memory", RECYCLONE_ROOT: root, WORKER_INGEST_TOKEN: "worker_client_test", MESSENGER_MODE: "mock", ILLUSTRATOR_MODE: "mock" });
+  Object.assign(process.env, { CONFIG_PROFILE: "demo", CORE_STORAGE: "memory", RECYCLONE_ROOT: root, WORKER_INGEST_TOKEN: "worker_client_test", ILLUSTRATOR_MODE: "mock" });
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -54,7 +54,6 @@ print(json.dumps(dict(sink.stats)))
     assert.equal((await core.getFeed()).items.filter(f => f.type === "disposal").length, 11);
     assert.equal((await core.getReviews()).length, 1);
     const alerts = await core.getAlerts(); assert.ok(alerts.some(a => a.kind === "recommendation")); assert.ok(alerts.some(a => a.kind === "emptying"));
-    assert.ok(alerts.flatMap(a => a.messages).every(m => m.mocked));
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     if (shared.recycloneCore) await (await shared.recycloneCore).close(); delete shared.recycloneCore;

@@ -58,7 +58,6 @@ export const ConfigProfileSchema = z.object({
   correct_threshold_pct: z.number().min(0).max(100).nullable(),
   min_assessed_events: z.int().min(1),
   evidence_window_hours: z.number().positive().nullable(),
-  follow_up_after_minutes: z.number().positive(),
   fullness_alert_threshold: z.number().positive().nullable(),
   item_confidence_threshold: unit,
   business_confidence_threshold: unit,

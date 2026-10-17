@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useScenes } from "@/hooks/useScenes";
 
 /** Notification for notable feed events. It never changes the page (user decision). */
 export function Toast() {
-  const { toast, dismissToast, scene } = useScenes();
+  const { toast, dismissToast } = useScenes();
   if (!toast) return null;
   const alert = toast.tone === "alert";
   return (
@@ -13,11 +12,6 @@ export function Toast() {
       <span aria-hidden="true" className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${alert ? "bg-clay" : "bg-forest"}`} />
       <div className="flex flex-col gap-1">
         <span className="text-[15px] leading-snug text-ink">{toast.text}</span>
-        {alert && scene !== "messages" && (
-          <Link href="/messages" className="text-sm font-bold">
-            Open Messages →
-          </Link>
-        )}
       </div>
       <button onClick={dismissToast} aria-label="Dismiss" className="ml-1 cursor-pointer text-lg leading-none text-muted-2 hover:text-ink">
         ×

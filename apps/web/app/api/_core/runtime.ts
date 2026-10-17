@@ -1,31 +1,10 @@
 import { readFile, access } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
-import { createIntegrationAdapters, integrationMode, type IntegrationAdapters } from "./adapters.js";
-import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, validateSeed, type Core, type CoreConfig, type SiteSeed } from "@recyclone/core";
+import { createIntegrationAdapters, integrationMode } from "./adapters.js";
+import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, validateSeed, type Core, type CoreConfig } from "@recyclone/core";
 
-/** Real recipient numbers stay in runtime configuration, outside committed fixtures. */
-function applyContactPhones(seed: SiteSeed, raw: string | undefined) {
-  if (!raw) return;
-  let phones: unknown;
-  try { phones = JSON.parse(raw); }
-  catch { throw new Error("CONTACT_PHONES_JSON must be valid JSON mapping contact IDs to phone numbers"); }
-  if (!phones || typeof phones !== "object" || Array.isArray(phones) ||
-      Object.entries(phones).some(([id, phone]) => !seed.contacts.some(c => c.contact_id === id) || typeof phone !== "string" || !phone.trim())) {
-    throw new Error("CONTACT_PHONES_JSON must map configured contact IDs to nonempty phone strings");
-  }
-  for (const contact of seed.contacts) {
-    if (Object.hasOwn(phones, contact.contact_id)) contact.phone = (phones as Record<string, string>)[contact.contact_id]!;
-  }
-}
-
-type Adapters = IntegrationAdapters;
-const shared = globalThis as typeof globalThis & { recycloneCore?: Promise<Core>; recycloneAdapters?: Adapters };
-/** S can register real/mock adapters before getCore(); the webhook calls getCore().handleReply(). */
-export function configureCoreAdapters(adapters: Adapters) {
-  if (shared.recycloneCore) throw new Error("Configure adapters before initializing core");
-  shared.recycloneAdapters = adapters;
-}
+const shared = globalThis as typeof globalThis & { recycloneCore?: Promise<Core> };
 export function getCore(): Promise<Core> {
   if (!shared.recycloneCore) shared.recycloneCore = initialize().catch(error => { shared.recycloneCore = undefined; throw error; });
   return shared.recycloneCore;
@@ -43,12 +22,10 @@ async function initialize(): Promise<Core> {
   }
   const seedPath = process.env.CORE_SITE_CONFIG_PATH ?? resolve(workspace, "contracts/fixtures/demo-site.json");
   const seed = validateSeed(JSON.parse(await readFile(seedPath, "utf8")));
-  applyContactPhones(seed, process.env.CONTACT_PHONES_JSON);
   const overrides = process.env.CORE_CONFIG_JSON ? JSON.parse(process.env.CORE_CONFIG_JSON) as Partial<CoreConfig> : {};
   const config = configFromSite(profile, seed.config_profiles[profile], overrides);
-  const messengerMode = integrationMode(process.env.MESSENGER_MODE, "MESSENGER_MODE");
   integrationMode(process.env.ILLUSTRATOR_MODE, "ILLUSTRATOR_MODE");
-  const adapters = shared.recycloneAdapters ?? createIntegrationAdapters();
+  const adapters = createIntegrationAdapters();
   const state = initialState(seed, config);
   const storage = process.env.CORE_STORAGE ?? "postgres";
   let repository;
@@ -63,5 +40,5 @@ async function initialize(): Promise<Core> {
       if (!isDeepStrictEqual(s.config, config)) throw new Error("Persisted configuration differs from runtime. Use a separate site/database for each profile, or explicitly migrate configuration.");
     }); } catch (error) { await repository.close(); throw error; }
   } else throw new Error("CORE_STORAGE must be postgres or memory");
-  return createCore({ seed, config, repository, ...adapters, inboundRepliesMocked: messengerMode === "mock", validateEvent: createEventValidator() });
+  return createCore({ seed, config, repository, ...adapters, validateEvent: createEventValidator() });
 }

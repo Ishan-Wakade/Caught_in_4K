@@ -2,14 +2,14 @@
  * In-browser MOCK of I's backend, used when NEXT_PUBLIC_DATA_SOURCE=mock.
  *
  * It exists only so the dashboard can be built and rehearsed before the real
- * API exists. It is deliberately simple (unweighted scores, keyword reply
- * interpretation) and is not a reference for core's rules. Like core
- * (contract §6), it does time-driven work lazily whenever the feed is polled.
+ * API exists. It is deliberately simple (unweighted scores) and is not a
+ * reference for core's rules. Like core, it does time-driven work lazily
+ * whenever the feed is polled. Alerts open as internal state but are never
+ * sent anywhere — messaging was removed from this product.
  */
 import type {
   Alert,
   AlertKind,
-  AlertMessage,
   AlertsResponse,
   BinStatus,
   BinsResponse,
@@ -23,7 +23,6 @@ import type {
   ItemDetail,
   ItemSummary,
   ItemsResponse,
-  MockReply,
   Outcome,
   Period,
   ReviewDecision,
@@ -37,7 +36,6 @@ import {
   BUSINESS_THRESHOLD,
   CATALOG,
   CONTACTS,
-  FOLLOW_UP_AFTER_MS,
   FULLNESS_THRESHOLD,
   MIN_ASSESSED,
   SCORE_THRESHOLD_PERCENT,
@@ -45,7 +43,6 @@ import {
 } from "./fixtures";
 import { SCRIPT, type ScriptStep } from "./script";
 import { mockIllustrationSvg } from "./illustration";
-import { APP_NAME } from "@/lib/config";
 
 type StoredEvent = {
   event: DisposalEvent;
@@ -133,7 +130,7 @@ export class MockBackend {
   }
 
   alertsList(): AlertsResponse {
-    return clone({ alerts: [...this.alerts].reverse(), messenger_mocked: true });
+    return clone({ alerts: [...this.alerts].reverse() });
   }
 
   reviews(): ReviewsResponse {
@@ -166,71 +163,16 @@ export class MockBackend {
     else this.catalogItems.push(clone(item));
   }
 
-  /** Same path a Photon webhook reply would take (contract §6), with a keyword interpreter. */
-  mockReply({ contactId, body }: MockReply): void {
-    const now = this.now();
-    const open = this.alerts.filter((a) => a.contact.contact_id === contactId && isOpen(a));
-    const target = open.at(-1);
-    if (!target) return;
-
-    const inbound: AlertMessage = {
-      message_id: this.id("msg"),
-      direction: "inbound",
-      body,
-      at: iso(now),
-      mocked: true,
-    };
-    target.messages.push(inbound);
-    this.pushFeed("reply_received", { alert_id: target.alert_id }, `${target.contact.name}: “${body}”`);
-
-    const intent = interpret(body, target.kind);
-    if (intent === "bin_emptied" && target.kind === "emptying" && target.bin_id) {
-      target.state = "emptied";
-      this.emptyBin(target.bin_id, now);
-      this.pushFeed("bin_emptied", { alert_id: target.alert_id, bin_id: target.bin_id }, `${binName(target.bin_id)} emptied; its inventory reset`);
-      this.refreshIllustration(target.bin_id);
-    } else if (intent === "action_confirmed" && target.kind === "recommendation" && target.item_id) {
-      target.state = "action_confirmed";
-      this.interventions.push({
-        intervention_id: this.id("int"),
-        alert_id: target.alert_id,
-        item_id: target.item_id,
-        action: body,
-        confirmed_at: iso(now),
-      });
-      this.pushFeed("intervention_recorded", { alert_id: target.alert_id, item_id: target.item_id }, `Intervention recorded for ${itemName(this.catalogItems, target.item_id)}`);
-    } else if (intent === "acknowledged") {
-      target.state = "acknowledged";
-    } else {
-      target.state = "needs_clarification";
-      this.sendMessage(target, "clarification", "Thanks! Just to confirm: has the suggested change been made? Reply DONE once it is in place.");
-    }
-  }
-
   // ---- time-driven work ---------------------------------------------------
 
   private advance(): void {
     const elapsed = this.now() - this.startedAt;
     while (this.nextStep < this.script.length && this.script[this.nextStep].at * 1000 <= elapsed) {
       const step = this.script[this.nextStep++];
-      if (step.kind === "disposal") this.dispose(step, this.startedAt + step.at * 1000);
-      else {
-        // Scripted replies only answer alerts still open for that contact.
-        const waiting = this.alerts.some((a) => a.contact.contact_id === step.contact && isOpen(a));
-        if (waiting) this.mockReply({ contactId: step.contact, body: step.body });
-      }
-    }
-    for (const a of this.alerts) {
-      if (a.state === "sent" && this.now() - Date.parse(a.opened_at) >= FOLLOW_UP_AFTER_MS) {
-        a.state = "follow_up_sent";
-        const body =
-          a.kind === "recommendation"
-            ? `Following up on ${itemName(this.catalogItems, a.item_id)}: did the suggested sign go up? Reply DONE once it's in place.`
-            : `Following up: has ${binName(a.bin_id)} been emptied? Reply EMPTIED once it has.`;
-        this.sendMessage(a, "follow_up", body);
-      }
+      this.dispose(step, this.startedAt + step.at * 1000);
     }
   }
+
 
   private dispose(step: Extract<ScriptStep, { kind: "disposal" }>, at: number): void {
     const cat = step.item ? this.catalogItems.find((c) => c.catalog_item_id === step.item) ?? null : null;
@@ -296,15 +238,10 @@ export class MockBackend {
     const contact = CONTACTS.find((c) => c.business_id === cat.business_id && c.role === "Restaurant manager");
     if (!contact) return;
     const pct = Math.round(s.score.percent);
-    const alert = this.openAlert("recommendation", contact, {
+    this.openAlert("recommendation", contact, {
       item_id: cat.catalog_item_id,
       trigger: `${cat.name} score ${pct}% < ${SCORE_THRESHOLD_PERCENT}%, ${s.assessed_count} assessed events`,
     });
-    this.sendMessage(
-      alert,
-      "recommendation",
-      `Hi, this is ${APP_NAME} at the shared patio. ${cat.name}s went into the right bin ${pct}% of the time (${s.assessed_count} seen). Here they go in ${cap(cat.correct_destination)}. Could you put a small sign where customers pick them up? Reply DONE once it's up.`,
-    );
   }
 
   private maybeRequestEmptying(binId: string): void {
@@ -315,11 +252,10 @@ export class MockBackend {
     const contact = CONTACTS.find((c) => c.contact_id === bin.emptying_contact_id);
     if (!contact) return; // Emptying responsibility not configured: never guess a recipient.
     const pct = Math.round(s.estimated_fullness * 100);
-    const alert = this.openAlert("emptying", contact, {
+    this.openAlert("emptying", contact, {
       bin_id: binId,
       trigger: `${s.name} estimated ${pct}% full ≥ ${Math.round(FULLNESS_THRESHOLD * 100)}% threshold`,
     });
-    this.sendMessage(alert, "emptying_request", `${s.name} is estimated at ${pct}% full. Could someone empty it? Reply EMPTIED when done.`);
   }
 
   private openAlert(
@@ -334,18 +270,12 @@ export class MockBackend {
       opened_at: iso(this.now()),
       contact: { contact_id: contact.contact_id, name: contact.name, role: contact.role, business_id: contact.business_id },
       business_name: BUSINESSES.find((b) => b.business_id === contact.business_id)?.name ?? null,
-      messages: [],
       ...extra,
     };
     this.alerts.push(alert);
     const what = kind === "recommendation" ? `Recommendation for ${contact.name}` : `Emptying request: ${binName(extra.bin_id)}`;
     this.pushFeed("alert_opened", { alert_id: alert.alert_id, item_id: extra.item_id, bin_id: extra.bin_id }, `${what} (${extra.trigger})`);
     return alert;
-  }
-
-  private sendMessage(alert: Alert, kind: NonNullable<AlertMessage["kind"]>, body: string): void {
-    alert.messages.push({ message_id: this.id("msg"), direction: "outbound", kind, body, at: iso(this.now()), mocked: true });
-    this.pushFeed("message_sent", { alert_id: alert.alert_id }, `${kind.replace("_", "-")} sent to ${alert.contact.name}`, { mocked: true });
   }
 
   // ---- derived state ------------------------------------------------------
@@ -421,12 +351,6 @@ export class MockBackend {
     return { from: iso(from), to: iso(to), assessed_count: inRange.length, score: score(inRange) };
   }
 
-  private emptyBin(binId: string, at: number): void {
-    const st = this.binState.get(binId)!;
-    st.epochStart = at;
-    st.last_emptied_at = iso(at);
-  }
-
   private refreshIllustration(binId: string): void {
     const s = this.binStatus(binId);
     const now = iso(this.now());
@@ -462,21 +386,8 @@ function isOpen(a: Alert): boolean {
   return a.state !== "action_confirmed" && a.state !== "emptied";
 }
 
-/** Keyword stand-in for S's ReplyInterpreter. "ok thanks" is an acknowledgement, not a confirmation. */
-export function interpret(body: string, kind: AlertKind): "bin_emptied" | "action_confirmed" | "acknowledged" | "unclear" {
-  const t = body.toLowerCase();
-  if (kind === "emptying" && /\bempt(ied|y)\b|\bdone\b/.test(t)) return "bin_emptied";
-  if (kind === "recommendation" && /\b(done|installed|put up|we put|added|placed)\b/.test(t)) return "action_confirmed";
-  if (/\b(ok|okay|thanks|thank you|got it|will do)\b/.test(t)) return "acknowledged";
-  return "unclear";
-}
-
 function binName(binId?: string): string {
   return BINS.find((b) => b.bin_id === binId)?.name ?? binId ?? "bin";
-}
-
-function itemName(catalog: CatalogItem[], id?: string): string {
-  return catalog.find((c) => c.catalog_item_id === id)?.name ?? id ?? "item";
 }
 
 function strip<T extends object>(o: T): T {

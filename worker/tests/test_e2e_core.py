@@ -1,6 +1,6 @@
 """End-to-end rehearsal: the worker's real HTTP client against I's real core (tools/rehearsal).
 
-Skipped when pnpm/node are not installed. Demo profile, in-memory, mock messenger.
+Skipped when pnpm/node are not installed. Demo profile, in-memory, mock illustrator.
 """
 
 import json
@@ -59,7 +59,7 @@ def test_synthetic_events_drive_alerts_in_real_core(core_url, monkeypatch, capsy
 
     types = [f["type"] for f in get(core_url + "/api/feed")["items"]]
     assert types.count("disposal") == 11
-    assert "alert_opened" in types and "message_sent" in types   # cup score fell below the demo threshold
+    assert "alert_opened" in types                                # cup score fell below the demo threshold
     assert "review_queued" in types                              # unbranded cup with a weak logo guess
     trash = next(b for b in get(core_url + "/api/bins") if b["bin_id"] == "bin_patio_trash")
     assert trash["estimated_fullness"] >= 0.8                   # the clamshell filled it

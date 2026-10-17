@@ -400,7 +400,6 @@
       "correct_threshold_pct": null,
       "min_assessed_events": 5,
       "evidence_window_hours": null,
-      "follow_up_after_minutes": 1440,
       "fullness_alert_threshold": null,
       "item_confidence_threshold": 0.5,
       "business_confidence_threshold": 0.6,
@@ -416,7 +415,6 @@
       "correct_threshold_pct": 60,
       "min_assessed_events": 3,
       "evidence_window_hours": 1,
-      "follow_up_after_minutes": 2,
       "fullness_alert_threshold": 0.8,
       "item_confidence_threshold": 0.5,
       "business_confidence_threshold": 0.6,
@@ -425,7 +423,6 @@
         "correct_threshold_pct",
         "min_assessed_events",
         "evidence_window_hours",
-        "follow_up_after_minutes",
         "fullness_alert_threshold",
         "item_confidence_threshold",
         "business_confidence_threshold"

@@ -15,7 +15,6 @@ export const PAGES: NavLink[] = [
   { href: "/", label: "Overview", match: (p) => p === "/" || p.startsWith("/items") },
   { href: "/camera", label: "Live camera" },
   { href: "/live", label: "Cameras", scene: "live" },
-  { href: "/messages", label: "Messages", scene: "messages" },
   { href: "/reviews", label: "Review queue" },
   { href: "/catalog", label: "Catalog" },
 ];

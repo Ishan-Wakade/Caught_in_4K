@@ -37,24 +37,23 @@ describe("sceneDirector", () => {
   });
 
   it("only the presenter switches scenes", () => {
-    let s = selectScene(initialDirector(), "messages");
-    expect(s.scene).toBe("messages");
-    s = selectScene(s, "bins");
+    let s = selectScene(initialDirector(), "bins");
     expect(s.scene).toBe("bins");
+    s = selectScene(s, "live");
+    expect(s.scene).toBe("live");
   });
 
   it("marks other tabs with unseen updates, never the current one", () => {
-    let s = onFeedItem(initialDirector(), item("disposal", { bin_id: "b1" }), 0);
-    expect(s.unseen).toEqual({ live: false, bins: true, messages: false });
-    s = onFeedItem(s, item("alert_opened", { alert_id: "a1" }), 0);
-    expect(s.unseen.messages).toBe(true);
+    const s = onFeedItem(initialDirector(), item("disposal", { bin_id: "b1" }), 0);
+    expect(s.unseen).toEqual({ live: false, bins: true });
   });
 
   it("selecting a tab clears its unseen marker only", () => {
-    let s = onFeedItem(initialDirector(), item("disposal", { bin_id: "b1" }), 0);
-    s = onFeedItem(s, item("reply_received", { alert_id: "a1" }), 0);
+    let s = selectScene(initialDirector(), null);
+    s = onFeedItem(s, item("disposal", { bin_id: "b1" }), 0);
+    expect(s.unseen).toEqual({ live: true, bins: true });
     s = selectScene(s, "bins");
-    expect(s.unseen).toEqual({ live: false, bins: false, messages: true });
+    expect(s.unseen).toEqual({ live: true, bins: false });
   });
 
   it("alerts raise a toast that expires without moving the screen", () => {
@@ -66,6 +65,11 @@ describe("sceneDirector", () => {
     expect(s.scene).toBe("live");
   });
 
+  it("recommendation alerts (item_id set) don't raise a toast", () => {
+    const s = onFeedItem(initialDirector(), item("alert_opened", { alert_id: "a1", item_id: "i1" }), 0);
+    expect(s.toast).toBeNull();
+  });
+
   it("review_queued shows an info toast", () => {
     const s = onFeedItem(initialDirector(), item("review_queued"), 0);
     expect(s.toast?.tone).toBe("info");
@@ -74,7 +78,7 @@ describe("sceneDirector", () => {
   it("on a management page every scene collects unseen updates", () => {
     let s = selectScene(initialDirector(), null);
     s = onFeedItem(s, item("disposal", { bin_id: "b1" }), 0);
-    expect(s.unseen).toEqual({ live: true, bins: true, messages: false });
+    expect(s.unseen).toEqual({ live: true, bins: true });
   });
 
   it("tracks the focused bin and the active alert for the hidden scenes", () => {

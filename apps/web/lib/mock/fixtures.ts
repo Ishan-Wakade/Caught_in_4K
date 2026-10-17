@@ -51,8 +51,6 @@ export const FULLNESS_THRESHOLD = demo.fullness_alert_threshold ?? 0.8;
 export const SCORE_THRESHOLD_PERCENT = demo.correct_threshold_pct ?? 60;
 export const MIN_ASSESSED = demo.min_assessed_events;
 export const BUSINESS_THRESHOLD = demo.business_confidence_threshold;
-/** Demo-shortened no-reply interval before the single follow-up. */
-export const FOLLOW_UP_AFTER_MS = demo.follow_up_after_minutes * 60_000;
 
 export const CATALOG: CatalogItem[] = SITE.catalog.map((c) => ({
   catalog_item_id: c.catalog_item_id,

@@ -8,8 +8,8 @@
  */
 import type { FeedItem } from "./types";
 
-export type Scene = "live" | "bins" | "messages";
-export const SCENES: Scene[] = ["live", "bins", "messages"];
+export type Scene = "live" | "bins";
+export const SCENES: Scene[] = ["live", "bins"];
 
 export const TOAST_MS = 4000;
 
@@ -28,7 +28,7 @@ export type DirectorState = {
 export function initialDirector(): DirectorState {
   return {
     scene: "live",
-    unseen: { live: false, bins: false, messages: false },
+    unseen: { live: false, bins: false },
     toast: null,
     focusBinId: null,
     activeAlertId: null,
@@ -38,19 +38,20 @@ export function initialDirector(): DirectorState {
 const AFFECTS: Partial<Record<FeedItem["type"], Scene[]>> = {
   disposal: ["live", "bins"],
   illustration_ready: ["bins"],
-  bin_emptied: ["bins", "messages"],
-  alert_opened: ["messages"],
-  message_sent: ["messages"],
-  reply_received: ["messages"],
-  intervention_recorded: ["messages"],
+  bin_emptied: ["bins"],
 };
 
 const TOAST_TONE: Partial<Record<FeedItem["type"], Toast["tone"]>> = {
-  alert_opened: "alert",
   review_queued: "info",
   bin_emptied: "info",
   intervention_recorded: "info",
 };
+
+/** `alert_opened` covers both recommendation and emptying alerts; recommendations don't toast (user decision). */
+function toastTone(item: FeedItem): Toast["tone"] | undefined {
+  if (item.type === "alert_opened") return item.ref.item_id ? undefined : "alert";
+  return TOAST_TONE[item.type];
+}
 
 /** Apply one new feed item. Never changes `scene`. Backlog items from the first load should not be passed here. */
 export function onFeedItem(prev: DirectorState, item: FeedItem, now: number): DirectorState {
@@ -58,7 +59,7 @@ export function onFeedItem(prev: DirectorState, item: FeedItem, now: number): Di
   const unseen = { ...s.unseen };
   for (const scene of AFFECTS[item.type] ?? []) if (scene !== s.scene) unseen[scene] = true;
 
-  const tone = TOAST_TONE[item.type];
+  const tone = toastTone(item);
   return {
     ...s,
     unseen,

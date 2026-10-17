@@ -4,5 +4,3 @@ export { MemoryRepository, PostgresRepository, connectPostgres, type Repository,
 export { initialState, type SiteSeed, type CatalogRecord, type CoreState } from "./model.js";
 export { createEventValidator, CoreError, validateSeed } from "./validation.js";
 export { createLocalMocks } from "./mocks.js";
-
-export { resolveReplyContact, type ReplyContactOptions } from "./contact-routing.js";

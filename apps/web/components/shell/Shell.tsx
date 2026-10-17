@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { ScenesProvider, SCENE_PATH } from "@/hooks/useScenes";
+import { ScenesProvider, SCENE_PATH, useScenes } from "@/hooks/useScenes";
 import { SCENES } from "@/lib/sceneDirector";
 import { DEMO_TOOLS } from "@/lib/config";
 import { DemoNotice } from "./DemoNotice";
@@ -26,13 +26,18 @@ function SceneKeys() {
   return null;
 }
 
+function ScenedHeader() {
+  const { unseen } = useScenes();
+  return <SiteHeader unseen={unseen} />;
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   return (
     <ScenesProvider>
       {DEMO_TOOLS && <SceneKeys />}
       <div className="flex min-h-screen flex-col bg-paper text-ink">
         <DemoNotice />
-        <SiteHeader />
+        <ScenedHeader />
         <main className="flex flex-1 flex-col">{children}</main>
       </div>
       <Toast />

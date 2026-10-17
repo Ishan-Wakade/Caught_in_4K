@@ -13,7 +13,8 @@ const nextConfig: NextConfig = {
   // Pages that moved when the demo and management screens became one app.
   async redirects() {
     return [
-      { source: "/demo", destination: "/live", permanent: false },
+      // The site opens on its first tab, the live camera (the old overview page is no longer linked).
+      { source: "/", destination: "/camera", permanent: false },
       { source: "/recommendations", destination: "/messages", permanent: false },
       { source: "/items", destination: "/catalog", permanent: false },
     ];

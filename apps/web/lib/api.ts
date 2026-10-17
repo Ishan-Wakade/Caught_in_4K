@@ -6,6 +6,7 @@
  */
 import { DATA_SOURCE } from "./config";
 import { MockBackend } from "./mock/backend";
+import type { CatalogItem as ContractCatalogItem, ItemDetail as ContractItemDetail, ItemSummary as ContractItemSummary } from "@recyclone/contracts";
 import * as core from "./adapters/core";
 import type {
   AlertsResponse,
@@ -49,7 +50,7 @@ const post = <T,>(path: string, body: unknown) => http<T>(path, { method: "POST"
 let catalogCache: { at: number; items: Promise<CatalogItem[]> } | null = null;
 function coreCatalog(): Promise<CatalogItem[]> {
   if (!catalogCache || Date.now() - catalogCache.at > 5000) {
-    catalogCache = { at: Date.now(), items: http<CatalogItem[]>("/api/catalog") };
+    catalogCache = { at: Date.now(), items: http<ContractCatalogItem[]>("/api/catalog").then((r) => r.map(core.fromContractCatalog)) };
     catalogCache.items.catch(() => (catalogCache = null));
   }
   return catalogCache.items;
@@ -66,9 +67,17 @@ export const api = {
       : core.adaptFeed(await http(`/api/feed${after ? `?after=${encodeURIComponent(after)}` : ""}`), after),
 
   bins: async (): Promise<BinsResponse> =>
-    useMock ? mockBackend().bins() : core.adaptBins(await http("/api/bins"), await coreCatalog()),
+    useMock ? mockBackend().bins() : core.adaptBins(await http("/api/bins")),
 
-  items: async (): Promise<ItemsResponse> => (useMock ? mockBackend().items() : core.adaptItems(await http("/api/items"))),
+  items: async (): Promise<ItemsResponse> => {
+    if (useMock) return mockBackend().items();
+    const list = await http<ContractItemSummary[]>("/api/items");
+    // The list has no interventions; fetch details for items with drops (few in a demo site).
+    const details = await Promise.all(
+      list.filter((i) => i.assessed_count > 0).map((i) => http<ContractItemDetail>(`/api/items/${encodeURIComponent(i.catalog_item_id)}`)),
+    );
+    return core.adaptItems(list, new Map(details.map((d) => [d.catalog_item_id, d])));
+  },
 
   item: async (id: string): Promise<ItemDetail | null> => {
     if (useMock) return mockBackend().item(id);
@@ -93,11 +102,11 @@ export const api = {
   },
 
   catalog: async (): Promise<CatalogResponse> =>
-    useMock ? mockBackend().catalog() : core.adaptCatalog(await coreCatalog()),
+    useMock ? mockBackend().catalog() : { items: await coreCatalog(), businesses: core.adaptCatalog([]).businesses },
 
   saveCatalogItem: async (item: CatalogItem): Promise<void> => {
     if (useMock) return mockBackend().saveCatalogItem(item);
-    await post("/api/catalog", item);
+    await post("/api/catalog", core.toContractCatalog(item));
     catalogCache = null;
   },
 

@@ -1,23 +1,30 @@
 /**
- * Converts core's current API responses (packages/core, owner I) into the UI's
- * view models. Core does not yet return the contract DTOs from
- * `@recyclone/contracts` (`src/api.ts`); when it does, only this file changes.
+ * Converts the API's responses into the UI's view models.
  *
- * The wire types below describe what core actually returns today (read from
- * packages/core/src/core.ts and metrics.ts, and checked against a running API).
+ * Core (owner I) returns the contract DTOs from `@recyclone/contracts`
+ * (`contracts/src/api.ts`). The contract leaves out a few things the screens
+ * show (business and contact names, per-item bin counts, interventions on the
+ * item list), so names come from the site fixture (`lib/site.ts`) and the rest
+ * is filled in by `lib/api.ts` or the pages.
  */
+import type {
+  AlertSummary,
+  BinSummary,
+  CatalogItem as ContractCatalogItem,
+  FeedResponse as ContractFeed,
+  ItemDetail as ContractItemDetail,
+  ItemSummary as ContractItemSummary,
+  ReviewItem as ContractReviewItem,
+} from "@recyclone/contracts";
 import { outcomeOf } from "../format";
-import { businessName, contactInfo, SITE, SITE_INFO, stationName, binCameraId } from "../site";
+import { binCameraId, businessName, contactInfo, SITE, SITE_INFO, stationName } from "../site";
 import type {
   Alert,
   AlertMessage,
   AlertsResponse,
-  BinStatus,
-  BinType,
   BinsResponse,
   CatalogItem,
   CatalogResponse,
-  FeedItem,
   FeedResponse,
   ItemDetail,
   ItemSummary,
@@ -26,241 +33,181 @@ import type {
   ReviewItem,
   ReviewsResponse,
   Score,
-  DisposalEvent,
 } from "../types";
 
-// ---- core wire types (current, not the contract DTOs) -----------------------
+// ---- feed --------------------------------------------------------------------
 
-type CoreFeed = {
-  items: (Omit<FeedItem, "outcome" | "source_mode">)[];
-  cursor?: string;
-  next_cursor?: string;
-  demo: boolean;
-};
-
-type CoreBin = {
-  bin_id: string;
-  station_id: string;
-  name: string;
-  type: BinType;
-  capacity_l: number;
-  estimated_volume_ml: number;
-  estimated_fullness: number;
-  observed_count: number;
-  unknown_content_count: number;
-  initial_contents_known: boolean;
-  last_confirmed_emptying: { emptied_at: string } | null;
-  items: { name: string; count: number }[];
-  illustration: {
-    snapshot: { snapshotId: string; takenAt: string };
-    result: { imageUrl: string; generatedAt: string; snapshotId: string; mocked: boolean };
-  } | null;
-};
-
-type CoreMetric = {
-  business_id: string | null;
-  status: "assessed" | "insufficient_data";
-  correct_sorting_percent: number | null;
-  assessed_event_count: number;
-  station_breakdown: { station_id: string; assessed_event_count: number; correct_event_count: number }[];
-};
-
-type CoreComparisonPeriod = { start: string; end: string; assessed_event_count: number; correct_sorting_percent: number | null };
-
-type CoreItem = CatalogItem & {
-  metrics: CoreMetric[];
-  interventions: {
-    intervention_id: string;
-    alert_id: string;
-    business_id: string;
-    action: string;
-    confirmed_at: string;
-    comparison: { before: CoreComparisonPeriod; after: CoreComparisonPeriod };
-  }[];
-};
-
-type CoreAlert = {
-  alert_id: string;
-  kind: "recommendation" | "emptying";
-  item_id?: string;
-  business_id?: string;
-  bin_id?: string;
-  contact: { contactId: string };
-  state: "open" | "acknowledged" | "action_confirmed" | "resolved";
-  created_at: string;
-  body: string;
-  messages: {
-    message_id: string;
-    body: string;
-    direction: "outbound" | "inbound";
-    at: string;
-    mocked?: boolean;
-    delivery_status?: string;
-  }[];
-};
-
-type CoreReview = {
-  raw: DisposalEvent;
-  item_id: string | null;
-  business_id: string | null;
-  review_status: "pending" | "resolved" | "unresolved" | "not_required";
-  reviewed_business_id?: string | null;
-};
-
-// ---- adapters -----------------------------------------------------------------
-
-export function adaptFeed(r: CoreFeed, after: string | null): FeedResponse {
+export function adaptFeed(r: ContractFeed, after: string | null): FeedResponse {
   return {
-    items: r.items.map((i) => ({ ...i, outcome: i.type === "disposal" ? (outcomeOf(i) ?? undefined) : undefined })),
-    cursor: r.next_cursor ?? r.cursor ?? after,
-    demo: r.demo,
-  };
-}
-
-export function adaptBins(r: CoreBin[], catalog: CatalogItem[]): BinsResponse {
-  const idByName = new Map(catalog.map((c) => [c.name, c.catalog_item_id]));
-  return {
-    bins: r.map((b) => ({
-      bin_id: b.bin_id,
-      name: b.name,
-      station_id: b.station_id,
-      station_name: stationName(b.station_id),
-      camera_id: binCameraId(b.bin_id),
-      type: b.type,
-      capacity_l: b.capacity_l,
-      estimated_fullness: b.estimated_fullness,
-      estimated_volume_l: b.estimated_volume_ml / 1000,
-      fullness_threshold: SITE_INFO.fullness_threshold ?? 0.8,
-      observed_counts: b.items.map((i) => ({ catalog_item_id: idByName.get(i.name) ?? null, name: i.name, count: i.count })),
-      unknown_count: b.unknown_content_count,
-      initial_contents_known: b.initial_contents_known,
-      assumed_initial_l: 0,
-      illustration: b.illustration && {
-        image_url: b.illustration.result.imageUrl,
-        generated_at: b.illustration.result.generatedAt,
-        snapshot_id: b.illustration.result.snapshotId,
-        snapshot_taken_at: b.illustration.snapshot.takenAt,
-        mocked: b.illustration.result.mocked,
-      },
-      last_emptied_at: b.last_confirmed_emptying?.emptied_at ?? null,
+    items: r.items.map((i) => ({
+      ...i,
+      outcome: i.type === "disposal" ? (outcomeOf(i) ?? undefined) : undefined,
+      // Core marks these in the summary text rather than with fields.
+      source_mode: /\[labeled backup input\]/i.test(i.summary) ? "labeled" : undefined,
+      mocked: /\(mocked\)/i.test(i.summary) || undefined,
     })),
+    cursor: r.next_cursor || after,
+    demo: r.items.some((i) => i.demo),
   };
 }
 
-const score = (status: string, pct: number | null): Score =>
-  status === "insufficient_data" || pct === null ? { status: "insufficient_data" } : { status: "ok", percent: pct };
+// ---- bins --------------------------------------------------------------------
 
-const period = (p: CoreComparisonPeriod): Period => ({
-  from: p.start,
-  to: p.end,
-  assessed_count: p.assessed_event_count,
-  score: score("assessed", p.correct_sorting_percent),
+export function adaptBins(r: BinSummary[]): BinsResponse {
+  return {
+    bins: r.map((b) => {
+      const site = SITE.bins.find((s) => s.bin_id === b.bin_id);
+      // Core's estimate includes the site file's assumed starting contents until the first emptying.
+      const assumed = b.last_emptied_at ? 0 : (site?.initial_volume_l ?? 0);
+      return {
+        bin_id: b.bin_id,
+        name: b.name,
+        station_id: b.station_id,
+        station_name: stationName(b.station_id),
+        camera_id: binCameraId(b.bin_id),
+        type: b.type,
+        capacity_l: b.capacity_l,
+        estimated_fullness: b.estimated_fullness,
+        estimated_volume_l: b.estimated_volume_l,
+        fullness_threshold: SITE_INFO.fullness_threshold ?? 0.8,
+        // The contract carries only a total; the Bins page fills per-item counts from the feed.
+        observed_counts: [],
+        observed_total: b.observed_count,
+        unknown_count: b.unknown_count,
+        initial_contents_known: true,
+        assumed_initial_l: assumed,
+        illustration: b.illustration,
+        last_emptied_at: b.last_emptied_at,
+      };
+    }),
+  };
+}
+
+// ---- items -------------------------------------------------------------------
+
+const score = (pct: number | null): Score => (pct === null ? { status: "insufficient_data" } : { status: "ok", percent: pct });
+
+type ContractPeriod = ContractItemDetail["interventions"][number]["before"];
+const period = (p: ContractPeriod): Period => ({
+  from: p.from,
+  to: p.to,
+  assessed_count: p.assessed_count,
+  score: score(p.correct_sorting_pct),
 });
 
-/** Core keys metrics by item + attributed business; the item's own business is the headline. */
-function headlineMetric(c: CoreItem): CoreMetric | undefined {
-  return c.metrics.find((m) => m.business_id === c.business_id) ?? c.metrics[0];
-}
-
-function summary(c: CoreItem): ItemSummary {
-  const m = headlineMetric(c);
+function summary(c: ContractItemSummary, interventions: ContractItemDetail["interventions"] = []): ItemSummary {
   return {
-    interventions: c.interventions.map((i) => ({
-      intervention_id: i.intervention_id,
-      alert_id: i.alert_id,
-      action: i.action,
-      confirmed_at: i.confirmed_at,
-      before: period(i.comparison.before),
-      after: period(i.comparison.after),
-    })),
     catalog_item_id: c.catalog_item_id,
     name: c.name,
     business_id: c.business_id,
     business_name: businessName(c.business_id),
-    correct_destination: c.correct_destination,
-    score: m ? score(m.status, m.correct_sorting_percent) : { status: "insufficient_data" },
-    assessed_count: m?.assessed_event_count ?? 0,
+    correct_destination: c.destination,
+    score: score(c.correct_sorting_pct),
+    assessed_count: c.assessed_count,
     threshold_percent: SITE_INFO.threshold_percent ?? 60,
     min_assessed: SITE.config_profiles.demo.min_assessed_events,
-  };
-}
-
-
-
-export function adaptItems(r: CoreItem[]): ItemsResponse {
-  return { items: r.map(summary) };
-}
-
-export function adaptItem(c: CoreItem): ItemDetail {
-  const m = headlineMetric(c);
-  return {
-    ...summary(c),
-    stations: (m?.station_breakdown ?? []).map((s) => ({
-      station_id: s.station_id,
-      station_name: stationName(s.station_id),
-      assessed_count: s.assessed_event_count,
-      correct_count: s.correct_event_count,
+    interventions: interventions.map((i) => ({
+      intervention_id: i.intervention_id,
+      alert_id: "",
+      action: i.action,
+      confirmed_at: i.confirmed_at,
+      before: period(i.before),
+      after: period(i.after),
     })),
   };
 }
 
-export function adaptCatalog(r: CatalogItem[]): CatalogResponse {
-  return { items: r, businesses: SITE.businesses };
+/** The list endpoint has no interventions; pass details (by id) when they were fetched. */
+export function adaptItems(r: ContractItemSummary[], details: Map<string, ContractItemDetail> = new Map()): ItemsResponse {
+  return { items: r.map((c) => summary(c, details.get(c.catalog_item_id)?.interventions)) };
 }
+
+export function adaptItem(c: ContractItemDetail): ItemDetail {
+  return {
+    ...summary(c, c.interventions),
+    stations: c.by_station.map((s) => ({
+      station_id: s.station_id,
+      station_name: stationName(s.station_id),
+      assessed_count: s.assessed_count,
+      correct_count: s.correct_count,
+    })),
+  };
+}
+
+// ---- catalog -----------------------------------------------------------------
+
+export function fromContractCatalog(c: ContractCatalogItem): CatalogItem {
+  const { destination, ...rest } = c;
+  return { ...rest, correct_destination: destination };
+}
+
+export function toContractCatalog(c: CatalogItem): ContractCatalogItem {
+  const { correct_destination, ...rest } = c;
+  return { ...rest, destination: correct_destination };
+}
+
+export function adaptCatalog(r: ContractCatalogItem[]): CatalogResponse {
+  return { items: r.map(fromContractCatalog), businesses: SITE.businesses };
+}
+
+// ---- alerts ------------------------------------------------------------------
 
 /** Core prefixes outbound bodies with "[alert_id] " for reply matching; hide it in the UI. */
 const stripPrefix = (body: string) => body.replace(/^\[[^\]]+\]\s*/, "");
 
-function alertState(a: CoreAlert): Alert["state"] {
-  if (a.state === "acknowledged") return "acknowledged";
-  if (a.state === "action_confirmed") return "action_confirmed";
-  if (a.state === "resolved") return a.kind === "emptying" ? "emptied" : "action_confirmed";
-  const followedUp = a.messages.some((m) => m.direction === "outbound" && /^Following up:/.test(stripPrefix(m.body)));
-  return followedUp ? "follow_up_sent" : "sent";
+function alertState(a: AlertSummary): Alert["state"] {
+  switch (a.state) {
+    case "open":
+    case "sent":
+      return "sent";
+    case "closed":
+      return a.kind === "emptying" ? "emptied" : "action_confirmed";
+    default:
+      return a.state;
+  }
 }
 
-/** First sentence of core's alert body, e.g. "Bean Co. clear cold cup: 50.0% correctly sorted across 2 assessed disposals (2 recent)." */
+/** First sentence of core's alert text, e.g. "Bean Co. clear cold cup: 33.3% correctly sorted across 3 assessed disposals (3 recent)". */
 function trigger(body: string): string {
   const m = body.match(/^.*?\)\./) ?? body.match(/^[^.]*\./);
   return (m?.[0] ?? body).replace(/\.$/, "");
 }
 
-export function adaptAlerts(r: CoreAlert[]): AlertsResponse {
+export function adaptAlerts(r: AlertSummary[]): AlertsResponse {
   let anyMocked = false;
   const alerts: Alert[] = r.map((a) => {
-    const info = contactInfo(a.contact.contactId);
-    let first = true;
+    const info = contactInfo(a.contact_id);
     const messages: AlertMessage[] = a.messages.map((m) => {
-      const body = stripPrefix(m.body);
       if (m.mocked) anyMocked = true;
-      let kind: AlertMessage["kind"];
-      if (m.direction === "outbound") {
-        if (/^Following up:/.test(body)) kind = "follow_up";
-        else if (first) kind = a.kind === "emptying" ? "emptying_request" : "recommendation";
-        else kind = "clarification";
-        first = false;
-      }
-      return { message_id: m.message_id, direction: m.direction, kind, body, at: m.at, mocked: Boolean(m.mocked) };
+      return {
+        message_id: m.message_id,
+        direction: m.direction,
+        kind: m.kind === "reply" ? undefined : m.kind,
+        body: stripPrefix(m.body),
+        at: m.at,
+        mocked: m.mocked,
+      };
     });
     return {
       alert_id: a.alert_id,
       kind: a.kind,
       state: alertState(a),
-      opened_at: a.created_at,
-      trigger: trigger(a.body),
-      item_id: a.item_id,
-      bin_id: a.bin_id,
-      contact: { contact_id: a.contact.contactId, ...info },
-      business_name: businessName(a.business_id ?? info.business_id),
+      opened_at: a.opened_at,
+      trigger: trigger(a.trigger),
+      item_id: a.item_id ?? undefined,
+      bin_id: a.bin_id ?? undefined,
+      contact: { contact_id: a.contact_id, ...info },
+      business_name: businessName(info.business_id),
       messages,
     };
   });
-  // Newest first, like the mock.
   alerts.sort((x, y) => y.opened_at.localeCompare(x.opened_at));
   return { alerts, messenger_mocked: anyMocked };
 }
 
-export function adaptReviews(r: CoreReview[], catalog: CatalogItem[]): ReviewsResponse {
+// ---- reviews -----------------------------------------------------------------
+
+export function adaptReviews(r: ContractReviewItem[], catalog: CatalogItem[]): ReviewsResponse {
   const byId = new Map(catalog.map((c) => [c.catalog_item_id, c]));
   return {
     reviews: r.map((e) => {
@@ -270,18 +217,18 @@ export function adaptReviews(r: CoreReview[], catalog: CatalogItem[]): ReviewsRe
         const prev = candidates.get(id);
         if (!prev || prev.score < s) candidates.set(id, { business_id: id, name: businessName(id) ?? id, score: s });
       };
-      add(e.raw.business?.business_id, e.raw.business?.confidence);
-      for (const c of e.raw.item.candidates) add(byId.get(c.catalog_item_id)?.business_id, c.score);
+      add(e.business.business_id, e.business.confidence);
+      for (const c of e.item.candidates) add(byId.get(c.catalog_item_id)?.business_id, c.score);
       return {
-        event_id: e.raw.event_id,
-        occurred_at: e.raw.occurred_at,
-        bin_id: e.raw.bin_id,
-        item_name: (e.item_id && byId.get(e.item_id)?.name) || e.raw.item.label,
-        item: e.raw.item,
+        event_id: e.event_id,
+        occurred_at: e.occurred_at,
+        bin_id: e.bin_id,
+        item_name: (e.item.catalog_item_id && byId.get(e.item.catalog_item_id)?.name) || e.item.label,
+        item: e.item,
         business_candidates: [...candidates.values()].sort((a, b) => b.score - a.score),
-        evidence: e.raw.evidence,
-        status: e.review_status === "unresolved" ? "left_unresolved" : e.review_status === "pending" ? "pending" : "resolved",
-        resolved_business_id: e.reviewed_business_id,
+        evidence: e.evidence,
+        status: e.status,
+        resolved_business_id: e.assigned_business_id,
       } satisfies ReviewItem;
     }),
   };

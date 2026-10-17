@@ -1,5 +1,6 @@
 "use client";
 
+import { useDisposals, type Disposal } from "@/hooks/useDisposals";
 import { useResource } from "@/hooks/useResource";
 import { useScenes } from "@/hooks/useScenes";
 import { api } from "@/lib/api";
@@ -68,9 +69,23 @@ function BinColumn({ bin, lead, emptyingRequested, highlight }: { bin: BinStatus
   );
 }
 
-function SeenList({ bin, catalog }: { bin: BinStatus; catalog: Map<string, CatalogItem> }) {
+/** Per-item counts for a bin: from the API when it sends them, else from this session's feed. */
+function countsFor(bin: BinStatus, disposals: Disposal[]): BinStatus["observed_counts"] {
+  if (bin.observed_counts.length || !bin.observed_total) return bin.observed_counts;
+  const since = bin.last_emptied_at ? Date.parse(bin.last_emptied_at) : -Infinity;
+  const rows = new Map<string, { catalog_item_id: string | null; name: string; count: number }>();
+  for (const d of disposals) {
+    if (d.bin !== bin.type || !d.identified || Date.parse(d.at) <= since) continue;
+    const row = rows.get(d.item_name) ?? { catalog_item_id: d.item_id, name: d.item_name, count: 0 };
+    row.count++;
+    rows.set(d.item_name, row);
+  }
+  return [...rows.values()];
+}
+
+function SeenList({ bin, catalog, disposals }: { bin: BinStatus; catalog: Map<string, CatalogItem>; disposals: Disposal[] }) {
   const byName = new Map([...catalog.values()].map((c) => [c.name, c]));
-  const rows = [...bin.observed_counts].sort((a, b) => b.count - a.count);
+  const rows = [...countsFor(bin, disposals)].sort((a, b) => b.count - a.count);
   return (
     <div className="flex min-w-0 flex-[1_1_300px] flex-col">
       <span className={`flex items-center gap-2 pb-1 text-[13px] font-bold ${BIN_INK[bin.type]}`}>
@@ -108,6 +123,7 @@ export default function BinsPage() {
   const alerts = useResource(api.alerts);
   const catalog = useResource(api.catalog);
   const { focusBinId } = useScenes();
+  const disposals = useDisposals();
 
   if (bins.error && !bins.data) return <LoadError error={bins.error} />;
   if (!bins.data) return <Empty title="Loading bins…" />;
@@ -134,7 +150,7 @@ export default function BinsPage() {
         </div>
         <div className="flex flex-wrap gap-x-14 gap-y-3">
           {list.map((b) => (
-            <SeenList key={b.bin_id} bin={b} catalog={catMap} />
+            <SeenList key={b.bin_id} bin={b} catalog={catMap} disposals={disposals} />
           ))}
         </div>
       </section>

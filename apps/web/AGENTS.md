@@ -52,14 +52,15 @@ Site overview (all bins, fullness, recurring mistakes, pending reviews, active a
 
 ## Implementation status (J, updated 2026-10-16)
 
-What exists (branch `j/dashboard-scaffold`, uncommitted), and what is still provisional:
+What exists (branch `j/dashboard-scaffold`), and what is still provisional:
 
 - Next.js 16 App Router + Tailwind v4 + Vitest, inside the root pnpm workspace. Next.js 16 differs from older versions: check `node_modules/next/dist/docs/` before using an unfamiliar API. From `apps/web/`: `pnpm dev`, `pnpm test`, `pnpm typecheck` (web code only), `pnpm build`.
 - Every page shares one light header with the nav centred (user feedback: Live must not look like a different app). Live shows the footage as a rounded card, not full-bleed.
 - Routes: `/live`, `/bins`, `/messages` (demo scenes; keys `1`/`2`/`3`), `/` overview, `/items/[id]`, `/reviews`, `/catalog`. Old `/demo`, `/items`, `/recommendations` redirect. "Reset demo" sits in the demo notice strip.
 - `dev`/`build` run with `--webpack`: core and contracts import siblings as `./x.js` while the files are `.ts`; only webpack honours `experimental.extensionAlias` (Turbopack ignores it).
 - `NEXT_PUBLIC_DATA_SOURCE=mock` (default) runs `lib/mock/` (a ~3-minute scripted run on E's demo site covering all six scenarios); `api` calls I's routes. Both produce the view models in `lib/view.ts`.
-- `lib/adapters/core.ts` converts core's **current** responses (which are core's internal records, not the contract DTOs in `contracts/src/api.ts`) into those view models. Tested against responses captured from a running core (`lib/adapters/__fixtures__/core-responses.json`). When core returns the contract DTOs, only this file changes.
+- `lib/adapters/core.ts` converts the contract DTOs (`contracts/src/api.ts`, which core returns) into those view models. Tested against responses captured from a running core on E's site file (`lib/adapters/__fixtures__/core-responses.json`). Gaps the contract leaves, and how the UI fills them: per-item bin counts (the Bins page counts this session's feed), interventions on the item list (`lib/api.ts` fetches item details), outcome / labeled input / mocked on feed items (parsed from core's summary text).
+- The web package depends on `@recyclone/contracts`, `@recyclone/core` and `@recyclone/integrations` (for the API routes I and S own under `app/api/`), all in `transpilePackages`.
 - `lib/site.ts` reads business names, contact names, and demo-profile settings from `contracts/fixtures/demo-site.json`, because core's API does not return them.
 - Toast and unseen-tab logic: `lib/sceneDirector.ts` (pure, tested; never changes the page).
 - One app-wide `/api/feed` poller (`hooks/useFeed.tsx`, ~1 s) runs on every page, driving the backend's lazy time-based work. The first load is backlog and raises no toasts or tab dots.
@@ -67,20 +68,15 @@ What exists (branch `j/dashboard-scaffold`, uncommitted), and what is still prov
 
 **Name (user decision, 2026-10-16):** the dashboard is called **Caught in 4K** on screen (`APP_NAME` in `lib/config.ts`). Code, packages and the repo keep "recyclone".
 
-**Deployed (2026-10-16):** Vercel project `caught-in-4k` (user's account), production URL https://caught-in-4k-app.vercel.app (`caught-in-4k.vercel.app` belongs to someone else; the original https://recyclone.vercel.app still points at the same project), deployed from a laptop with the CLI (no Git integration: the account can't access the GitHub repo). Project settings: root directory `apps/web`, framework Next.js, source files outside the root directory included. It runs the mock data; I's API routes return 503 there (no database configured). `next.config.ts` has a **temporary** `typescript.ignoreBuildErrors: true`, approved by the user for this mock deploy only because of I's core type errors below; remove it once I fixes them.
+**Deployed (2026-10-16):** Vercel project `caught-in-4k` (user's account), production URL https://caught-in-4k-app.vercel.app (`caught-in-4k.vercel.app` belongs to someone else; https://recyclone.vercel.app still points at the same project), deployed from a laptop with the CLI (no Git integration: the account can't access the GitHub repo). Project settings: root directory `apps/web`, framework Next.js, source files outside the root directory included. It runs the mock data; I's API routes return 503 there (no database configured).
 
-**Verified (2026-10-16):** `pnpm test` (33 tests), `pnpm typecheck`, all routes 200 in mock mode, and headless-Chrome screenshots of every page in mock mode and against core (demo memory mode, E's synthetic events). Without the temporary setting, `pnpm build` fails type-checking inside I's code (see below). The deployed pages return 200 and render (headless-Chrome screenshots). Not verified: the real worker stream, Photon/Grok live, the API on Vercel.
+**Verified (2026-10-16, after rebasing on main @ 12ee98e):** `pnpm test` (34 tests), `pnpm typecheck`, `pnpm build` with full type checking, and an end-to-end run against core (demo memory mode, E's `demo-site.json`, all 11 synthetic events accepted) with headless-Chrome screenshots. Not verified: the real worker stream, Photon/Grok live, the API on Vercel.
 
 **Requests to other owners (not edited by J):**
 
-- **I (blocks `next build`):** `packages/core/src/metrics.ts:4,8` and `validation.ts:29` treat `item.confidence` / `business.confidence` as numbers; the contract allows `null` (unknown). Next's build type-checks the API routes and fails. The same check rejects contract-valid events at runtime ("Confidence must be between 0 and 1"); 4 of E's 11 synthetic events are refused.
-- **I:** core cannot start from E's `contracts/fixtures/demo-site.json` ("Invalid site ID"): it expects top-level `site_id`, `contacts[].contactId`, `businesses[].manager_contact_id`, `catalog[].correct_destination`. J tested with a translated copy outside the repo.
-- **I:** core's Ajv validator rejects E's draft 2020-12 schema (`no schema with key or ref "https://json-schema.org/draft/2020-12/schema"`); use Ajv's 2020 build.
-- **I:** responses are internal records, not the contract DTOs (`/api/feed` returns `cursor`, not `next_cursor`; `/api/bins` and `/api/items` shapes differ). Contact and business names are missing from `/api/alerts`. Outbound message bodies carry an `[alert_id]` prefix (J hides it). `messenger_mocked` is inferred from message `mocked` flags.
-- **I/E:** demo parameters disagree: E's fixture demo profile says goal 60%, min 3 assessed events, follow-up 2 min; core's demo config uses 80%, 2, 30 s. The dashboard shows E's numbers (from the fixture), so it can disagree with what triggered an alert.
-- **S:** `POST /api/photon/mock-reply` doesn't exist on `main` yet; in api mode the mock reply box shows the 404.
-- **E:** add `outcome` and `source_mode` to feed items (contract §3). Without `source_mode` the "labeled backup input" label can't appear in api mode.
+- **S/I:** `POST /api/photon/mock-reply` exists but fails: "No ReplySink wired yet" (`app/api/photon/_replySink.ts` still waits for core's `createCore`). Until it's wired, the dashboard's mock reply box shows that error in api mode (mock mode is unaffected).
+- **E (contract):** `BinSummary` has only `observed_count`; add per-item counts so the Bins page needn't rebuild them from the feed. `FeedItem` has no `outcome`, `source_mode` or `mocked`; core puts them in `summary` text ("(incorrect)", "[labeled backup input]", "(mocked)"), which J parses. `FeedResponse` has no `demo` flag. `AlertSummary` has no contact or business names (J reads them from the site file).
+- **I:** outbound message bodies still carry an `[alert_id]` prefix (J hides it), and `trigger` is the whole message body (J shows its first sentence).
 - **E:** clarify whether `evidence[].uri` includes the `evidence/` prefix (the §1 sample does; §4 serves `/evidence/<path>`). J accepts both.
 - **E (decision needed):** a Vercel page over HTTPS cannot load an `http://localhost` stream (mixed content). Run the dashboard locally next to the worker for the demo, or expose the worker over HTTPS.
 - **E:** the root `AGENTS.md` "Confirmed decisions" still says the scenes switch after each drop and when an alert fires; the user decided there is no automatic switching.
-- **E:** synthetic events are dated 2026-10-17T15:00Z; core rejects them as "too far in the future" until then.

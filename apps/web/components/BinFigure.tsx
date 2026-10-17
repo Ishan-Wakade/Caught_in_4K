@@ -4,7 +4,7 @@ import type { BinStatus } from "@/lib/types";
 
 /** True when nothing at all is known about the bin's contents yet. */
 export function fillUnknown(bin: BinStatus): boolean {
-  return !bin.initial_contents_known && bin.assumed_initial_l === 0 && bin.observed_counts.length === 0 && bin.unknown_count === 0;
+  return !bin.initial_contents_known && bin.assumed_initial_l === 0 && bin.observed_counts.length === 0 && !bin.observed_total && bin.unknown_count === 0;
 }
 
 // Interior of the large bin drawing (viewBox 0 0 380 390): y=72 is full, y=372 is empty.
@@ -14,7 +14,8 @@ const levelY = (fraction: number) => BOTTOM - Math.min(1, Math.max(0, fraction))
 
 /** Simple stand-in shapes for observed items, used when no real illustration is available. */
 function DrawnContents({ bin, y }: { bin: BinStatus; y: number }) {
-  const n = Math.min(9, bin.observed_counts.reduce((a, c) => a + c.count, 0) + bin.unknown_count);
+  const seen = bin.observed_counts.reduce((a, c) => a + c.count, 0) || bin.observed_total || 0;
+  const n = Math.min(9, seen + bin.unknown_count);
   const span = BOTTOM - y;
   if (n === 0 || span < 24) return null;
   const shapes = [];

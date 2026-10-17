@@ -55,7 +55,8 @@ export function FeedProvider({ children }: { children: ReactNode }) {
         const res = await api.feed(cursor.current);
         if (stopped || myEpoch !== epoch.current) return;
         setError(null);
-        setDemo(res.demo || res.items.some((i) => i.demo));
+        // Empty polls carry no demo flag; keep the last known value.
+        setDemo((prev) => (res.items.length ? res.demo || res.items.some((i) => i.demo) : prev || res.demo));
         if (res.cursor) cursor.current = res.cursor;
         if (res.items.length) {
           setItems((prev) => [...prev, ...res.items].slice(-MAX_ITEMS));

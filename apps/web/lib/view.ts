@@ -110,6 +110,8 @@ export type BinStatus = {
   fullness_threshold: number;
   observed_counts: { catalog_item_id: string | null; name: string; count: number }[];
   unknown_count: number;
+  /** Total items seen since the last emptying, when per-item counts aren't available. */
+  observed_total?: number;
   /** False when nothing is known about what was in the bin before monitoring began. */
   initial_contents_known: boolean;
   /** Litres assumed to be in the bin when monitoring began (included in the estimate); 0 if none. */

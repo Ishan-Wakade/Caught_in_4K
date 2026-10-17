@@ -78,7 +78,6 @@ export default function OverviewPage() {
             <span className="text-[13px] text-muted">
               estimated from what we&apos;ve seen{latestSnapshot ? <> · <Mono>{shortTime(latestSnapshot)}</Mono></> : null}
             </span>
-            <Link href="/bins" className="flex min-h-8 items-center text-sm font-bold">See bins →</Link>
           </div>
           {(bins.data?.bins ?? []).map((b) => {
             const unknown = fillUnknown(b);

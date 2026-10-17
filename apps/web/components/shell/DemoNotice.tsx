@@ -7,30 +7,18 @@ import { api } from "@/lib/api";
 import { DEMO_TOOLS } from "@/lib/config";
 
 /**
- * The slim strip at the top of every page. A manager only sees it when something
- * isn't real: sample data, the labeled backup input, mock services, or a lost
- * backend (honesty rules in AGENTS.md). "Demo mode" and "Reset demo" appear only
- * with the presenter's demo tools on.
+ * The slim strip at the top of every page: the labeled backup input or a lost backend.
+ * "Demo mode" and "Reset demo" appear only with the presenter's demo tools on.
  */
 export function DemoNotice() {
-  const { demo, items, labeledInput, error, restart } = useFeed();
+  const { demo, labeledInput, error, restart } = useFeed();
   const { reset } = useScenes();
   const [busy, setBusy] = useState(false);
-  const mockData = api.source === "mock";
   const tools = DEMO_TOOLS && demo;
-
-  const mockedTexts = items.some((i) => i.mocked && (i.type === "message_sent" || i.type === "reply_received"));
-  const mockedImages = items.some((i) => i.mocked && i.type === "illustration_ready");
-  const mockedServices = [mockedTexts && "texts", mockedImages && "bin images"].filter(Boolean).join(" and ");
 
   const parts = [
     tools ? "Demo mode" : null,
-    mockData
-      ? "Sample data: this site isn't connected to a camera"
-      : labeledInput
-        ? "replaying the hand-labeled backup input, not live detection"
-        : null,
-    mockedServices ? `${mockedServices} come from mock services` : null,
+    labeledInput ? "replaying the hand-labeled backup input, not live detection" : null,
   ].filter(Boolean);
 
   if (!parts.length && !error) return null;

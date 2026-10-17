@@ -24,5 +24,5 @@ export const DEMO_TOOLS = process.env.NEXT_PUBLIC_DEMO_TOOLS === "true";
 
 export const FEED_POLL_MS = 1000;
 
-/** Product name shown in the UI (user's choice, 2026-10-16). Code and packages keep "recyclone". */
-export const APP_NAME = "Caught in 4K";
+/** Product name shown in the UI (user's choice, 2026-10-16; all-caps per 2026-10-17). Code and packages keep "recyclone". */
+export const APP_NAME = "CAUGHT IN 4K";

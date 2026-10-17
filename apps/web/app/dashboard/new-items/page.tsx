@@ -17,6 +17,7 @@ export default async function NewItemsPage() {
     <>
       <div className="flex flex-col gap-2">
         <h1 className="m-0 font-display text-[40px] leading-none font-bold">New items</h1>
+        <span className="text-[15px] text-ink-2">Items the camera couldn&apos;t match to your approved catalog, pending manual review.</span>
         {!error && <span className="text-[15px] text-ink-2">{items.length ? `${items.length} to review. Approved items join your catalog.` : "All caught up."}</span>}
       </div>
       {error ? (

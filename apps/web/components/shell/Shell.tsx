@@ -6,7 +6,7 @@ import { ScenesProvider, SCENE_PATH, useScenes } from "@/hooks/useScenes";
 import { SCENES } from "@/lib/sceneDirector";
 import { DEMO_TOOLS } from "@/lib/config";
 import { DemoNotice } from "./DemoNotice";
-import { SiteHeader } from "./SiteHeader";
+import { PAGES, SiteHeader } from "./SiteHeader";
 import { Toast } from "./Toast";
 
 /** Presenter keys (demo tools only): 1/2/3 open Cameras / Bins / Messages (ignored while typing). */
@@ -26,9 +26,12 @@ function SceneKeys() {
   return null;
 }
 
+// This old manager page is otherwise unlinked (2026-10-17 decision) — Bins needs its own way back in (2026-10-17).
+const OLD_SHELL_PAGES = [{ href: "/bins", label: "Bins", scene: "bins" as const }, ...PAGES];
+
 function ScenedHeader() {
   const { unseen } = useScenes();
-  return <SiteHeader unseen={unseen} />;
+  return <SiteHeader unseen={unseen} pages={OLD_SHELL_PAGES} />;
 }
 
 export function Shell({ children }: { children: ReactNode }) {

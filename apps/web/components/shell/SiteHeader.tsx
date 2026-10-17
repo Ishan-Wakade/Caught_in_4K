@@ -84,14 +84,14 @@ export function PageNav({
 }
 
 /** One navigation for the whole app: logo left, page links right, as on the camera page. */
-export function SiteHeader({ unseen = {} }: { unseen?: Unseen }) {
+export function SiteHeader({ unseen = {}, pages }: { unseen?: Unseen; pages?: NavLink[] }) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-7 gap-y-1 border-b border-rule-soft px-6 py-2.5 sm:px-10">
       <Link href="/" aria-label={`${APP_NAME}, overview`} className="flex min-h-11 items-center gap-2.5 text-forest-deep no-underline hover:text-forest-deep">
         <LogoMark />
         <span className="font-display text-2xl leading-none font-extrabold">{APP_NAME}</span>
       </Link>
-      <PageNav unseen={unseen} />
+      <PageNav unseen={unseen} pages={pages} />
     </header>
   );
 }

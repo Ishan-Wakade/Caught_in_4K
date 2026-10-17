@@ -8,8 +8,7 @@ import { COMPANY, PROPOSED } from "@/lib/dashboard/sample";
 
 const TABS: NavLink[] = [
   { href: "/dashboard", label: "Overview" },
-  { href: "/dashboard/items", label: "Items", match: (p) => p.startsWith("/dashboard/items") },
-  { href: "/dashboard/bins", label: "Bins", match: (p) => p.startsWith("/dashboard/bins") },
+  { href: "/bins", label: "Bins", match: (p) => p === "/bins" },
   { href: "/dashboard/new-items", label: "New items", badge: PROPOSED.length, match: (p) => p.startsWith("/dashboard/new-items") },
   { href: "/dashboard/catalog", label: "Catalog", match: (p) => p.startsWith("/dashboard/catalog") },
   { href: "/dashboard/sites", label: "Sites", match: (p) => p.startsWith("/dashboard/sites") },

@@ -54,6 +54,22 @@ LOOSE = 45                          # loose: within 1.5 s (the right drop into t
 
 # ---------------------------------------------------------------- stage 1: perception (cached)
 
+def weight(rel: str) -> Path:
+    """Model weights live in worker/weights/ (not in git); any that are missing are downloaded on first run."""
+    p = WORKER / "weights" / rel
+    if not p.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if rel.startswith("clip/"):
+            import clip
+
+            clip.load("ViT-B/32", device="cpu", download_root=str(p.parent))  # saves ViT-B-32.pt there
+        else:
+            from ultralytics.utils.downloads import attempt_download_asset
+
+            attempt_download_asset(str(p))
+    return p
+
+
 def keyframe_boxes(spec: dict, n: int) -> list:
     kf = sorted((int(f), b) for f, b in spec["keyframes"])
     lo, hi = spec.get("visible", [kf[0][0], kf[-1][0]])
@@ -596,7 +612,7 @@ def main():
     if "--recompute" in sys.argv:
         for c in (out_dir / "cache").glob("*.npz"):
             c.unlink()
-    clip = Clip(WORKER / "weights/clip/ViT-B-32.pt")
+    clip = Clip(weight("clip/ViT-B-32.pt"))
     sam = pose = None
     scorer = Scorer(clip)
     results = {}
@@ -605,7 +621,7 @@ def main():
         video = Path(spec["video"]).expanduser()
         cache = out_dir / "cache" / f"{name}.npz"  # config name: several clips may share a file name (video.mp4)
         if not cache.exists() and sam is None:
-            sam, pose = FastSAM(str(WORKER / "weights/FastSAM-s.pt")), YOLO(str(WORKER / "weights/yolo11n-pose.pt"))
+            sam, pose = FastSAM(str(weight("FastSAM-s.pt"))), YOLO(str(weight("yolo11n-pose.pt")))
         data = perceive(video, cache, sam, pose, clip, spec.get("min_item_area", MIN_AREA))
         n = len(data["kps"])
         bins = {b["bin_id"]: keyframe_boxes(b, n) for b in spec["bins"]}

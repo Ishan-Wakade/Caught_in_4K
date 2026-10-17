@@ -32,6 +32,30 @@ Environment (see the root `.env.example`): `API_BASE_URL`, `WORKER_INGEST_TOKEN`
 | `... run ... --tracker world` | YOLO-World with packaging prompts (slower; compare on real footage) |
 | `... run ... --no-categories` | Report unregistered items as unknown instead of a generic category (on by default) |
 
+## Item tracker on real footage (anyone on the team can run and improve it)
+
+`scripts/item_tracker.py` is the current best detector on real, even hand-held, footage. It counts only objects a
+person brings in (the skeleton's arm decides), remembers what was already in a bin, and decides drops. It is
+not yet wired into `run`. Results and limits: `AGENTS.md`, "Real-footage experiments".
+
+```bash
+cd worker && uv sync                     # weights (FastSAM, YOLO11n-pose, CLIP) download on first run
+uv run python scripts/pick_boxes.py ~/Videos/clip.mov --bins bin_recycle --frames 120,180,240 > state/my.json
+# edit state/my.json: add each real drop to "truths" as {"frame": N, "bin": "bin_..."}
+uv run python scripts/item_tracker.py ~/Downloads/tracker-out state/my.json
+```
+
+Format of the config: `examples/item_tracker.example.json` (keep your own copy under `state/`, which is git-ignored).
+Output: `<name>_items.mp4` per clip (yellow arms, magenta line from a wrist to the object it holds, DROP
+banner), `item_summary.md` (found / false drops at ±0.5 s and ±1.5 s), `item_results.json`.
+
+Improving it:
+- Perception is cached in `OUT/cache/`, so after the first run a rule change re-scores in seconds
+  (`--no-video` skips rendering). `--recompute` re-runs the models.
+- The knobs are the constants at the top of `item_tracker.py`, each with a one-line reason.
+- Keep a **dev** set you tune on and a **test** set you only score at the end; numbers from clips you tuned
+  on are not accuracy. Never commit videos or `state/` configs (people are in them).
+
 Filming plan and the full after-filming sequence: `docs/demo/shot-list.md`. Local end-to-end rehearsal against the real core: `pnpm --filter @recyclone/rehearsal start` (see `tools/rehearsal/server.ts`).
 
 The stream and evidence URLs are for `<img src=...>` on the presenter's laptop only: there is no CORS header, so `fetch()` from the dashboard cannot read them, and requests whose `Host` is not localhost get 403.

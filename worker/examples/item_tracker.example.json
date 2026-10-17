@@ -1,0 +1,15 @@
+{
+ "phone_clip_recycle": {
+  "video": "~/Videos/my_clip.mov",
+  "truths": [{"frame": 198, "bin": "bin_recycle"}],
+  "bins": [{"bin_id": "bin_recycle", "visible": [110, 235],
+            "keyframes": [[120, [870, 1150, 1080, 1440]], [175, [260, 1150, 990, 1520]], [225, [260, 1120, 1020, 1520]]]}]
+ },
+ "fixed_camera_two_bins": {
+  "video": "~/Videos/fixed_cam.mp4",
+  "truths": [{"frame": 300, "bin": "bin_trash"}, {"frame": 640, "bin": "bin_recycle"}],
+  "min_item_area": 0.0005,
+  "bins": [{"bin_id": "bin_trash", "visible": [0, 899], "keyframes": [[0, [100, 400, 380, 700]]]},
+           {"bin_id": "bin_recycle", "visible": [0, 899], "keyframes": [[0, [420, 400, 700, 700]]]}]
+ }
+}

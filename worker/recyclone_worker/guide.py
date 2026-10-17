@@ -33,6 +33,23 @@ def _where(kp):
     return float(xs.mean()), float(ys.mean()), float(max(ys.max() - ys.min(), xs.max() - xs.min(), 1.0))
 
 
+def list_cameras(max_index: int = 6, opener=None) -> list[tuple[int, int, int]]:
+    """(index, width, height) of every camera that opens and gives a frame: the built-in webcam, an iPhone through
+    Continuity Camera, a USB camera."""
+    opener = opener or cv2.VideoCapture
+    found = []
+    for i in range(max_index):
+        cap = opener(i)
+        try:
+            if cap.isOpened():
+                ok, frame = cap.read()
+                if ok and frame is not None:
+                    found.append((i, int(frame.shape[1]), int(frame.shape[0])))
+        finally:
+            cap.release()
+    return found
+
+
 class YoloPoseTracker:
     """frame -> [(track_id, keypoints[17, 3])], people tracked across frames by ByteTrack."""
 
@@ -158,8 +175,17 @@ class Guide:
         print(f"[{t:6.2f}s] person {tid}: {text} ({source}, waited {a['waited_s']}s)", file=sys.stderr)
         return a
 
-    def annotate(self, frame, t: float) -> np.ndarray:
+    def annotate(self, frame, t: float, cctv: str | None = None) -> np.ndarray:
         out = frame.copy()
+        if cctv:  # a surveillance-camera look for the demo video: camera name and a running clock, top left
+            import datetime
+
+            big0 = max(out.shape[:2]) / 1920
+            stamp = f"{cctv}  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            for color, width in (((0, 0, 0), 6), ((255, 255, 255), 2)):
+                cv2.putText(out, stamp, (int(24 * big0) + 10, int(60 * big0) + 30), cv2.FONT_HERSHEY_SIMPLEX, 1.1 * big0 + 0.4,
+                            color, width)
+            cv2.circle(out, (out.shape[1] - int(60 * big0) - 30, int(110 * big0) + 30), int(12 * big0) + 6, (0, 0, 255), -1)
         big = max(out.shape[:2]) / 1920
         lw = max(2, int(4 * big))
         a = self.area
@@ -183,7 +209,7 @@ class Guide:
                     big + 0.3, (255, 255, 255), lw)
         return out
 
-    def run(self, source, on_frame=None) -> list[dict]:
+    def run(self, source, on_frame=None, cctv: str | None = None) -> list[dict]:
         busy, n = 0.0, 0
         for idx, t, frame in source:
             t0 = time.perf_counter()
@@ -192,5 +218,5 @@ class Guide:
             n += 1
             self.fps = n / busy if busy > 0 else 0.0
             if on_frame:
-                on_frame(self.annotate(frame, t))
+                on_frame(self.annotate(frame, t, cctv))
         return self.said

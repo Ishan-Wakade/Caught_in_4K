@@ -310,17 +310,27 @@ def cmd_guide(args, make_guide_parts=None) -> int:
     import subprocess
     import tempfile
 
+    import cv2
+
     from . import guide_message as gm
     from .approach import Approach, BinArea
     from .guide import Guide, YoloPoseTracker
     from .sources import LiveCameraSource
     from .voice import SayVoice, SilentVoice, mix_audio
 
-    area = BinArea(*[float(v) for v in args.area.split(",")])
     homography = np.array(json.loads(Path(args.homography).read_text())) if args.homography else None
     live = args.source.isdigit() or "://" in args.source
-    source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
     table = gm.load_bin_table(Path(args.bins))
+    voice = SilentVoice() if args.voice == "silent" else SayVoice(WORKER_DIR / "state/voice-cache", play=live or args.realtime)
+    voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])  # before the camera
+    source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
+    if args.area == "pick":  # draw the box around the bins on the first frame with the mouse
+        first = next(iter(LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))))[2]
+        x, y, w, h = cv2.selectROI("Draw ONE box around all the bins, then press Enter", first, showCrosshair=False)
+        cv2.destroyAllWindows()
+        args.area = f"{x},{y},{x + w},{y + h}"
+        print(f"bin area: --area {args.area}  (reuse it next time)", file=sys.stderr)
+    area = BinArea(*[float(v) for v in args.area.split(",")])
     if make_guide_parts is not None:
         pose, watcher = make_guide_parts(args, area)
     else:
@@ -343,9 +353,6 @@ def cmd_guide(args, make_guide_parts=None) -> int:
 
         pose = YoloPoseTracker(weight("yolo11n-pose.pt"))
         watcher = ItemWatcher(clip.images, Scorer(clip, guide_prompts()), table, namer=namer, advisor=advisor)
-    play = live or args.realtime
-    voice = SilentVoice() if args.voice == "silent" else SayVoice(WORKER_DIR / "state/voice-cache", play=play)
-    voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])
     guide = Guide(pose, watcher, Approach(area, homography), voice, log_path=Path(args.log), area=area, homography=homography)
     stream = writer = tmp = None
     if not args.no_stream:
@@ -359,6 +366,10 @@ def cmd_guide(args, make_guide_parts=None) -> int:
         nonlocal writer, tmp
         if stream:
             stream.publish(img)
+        if args.show:  # a window on the laptop with what the "surveillance camera" sees
+            cv2.imshow("Caught in 4K - guide", cv2.resize(img, (img.shape[1] * 720 // img.shape[0], 720)))
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                raise KeyboardInterrupt
         if args.render:
             if writer is None:
                 h, w = img.shape[:2]
@@ -370,7 +381,7 @@ def cmd_guide(args, make_guide_parts=None) -> int:
 
     frames = _realtime(source, source.fps) if (args.realtime and not live) else source
     try:
-        guide.run(frames, on_frame=on_frame if (stream or args.render) else None)
+        guide.run(frames, on_frame=on_frame if (stream or args.render or args.show) else None, cctv=args.cctv)
     except KeyboardInterrupt:  # Ctrl-C ends a live run: still finish the video and print the numbers
         print("stopped", file=sys.stderr)
     finally:
@@ -512,7 +523,9 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
                                          "default: the camera's fixed bin regions from demo-site.json")
     gd = sub.add_parser("guide", help="voice guide: tell a person with waste which bin, before they reach the bins")
     gd.add_argument("--source", required=True, help="camera index (0 = built-in webcam), rtsp:// URL, or a video file")
-    gd.add_argument("--area", required=True, help="one box around all the bins: x0,y0,x1,y1 in pixels")
+    gd.add_argument("--area", required=True, help="one box around all the bins: x0,y0,x1,y1 in pixels, or 'pick' to draw it")
+    gd.add_argument("--show", action="store_true", help="show the camera view in a window (q to stop)")
+    gd.add_argument("--cctv", nargs="?", const="CAM 01", help="surveillance look: camera name + clock on the video")
     gd.add_argument("--homography", help="optional floor calibration: JSON 3x3 matrix, image pixels -> floor meters")
     gd.add_argument("--namer", choices=["clip", "deepseek"], default="deepseek")
     gd.add_argument("--local-rules", default=str(WORKER_DIR / "rules/cambridge-ma-2022.md"))
@@ -523,6 +536,7 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     gd.add_argument("--no-stream", action="store_true")
     gd.add_argument("--evidence-dir", default=str(WORKER_DIR / "evidence"))
     gd.add_argument("--log", default=str(WORKER_DIR / "state/guide-log.jsonl"))
+    sub.add_parser("cameras", help="list the cameras this computer sees (iPhone via Continuity Camera included)")
     st = sub.add_parser("run-station", help="several cameras of one station: drops merged, reported by the camera the person faces")
     st.add_argument("--station", required=True, help='JSON: {"station_id", "cameras": [{"camera_id", "video", "offset_s", "bins"}]}')
     st.add_argument("--clip-id", required=True)
@@ -575,6 +589,12 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
 
     if args.cmd == "guide":
         return cmd_guide(args, make_guide_parts)
+    if args.cmd == "cameras":
+        from .guide import list_cameras
+
+        for i, w, h in list_cameras():
+            print(f"--source {i}   {w}x{h}")
+        return 0
     if args.cmd == "run-station":
         return cmd_run_station(args, analyze_items)
     if args.cmd == "run" and args.tracker == "items":

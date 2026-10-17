@@ -197,3 +197,27 @@ def test_ctrl_c_still_writes_the_video_and_prints_fps(tmp_path, capsys):
                      "--log", str(tmp_path / "g.jsonl"), "--render", str(tmp_path / "out.mp4")],
                     make_guide_parts=lambda args, area: (pose, FakeWatcher({1: CAN})))
     assert code == 0 and (tmp_path / "out.mp4").exists() and "fps" in capsys.readouterr().err
+
+
+# ---- filming helpers (17 Oct)
+def test_list_cameras_reports_each_working_index():
+    class Cap:
+        def __init__(self, i):
+            self.i = i
+
+        def isOpened(self):
+            return self.i in (0, 1)
+
+        def read(self):
+            return (True, np.zeros((1080 if self.i else 720, 1920 if self.i else 1280, 3), np.uint8))
+
+        def release(self):
+            pass
+    assert gd.list_cameras(max_index=3, opener=Cap) == [(0, 1280, 720), (1, 1920, 1080)]
+
+
+def test_cctv_look_adds_a_camera_label_and_clock(tmp_path):
+    g = make(lambda t: [], FakeWatcher({}), tmp_path)
+    g.step(0, 0.0, FRAME)
+    plain, cctv = g.annotate(FRAME, 0.0), g.annotate(FRAME, 0.0, cctv="CAM 01")
+    assert (cctv[:120, :700] != plain[:120, :700]).any()

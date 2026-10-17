@@ -70,7 +70,10 @@ function speaker(token: string) {
   };
 }
 
-function draw(canvas: HTMLCanvasElement, video: HTMLVideoElement, frame: GuideFrame) {
+/** ?debug in the URL: each hand box is labelled with P(item) and CLIP's closest label (green when it counts as held). */
+const DEBUG = typeof location !== "undefined" && new URLSearchParams(location.search).has("debug");
+
+function draw(canvas: HTMLCanvasElement, video: HTMLVideoElement, frame: GuideFrame, itemP: number) {
   if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -92,7 +95,29 @@ function draw(canvas: HTMLCanvasElement, video: HTMLVideoElement, frame: GuideFr
     const color = p.holding && frame.banner ? BOX_COLOR[frame.banner.fallback ? "fallback" : frame.banner.message.bin] : "rgba(200,200,200,0.8)";
     ctx.strokeStyle = color;
     ctx.lineWidth = p.holding ? line * 2 : line / 2;
-    for (const [x0, y0, x1, y1] of p.hands) ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    // The box in use (CLIP's best of the scan); ?debug draws every scanned box, labelled.
+    p.hands.forEach(([x0, y0, x1, y1], i) => {
+      if (i === p.best || (DEBUG && p.best < 0)) ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    });
+    if (!DEBUG) continue;
+    ctx.font = `${Math.round(line * 9)}px ui-monospace, monospace`;
+    p.hands.forEach(([x0, y0], i) => {
+      const look = p.looks[i];
+      if (!look) return;
+      if (i !== p.best) {
+        ctx.save();
+        ctx.lineWidth = line / 2;
+        ctx.setLineDash([line * 3, line * 3]);
+        ctx.strokeRect(x0, y0, p.hands[i][2] - x0, p.hands[i][3] - y0);
+        ctx.restore();
+      }
+      const text = `${Math.round(100 * look.pItem)}% ${look.label}`;
+      const y = Math.max(line * 10, y0 - line * 2);
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x0, y - line * 9, ctx.measureText(text).width + line * 2, line * 11);
+      ctx.fillStyle = look.pItem >= itemP ? "#7CFC7C" : "#FFB0A0";
+      ctx.fillText(text, x0 + line, y);
+    });
   }
 }
 
@@ -109,12 +134,15 @@ export function useBrowserGuide(
   const [progress, setProgress] = useState<Progress | null>(null);
   const [people, setPeople] = useState(0);
   const [banner, setBanner] = useState<Banner | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [inView, setInView] = useState(false);
+  const [unsure, setUnsure] = useState(false);
   const [backend, setBackend] = useState<Backend | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [smart, setSmart] = useState(false);
   const [sound, setSound] = useState(false);
   const soundRef = useRef(false);
-  const last = useRef({ people: -1, banner: "" });
+  const last = useRef({ people: -1, banner: "", checking: false, inView: false, unsure: false });
 
   /** Browsers only play sound after a click on the page: the "Sound on" button calls this. */
   const enableSound = useCallback(() => {
@@ -168,10 +196,13 @@ export function useBrowserGuide(
             // Always the newest frame: while a step runs, the camera keeps going and the frames in between are skipped.
             const frame = await session.step(video, performance.now() / 1000);
             if (stopped) break;
-            if (canvasRef.current) draw(canvasRef.current, video, frame);
+            if (canvasRef.current) draw(canvasRef.current, video, frame, engine.data.constants.item_p);
             if (say && soundRef.current) frame.speak.forEach(say);
             const key = frame.banner ? JSON.stringify(frame.banner) : "";
             if (frame.people.length !== last.current.people) setPeople((last.current.people = frame.people.length));
+            if (frame.checking !== last.current.checking) setChecking((last.current.checking = frame.checking));
+            if (frame.inView !== last.current.inView) setInView((last.current.inView = frame.inView));
+            if (frame.unsure !== last.current.unsure) setUnsure((last.current.unsure = frame.unsure));
             if (key !== last.current.banner) {
               last.current.banner = key;
               setBanner(frame.banner);
@@ -193,9 +224,12 @@ export function useBrowserGuide(
       if (videoRef.current) videoRef.current.srcObject = null;
       canvasRef.current?.getContext("2d")?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       setBanner(null);
-      last.current = { people: -1, banner: "" };
+      setChecking(false);
+      setInView(false);
+      setUnsure(false);
+      last.current = { people: -1, banner: "", checking: false, inView: false, unsure: false };
     };
   }, [active, videoRef, canvasRef]);
 
-  return { status, progress, people, banner, backend, error, smart, sound, enableSound };
+  return { status, progress, people, banner, inView, checking, unsure, backend, error, smart, sound, enableSound };
 }

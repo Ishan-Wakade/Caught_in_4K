@@ -1,15 +1,19 @@
 """What is this person carrying? Decided early, while they walk, so the answer is ready when they reach the bins.
 
-Per person track: the crop past each wrist (items.hand_box) is embedded with CLIP; a crop that CLIP thinks is an item
-(p_item >= 0.5) is "holding" and adds its catalog-category probabilities to the person's votes. Up to 3 crops of the
-item, >= 0.5 s apart, are kept for the LLM.
+Per person track: the boxes around each hand (items.hand_scan) are embedded with CLIP, and the crop CLIP thinks most
+likely holds an item is used: if it is an item (p_item >= 0.5), it adds its catalog-category probabilities to the
+person's votes. "Holding" needs HOLD_CONFIRM of the
+last HOLD_RECENT looks to see an item and ends after HOLD_WINDOW_S without one, so one odd frame does not flip it.
+The first answer is kept for the visit (no switching between guesses). Up to 3 crops of the item, >= 0.5 s apart, are
+kept for the LLM.
 - Catalog item: the top category has >= KNOWN_P of the votes over >= MIN_VOTES crops -> answered from the bin table,
-  no network.
+  no network. Votes split between a product and its generic kind (PRODUCT_PARENT, same bin) count for the generic kind.
 - Otherwise, once CLIP has voted MIN_VOTES times and MIN_CROPS crops exist: ONE background job per person: DeepSeek picks a catalog item (-> table), or
   describes it -> generic type -> Jev -> message. Any failure leaves no answer; the guide then says trash on arrival.
 """
 
 import sys
+from collections import deque
 from pathlib import Path
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 
@@ -18,8 +22,8 @@ import numpy as np
 
 from . import guide_message as gm
 from .generic import for_event, generic_type
-from .categories import ITEM_PROMPTS
-from .items import hand_box
+from .categories import ITEM_PROMPTS, PRODUCT_PARENT
+from .items import hand_scan
 
 # Dangerous items the catalog never has: CLIP may vote for them, and then the item always goes to the LLM path
 # (never answered from the catalog), so a battery is never told "recycle" because it looked like a can.
@@ -141,7 +145,9 @@ MIN_VOTES = 3       # crops voting before a catalog answer
 MIN_CROPS = 2       # item crops before the LLM is asked
 CROP_GAP_S = 0.5    # kept crops at least this far apart (different moments/angles)
 KEEP_CROPS = 3
-HOLD_WINDOW_S = 1.0  # "holding" = an item seen in a hand within the last second
+HOLD_WINDOW_S = 1.5  # "holding" ends after this long without an item seen in a hand
+HOLD_RECENT = 5      # "holding" starts when HOLD_CONFIRM of the last HOLD_RECENT looks at the hands saw an item
+HOLD_CONFIRM = 3     #   (0.3-0.5 s at OBSERVE_EVERY_S), so one odd frame neither starts nor ends it
 OBSERVE_EVERY_S = 0.1  # CLIP on a person's hands at most 10 times a second (speed; the hand moves little in 0.1 s)
 
 
@@ -151,6 +157,9 @@ class _Person:
         self.n_votes = 0
         self.crops: list[tuple[float, float, np.ndarray]] = []  # (t, p_item, crop)
         self.last_held = -1e9
+        self.recent: deque[bool] = deque(maxlen=HOLD_RECENT)
+        self.confirmed = False
+        self.locked: tuple[dict, str] | None = None  # the first answer, kept for the visit
         self.job: Future | None = None
 
 
@@ -173,20 +182,23 @@ class ItemWatcher:
         self.last_observed[track_id] = t
         h, w = frame.shape[:2]
         crops, origins = [], []
-        for side in ("L", "R"):
-            b = hand_box(kp, side, w, h)
-            if b is not None:
-                x0, y0, x1, y1 = (int(v) for v in b)
-                if x1 > x0 + 4 and y1 > y0 + 4:
-                    crops.append(frame[y0:y1, x0:x1])  # CLIP sees the raw crop, on this machine only
-                    origins.append((x0, y0))
+        for b in hand_scan(kp, w, h):
+            x0, y0, x1, y1 = (int(v) for v in b)
+            if x1 > x0 + 4 and y1 > y0 + 4:
+                crops.append(frame[y0:y1, x0:x1])  # CLIP sees the raw crop, on this machine only
+                origins.append((x0, y0))
         if not crops:
             return
         p_item, p_cat = self.scorer(self.embed(crops))
         k = int(np.argmax(p_item))
+        p = self._person(track_id)
+        if t - p.last_held > HOLD_WINDOW_S:  # the hand was empty for a while: confirm afresh
+            p.recent.clear()
+            p.confirmed = False
+        p.recent.append(bool(p_item[k] >= ITEM_P))
+        p.confirmed = p.confirmed or sum(p.recent) >= HOLD_CONFIRM
         if p_item[k] < ITEM_P:
             return
-        p = self._person(track_id)
         p.last_held = t
         p.votes += p_cat[k] * p_item[k]
         p.n_votes += 1
@@ -201,15 +213,22 @@ class ItemWatcher:
 
     def holding(self, track_id: int, now: float) -> bool:
         p = self.people.get(track_id)
-        return p is not None and now - p.last_held <= HOLD_WINDOW_S
+        return p is not None and p.confirmed and now - p.last_held <= HOLD_WINDOW_S
 
     def _catalog(self, p: _Person) -> dict | None:
         if p.n_votes < MIN_VOTES or p.votes.sum() <= 0:
             return None
+        total = p.votes.sum()
         k = int(np.argmax(p.votes))
         cid = self.scorer.cats[k]
-        if p.votes[k] / p.votes.sum() >= KNOWN_P and cid in self.table:
+        if p.votes[k] / total >= KNOWN_P and cid in self.table:
             return gm.from_catalog(cid, self.table)
+        pooled: dict[str, float] = {}
+        for c, v in zip(self.scorer.cats, p.votes):
+            pooled[PRODUCT_PARENT.get(c, c)] = pooled.get(PRODUCT_PARENT.get(c, c), 0.0) + float(v)
+        kind = max(pooled, key=pooled.get)
+        if pooled[kind] / total >= KNOWN_P and kind in self.table:
+            return gm.from_catalog(kind, self.table)
         return None
 
     def answer(self, track_id: int, now: float) -> tuple[dict, str] | None:
@@ -217,12 +236,13 @@ class ItemWatcher:
         p = self.people.get(track_id)
         if p is None:
             return None
-        known = self._catalog(p)
-        if known is not None:
-            return known, "catalog"
-        if p.job is not None and p.job.done() and p.job.exception() is None and p.job.result() is not None:
-            return p.job.result(), "llm"
-        return None
+        if p.locked is None:
+            known = self._catalog(p)
+            if known is not None:
+                p.locked = known, "catalog"
+            elif p.job is not None and p.job.done() and p.job.exception() is None and p.job.result() is not None:
+                p.locked = p.job.result(), "llm"
+        return p.locked
 
     def set_heads(self, heads: list) -> None:
         """head_box() of everyone in the current frame (the guide sets this each frame)."""

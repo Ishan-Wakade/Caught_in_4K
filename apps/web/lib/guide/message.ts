@@ -54,6 +54,14 @@ export function defaultTrash(what: string | null): GuideMessage {
   return placed("trash", what || "not sure what this is");
 }
 
+/** True when fromSuggestion falls back to trash: an ordinary item without a confident (>= 50%) bin from Jev. */
+export function unsureSuggestion(pt: ProposedType): boolean {
+  const text = `${(pt.name ?? "").trim()} ${pt.form ?? ""}`.toLowerCase();
+  if (pt.hazardous || HAZARD.some(([rx]) => rx.test(text))) return false;
+  const conf = pt.suggestion_confidence;
+  return conf == null || conf < DEFAULT_TRASH_BELOW || !((pt.suggested_destination ?? "") in JEV_TO_BIN);
+}
+
 export function fromSuggestion(pt: ProposedType): GuideMessage {
   const name = (pt.name ?? "").trim() || "this item";
   const text = `${name} ${pt.form ?? ""}`.toLowerCase();
@@ -66,8 +74,6 @@ export function fromSuggestion(pt: ProposedType): GuideMessage {
     validateMessage(m);
     return m;
   }
-  const dest = pt.suggested_destination ?? "";
-  const conf = pt.suggestion_confidence;
-  if (conf == null || conf < DEFAULT_TRASH_BELOW || !(dest in JEV_TO_BIN)) return defaultTrash(name);
-  return placed(JEV_TO_BIN[dest], name);
+  if (unsureSuggestion(pt)) return defaultTrash(name);
+  return placed(JEV_TO_BIN[pt.suggested_destination!], name);
 }

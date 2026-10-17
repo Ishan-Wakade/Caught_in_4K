@@ -5,11 +5,12 @@
  * Crops arrive already face-redacted by the phone. Keys stay on the server. Any provider failure -> trash.
  */
 import siteJson from "../../../../contracts/fixtures/demo-site.json";
-import { CATALOG_IDS, defaultTrash, fromCatalog, fromSuggestion, type GuideMessage } from "./message";
+import { CATALOG_IDS, defaultTrash, fromCatalog, fromSuggestion, unsureSuggestion, type GuideMessage } from "./message";
 import { LOCAL_RULES, RULES_SOURCE } from "./rules";
 
 export type Keys = { deepseek: string; jev: string };
-export type Result = { message: GuideMessage | null; source: "catalog" | "llm" | "default" | "nothing_held" };
+/** source "unclear": DeepSeek could not see what it is (blurry, or covered by the face blackout): worth another look. */
+export type Result = { message: GuideMessage | null; source: "catalog" | "llm" | "default" | "unclear" | "nothing_held" };
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Response>;
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -29,13 +30,49 @@ Answer JSON only: {"catalog_item_id": id or null, "what": "short description of 
 
 const GENERIC_PROMPT = (n: number) => `These ${n} images are crops around the hand of ONE person walking to a waste bin (faces are blacked out).
 Describe the object generically, for deciding which waste bin it belongs in:
-- holding: true only if the person is clearly holding an object (not just an empty hand, a sleeve, or a phone they keep using)
-- name: short generic name including its use ("disposable face mask", "paper takeout box", "paper coffee cup")
+- holding: true if the person is holding any object in their hand (not just an empty hand or a sleeve)
+- name: short generic name including its use; if you cannot see the object clearly enough to tell what it is, "unknown" (do not guess)
 - material: one of plastic_film, rigid_plastic, paper, cardboard, metal, glass, organic, textile, foam, mixed, unknown
-- form: one word for its shape or use ("cup", "bag", "mask", "wrapper", "box", "napkin", "bottle", "glove", "battery")
+- form: one word for its shape or use: cup, bag, wrapper, box, napkin, bottle, can, container, utensil, food, glove, battery, phone, or other
 - condition: one of clean, food_residue, liquid, unknown (only what you can see)
 - hazardous: true only for batteries, electronics, chemicals, needles, or items labeled hazardous
 Answer JSON only: {"holding": true, "name": "...", "material": "...", "form": "...", "condition": "...", "hazardous": false}`;
+
+/**
+ * DeepSeek's generic description -> the catalog's generic kind, whose bin the local rules already decide (bins.json), so
+ * Jev is only asked about items the catalog does not cover (17 Oct: Jev called snack wrappers "special" at 57%).
+ * By form, then material where the bin depends on it. Bags and boxes are left to Jev (a grocery bag or a clean shipping
+ * box is not a chip bag or a takeout box).
+ */
+const KIND_BY_FORM: Record<string, string | Record<string, string>> = {
+  wrapper: "item_generic_wrapper",
+  napkin: "item_napkin",
+  food: "item_generic_food",
+  can: { metal: "item_generic_can" },
+  bottle: { rigid_plastic: "item_generic_bottle", glass: "item_generic_glass" },
+  cup: { rigid_plastic: "item_generic_cup", paper: "item_generic_paper_cup" },
+  container: { rigid_plastic: "item_generic_container" },
+  utensil: { rigid_plastic: "item_generic_utensil" },
+};
+
+/**
+ * The two DeepSeek calls see the same crops; when the unsure one (catalog confidence < 0.5) describes something else
+ * than the generic one names, neither is trusted (17 Oct: "paper wrapper or packet" vs "packaging box" -> recycling;
+ * "cup lid" vs "phone" -> none). Agreeing = the generic form or a word of its name appears in the other description.
+ */
+export function disagree(gen: { name?: string; form?: string } | null, cat: { what?: string; confidence?: number } | null): boolean {
+  const what = (cat?.what ?? "").toLowerCase();
+  if (!what || (cat?.confidence ?? 1) >= 0.5) return false;
+  const words = [gen?.form ?? "", ...(gen?.name ?? "").toLowerCase().split(/\W+/)].filter((w) => w.length >= 3);
+  return !words.some((w) => what.includes(w.toLowerCase()));
+}
+
+export function catalogKind(item: { form?: string; material?: string; hazardous?: boolean }): string | null {
+  if (item.hazardous) return null;
+  const m = KIND_BY_FORM[(item.form ?? "").toLowerCase()];
+  const id = typeof m === "string" ? m : m?.[(item.material ?? "").toLowerCase()];
+  return id && CATALOG_IDS.includes(id) ? id : null;
+}
 
 const DESTINATIONS = {
   recycling: "Curbside recycling cart",
@@ -73,31 +110,41 @@ async function jev(fetchFn: Fetch, key: string, item: object): Promise<{ choice:
   return r.answers.bin;
 }
 
-export async function identify(crops: string[], keys: Keys, fetchFn: Fetch = fetch as unknown as Fetch): Promise<Result> {
+/** trace: each provider answer as it arrives (the server's GUIDE_DEBUG_DIR log); never sent to the browser. */
+export async function identify(crops: string[], keys: Keys, fetchFn: Fetch = fetch as unknown as Fetch,
+  trace: (step: object) => void = () => {}): Promise<Result> {
   try {
     const [cat, gen] = await Promise.all([
       deepseek(fetchFn, keys.deepseek, CATALOG_PROMPT(crops.length), crops),
       deepseek(fetchFn, keys.deepseek, GENERIC_PROMPT(crops.length), crops),
     ]);
+    trace({ deepseek_catalog: cat, deepseek_generic: gen });
     if (gen && gen.holding === false) return { message: null, source: "nothing_held" };
     if (cat && typeof cat.catalog_item_id === "string" && CATALOG_IDS.includes(cat.catalog_item_id)) {
       return { message: fromCatalog(cat.catalog_item_id), source: "catalog" };
     }
     const item = { name: gen?.name || cat?.what || "", material: gen?.material ?? "unknown", form: gen?.form ?? "",
       condition: gen?.condition ?? "unknown", hazardous: !!gen?.hazardous, description: cat?.what ?? "" };
-    if (!item.name) return { message: defaultTrash(null), source: "default" };
+    if (!item.name || /^unknown\b/i.test(item.name.trim())) return { message: defaultTrash(null), source: "unclear" };
+    if (disagree(gen, cat)) return { message: defaultTrash(null), source: "unclear" };
+    const kind = catalogKind(item);
+    if (kind) return { message: fromCatalog(kind), source: "catalog" };
     let suggestion: { choice?: string; confidence?: number } = {};
+    // Dangerous items are "none" whatever Jev says (fromSuggestion): skip the call, it only added time.
+    const dangerous = unsureSuggestion({ name: item.name, form: item.form, hazardous: item.hazardous }) === false;
     try {
-      suggestion = await jev(fetchFn, keys.jev, item);
-    } catch {
+      if (!dangerous) suggestion = await jev(fetchFn, keys.jev, item);
+      trace({ jev: suggestion });
+    } catch (e) {
+      trace({ jev_error: String(e) });
       suggestion = {}; // no suggestion -> from_suggestion says trash (unless dangerous)
     }
-    return {
-      message: fromSuggestion({ name: item.name, form: item.form, hazardous: item.hazardous,
-        suggested_destination: suggestion.choice ?? null, suggestion_confidence: suggestion.confidence ?? null }),
-      source: "llm",
-    };
-  } catch {
+    const proposed = { name: item.name, form: item.form, hazardous: item.hazardous,
+      suggested_destination: suggestion.choice ?? null, suggestion_confidence: suggestion.confidence ?? null };
+    // Jev unsure (< 50%) or silent: the trash fallback, marked "default" so the camera page can treat it as unsure.
+    return { message: fromSuggestion(proposed), source: unsureSuggestion(proposed) ? "default" : "llm" };
+  } catch (e) {
+    trace({ error: String(e) });
     return { message: defaultTrash(null), source: "default" };
   }
 }

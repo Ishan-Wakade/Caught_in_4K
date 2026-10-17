@@ -39,9 +39,11 @@ test("HTTP route flow: worker auth, intake, projections, review, catalog, reset 
     const g = event("generic_http", { occurred_at: new Date().toISOString(), item: { catalog_item_id: "generic", label: "can", confidence: 1, candidates: [] }, business: { business_id: "biz_cafe", confidence: 0.1, basis: ["logo_text"] } });
     await ingest(req("events", g)); assert.equal((await (await reviews()).json()).length, 1);
     const context = { params: Promise.resolve({ event_id: g.event_id }) };
-    assert.equal((await review(req("reviews/generic_http", {}), context)).status, 400);
-    assert.equal((await review(req("reviews/generic_http", { business_id: "biz_cafe" }), context)).status, 200);
+    assert.equal((await review(req("reviews/generic_http", {}), context)).status, 503); // manager API not configured yet
     process.env.MANAGER_API_TOKEN = "manager_test";
+    assert.equal((await review(req("reviews/generic_http", {}), context)).status, 401); // wrong token
+    assert.equal((await review(req("reviews/generic_http", {}, "manager_test"), context)).status, 400);
+    assert.equal((await review(req("reviews/generic_http", { business_id: "biz_cafe" }, "manager_test"), context)).status, 200);
     assert.equal((await catalogPost(req("catalog", testSeed.catalog[0]))).status, 401);
     assert.equal((await catalogPost(req("catalog", testSeed.catalog[0], "manager_test"))).status, 200);
     assert.equal((await reset(req("demo/reset", {}, "manager_test"))).status, 200);

@@ -6,10 +6,10 @@ export function requireWorker(request: Request) {
   const expected = Buffer.from(`Bearer ${token}`), actual = Buffer.from(request.headers.get("authorization") ?? "");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new CoreError(401, "Invalid worker token");
 }
-/** Optional shared manager token. Full user/role authentication remains deployment work. */
+/** Shared manager token. Full user/role authentication remains deployment work. */
 export function requireManager(request: Request) {
   const token = process.env.MANAGER_API_TOKEN;
-  if (!token) return;
+  if (!token) throw new CoreError(503, "Manager API is not configured");
   const expected = Buffer.from(`Bearer ${token}`), actual = Buffer.from(request.headers.get("authorization") ?? "");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new CoreError(401, "Invalid manager token");
 }

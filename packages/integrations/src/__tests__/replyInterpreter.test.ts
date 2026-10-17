@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RuleBasedReplyInterpreter } from "../interpreter/replyInterpreter.js";
-import type { InboundReply, OpenAlertSummary } from "../types.js";
+import type { InboundReply, OpenAlertSummary } from "@recyclone/contracts";
 
 const interpreter = new RuleBasedReplyInterpreter();
 

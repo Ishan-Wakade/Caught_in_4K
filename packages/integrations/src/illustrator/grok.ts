@@ -1,4 +1,6 @@
-import type { BinInventorySnapshot, Illustrator, IllustrateResult } from "../types.js";
+import type { BinInventorySnapshot, Illustrator } from "@recyclone/contracts";
+
+type IllustrateResult = Awaited<ReturnType<Illustrator["illustrate"]>>;
 
 export type GrokIllustratorConfig = {
   apiKey: string;

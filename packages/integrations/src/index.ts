@@ -1,4 +1,13 @@
-export * from "./types.js";
+export type {
+  ContactRef,
+  InboundReply,
+  OpenAlertSummary,
+  BinInventorySnapshot,
+  Messenger,
+  Illustrator,
+  ReplyInterpreter,
+  ReplySink,
+} from "@recyclone/contracts";
 export * from "./config.js";
 export { MockMessenger } from "./messenger/mock.js";
 export type { MockSentMessage } from "./messenger/mock.js";

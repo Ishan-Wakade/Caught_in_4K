@@ -1,5 +1,8 @@
-import type { Messenger, OutboundMessage, SendResult } from "../types.js";
+import type { Messenger } from "@recyclone/contracts";
 import { getPhotonProvider } from "./photonApp.js";
+
+type OutboundMessage = Parameters<Messenger["send"]>[0];
+type SendResult = Awaited<ReturnType<Messenger["send"]>>;
 
 type PhotonGrpcError = { grpcCode?: number; details?: string; message?: string };
 

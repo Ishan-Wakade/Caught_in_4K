@@ -1,5 +1,7 @@
-import type { Messenger, OutboundMessage, SendResult } from "../types.js";
+import type { Messenger } from "@recyclone/contracts";
 
+type OutboundMessage = Parameters<Messenger["send"]>[0];
+type SendResult = Awaited<ReturnType<Messenger["send"]>>;
 export type MockSentMessage = OutboundMessage & SendResult;
 
 // Demo stand-in for Photon: keeps every send in memory so the Messages scene

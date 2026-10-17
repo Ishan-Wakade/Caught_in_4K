@@ -1,4 +1,6 @@
-import type { BinInventorySnapshot, Illustrator, IllustrateResult } from "../types.js";
+import type { BinInventorySnapshot, Illustrator } from "@recyclone/contracts";
+
+type IllustrateResult = Awaited<ReturnType<Illustrator["illustrate"]>>;
 
 function escapeXml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c] as string));

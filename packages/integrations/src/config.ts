@@ -1,4 +1,4 @@
-import type { Illustrator, Messenger, ReplyInterpreter } from "./types.js";
+import type { Illustrator, Messenger, ReplyInterpreter } from "@recyclone/contracts";
 import { MockMessenger } from "./messenger/mock.js";
 import { PhotonMessenger } from "./messenger/photon.js";
 import { MockIllustrator } from "./illustrator/mock.js";

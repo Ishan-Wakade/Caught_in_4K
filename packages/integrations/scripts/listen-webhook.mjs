@@ -4,10 +4,10 @@
 // HTTP server, verifies + deserializes each delivery via app.webhook(),
 // and logs the sender + text. Point a tunnel (e.g. `ngrok http 8787`) at
 // this, register the tunnel's https URL with
-// `npm run register-webhook -- <tunnel-url>`, then text the project's
+// `pnpm --filter @recyclone/integrations register-webhook -- <tunnel-url>`, then text the project's
 // configured number/handle from a real phone and watch this log.
 //
-// Usage: npm run build && node scripts/listen-webhook.mjs [port=8787]
+// Usage: pnpm --filter @recyclone/integrations build && node scripts/listen-webhook.mjs [port=8787]
 
 import http from "node:http";
 import { getPhotonApp } from "../dist/messenger/photonApp.js";

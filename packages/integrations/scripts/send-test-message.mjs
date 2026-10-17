@@ -3,7 +3,7 @@
 // project — sends one real message. Costs a real send and requires
 // MESSENGER_MODE=live + real credentials; nothing here is mocked.
 //
-// Usage: npm run build && node scripts/send-test-message.mjs <phone> <message>
+// Usage: pnpm --filter @recyclone/integrations build && node scripts/send-test-message.mjs <phone> <message>
 // Example: node scripts/send-test-message.mjs +15551234567 "test from Recyclone"
 
 import { createMessenger } from "../dist/config.js";

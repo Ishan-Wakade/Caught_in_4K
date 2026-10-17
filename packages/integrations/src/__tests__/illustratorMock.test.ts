@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MockIllustrator } from "../illustrator/mock.js";
-import type { BinInventorySnapshot } from "../types.js";
+import type { BinInventorySnapshot } from "@recyclone/contracts";
 
 const snapshot: BinInventorySnapshot = {
   snapshotId: "snap_1",

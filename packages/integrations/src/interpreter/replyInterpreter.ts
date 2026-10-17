@@ -1,4 +1,6 @@
-import type { InboundReply, InterpretResult, OpenAlertSummary, ReplyInterpreter } from "../types.js";
+import type { InboundReply, OpenAlertSummary, ReplyInterpreter } from "@recyclone/contracts";
+
+type InterpretResult = Awaited<ReturnType<ReplyInterpreter["interpret"]>>;
 
 // Keyword lists are a first pass, not a finished NLU model — tune them once
 // real manager replies from the demo/pilot are available.

@@ -17,6 +17,7 @@ import numpy as np
 from .events import build_event, validate_event
 from .identify import business_from_candidates
 from .items import Analysis, destination_confidence, item_box_at, item_from_votes
+from .namer import item_from_answer
 from .pipeline import clamp_crop, pad_box
 
 KEEP_FRAMES = 90  # recent frames kept for evidence crops (the item's last sighting can precede the drop by ~1 s)
@@ -79,6 +80,8 @@ class ItemPlayback:
         a = self.analysis
         root = next(t for t in a.tracks if t["id"] == drop["item_id"])
         item = item_from_votes(root)
+        if drop.get("llm"):  # named by the vision LLM at analysis time (namer.py); CLIP stays as evidence
+            item = item_from_answer(drop["llm"], item)
         evidence = []
         seen = item_box_at(a, drop)
         frames = dict(recent)

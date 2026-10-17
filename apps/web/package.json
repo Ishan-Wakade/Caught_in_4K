@@ -10,10 +10,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1",
     "@recyclone/contracts": "workspace:*",
     "@recyclone/core": "workspace:*",
     "@recyclone/integrations": "workspace:*",
     "next": "^16.4.2",
+    "onnxruntime-web": "1.30.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

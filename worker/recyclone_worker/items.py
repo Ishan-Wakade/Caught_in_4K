@@ -58,6 +58,9 @@ MERGE_FRAMES = 45                   # drops into one bin within 1.5 s are one dr
 BIN_MARGIN = 0.10
 MIN_VOTES = 1e-3                    # category vote mass below this: item unknown
 REQUIRE_SEEN_OUTSIDE = True         # a drop needs an item that was seen as an item outside every bin
+VETO_NEAR = 0.3                     # the veto needs the item back in a hand within 0.3 of its size from where it vanished
+VETO_OVER_BIN = True                # ... and also counts it when that spot is over a bin (a hand hovering with it)
+BACK_VIEW_DROPS = False             # experimental: drops hidden by the person's body (filmed from behind), hidden_drops()
 
 
 # ---------------------------------------------------------------- stage 1: perception (cached)
@@ -201,9 +204,10 @@ def in_box(pt, box, margin=BIN_MARGIN) -> bool:
 class Scorer:
     """CLIP zero-shot: P(item) vs background, and the item's category (bin rule comes from the catalog)."""
 
-    def __init__(self, clip):
-        self.cats = list(ITEM_PROMPTS)
-        flat = [(c, p) for c in self.cats for p in ITEM_PROMPTS[c]]
+    def __init__(self, clip, prompts: dict | None = None):
+        prompts = ITEM_PROMPTS if prompts is None else prompts
+        self.cats = list(prompts)
+        flat = [(c, p) for c in self.cats for p in prompts[c]]
         self.item_owner = np.array([self.cats.index(c) for c, _ in flat])
         self.item_text = clip.texts([p for _, p in flat])
         self.bg_text = clip.texts(BACKGROUND)
@@ -569,14 +573,28 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
             still = [k for k in range(k0, len(fr)) if mv[k] < OWN_MOTION / 2]
             if len(still) >= at_fps(STILL_MIN, fps):
                 cand.append({"frame": int(fr[still[0]]), "how": "left in bin", "bin": bid, "track": t})
-    # veto: shortly after, a hand holds the same item again (outside every bin) -> it was never let go
+    # veto: shortly after, a hand holds the same item again (outside every bin) AT THE SPOT WHERE IT VANISHED -> it
+    # was never let go (its track only broke). An item's group can also hold other things (17 Oct: a white paper and
+    # the white bag in the other hand; a napkin and the hand on a hopper handle); those reappear elsewhere and must
+    # not cancel the drop. Measured on the 10 dev clips: re-held where it vanished = 0.04-0.18 box diagonals away,
+    # after a real drop >= 0.38 (or nothing re-held).
+    def same_as(tid, dropped, f) -> bool:
+        if tid == dropped["id"]:
+            return True
+        if identity.get(tid) != identity[dropped["id"]]:
+            return False
+        lb = dropped["boxes"][-1]
+        px, py = carry(center(lb), motion, dropped["frames"][-1], f)
+        cx, cy = center(boxes_at[tid][f])
+        return float(np.hypot(cx - px, cy - py)) <= VETO_NEAR * float(np.hypot(lb[2] - lb[0], lb[3] - lb[1]))
     kept = []
     for c in cand:
-        cid = identity[c["track"]["id"]]
         back = [f for f in range(c["frame"] + 1, min(n, c["frame"] + at_fps(VETO_FRAMES, fps) + 1)) for _, tid, _ in links[f]
-                if identity.get(tid) == cid and not any(in_box(center(boxes_at[tid][f]), bx[f]) for bx in bins.values())]
+                if same_as(tid, c["track"], f) and (VETO_OVER_BIN or not any(in_box(center(boxes_at[tid][f]), bx[f]) for bx in bins.values()))]
         if not back:
             kept.append(c)
+    if BACK_VIEW_DROPS:
+        kept += hidden_drops(tracks, data, bins, fps, identity, {identity[c["track"]["id"]] for c in kept}, seen_outside)
     # one drop seen through several tracks of the same item (or within 1.5 s into the same bin) is one drop
     kept.sort(key=lambda c: c["frame"])
     groups = []
@@ -596,6 +614,54 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
     data["_links"], data["_identity"] = links, identity
     data["_debug"] = {"candidates": [(c["frame"], c["track"]["id"], c["how"]) for c in cand], "kept": [(c["frame"], c["track"]["id"]) for c in kept]}
     return events, roles
+
+
+def body_box(kp, margin: float = 0.15):
+    """The person's box from the visible keypoints (conf > 0.3), grown by margin; None if fewer than 4 are seen."""
+    seen = kp[kp[:, 2] > 0.3]
+    if len(seen) < 4:
+        return None
+    x0, y0, x1, y1 = seen[:, 0].min(), seen[:, 1].min(), seen[:, 0].max(), seen[:, 1].max()
+    mx, my = (x1 - x0) * margin, (y1 - y0) * margin
+    return (x0 - mx, y0 - my, x1 + mx, y1 + my)
+
+
+def hidden_drops(tracks, data, bins, fps, identity, already: set, seen_outside: dict) -> list[dict]:
+    """Drops the camera cannot see because the person's own body hides them (filmed from behind, 17 Oct, experimental).
+
+    A carried item that was seen as an item outside every bin, whose LAST sighting is next to the person's body,
+    counts as dropped into a bin when, within 1.5 s after that, the person's elbow or wrist is at that bin's opening,
+    and the item is never seen again. Off by default (BACK_VIEW_DROPS) until measured on back-view footage."""
+    n = len(data["kps"])
+    kps = data["kps"]
+    window = at_fps(45, fps)
+    last = {}
+    for t in tracks:
+        iid = identity.get(t["id"])
+        if iid is None or iid in already or seen_outside.get(iid, 0.0) < MIN_VOTES:
+            continue
+        f, b = t["frames"][-1], t["boxes"][-1]
+        if f > last.get(iid, (-1, None))[0]:
+            last[iid] = (f, b, t)
+    out = []
+    for iid, (f, b, t) in last.items():
+        if f >= n - at_fps(LOST_AFTER, fps):  # still in view when the clip ends: nothing to decide
+            continue
+        body = body_box(kps[f])
+        if body is None or not in_box(center(b), body, margin=0.0):
+            continue
+        votes = {}
+        for g in range(f, min(n, f + window + 1)):
+            for j in (7, 8, 9, 10):  # elbows and wrists
+                if kps[g][j][2] < 0.3:
+                    continue
+                for bid, bx in bins.items():
+                    if bx[g] is not None and in_box((kps[g][j][0], kps[g][j][1]), bx[g], margin=0.25):
+                        votes[bid] = votes.get(bid, 0) + 1
+        if votes:
+            bid = max(votes, key=votes.get)
+            out.append({"frame": int(f), "how": "hidden by the body", "bin": bid, "track": t})
+    return out
 
 
 # ---------------------------------------------------------------- package API (recyclone-worker run --tracker items)

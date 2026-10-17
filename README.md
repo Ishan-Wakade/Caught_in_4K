@@ -1,50 +1,82 @@
 # Caught in 4K
 
-*(codebase name: Recyclone)*
+**The right bin, before the item gets there.**
 
-**The cameras already watching your bins can tell you who keeps sorting them wrong — if anyone bothered to look.**
+Caught in 4K is being built to give customers spoken waste-sorting guidance as they approach a store's bins. It will use the store's existing surveillance camera to recognize what someone is carrying, apply local disposal rules, and announce the destination through a nearby speaker before they throw the item away.
 
-## The problem
+> This README describes the intended finished product. The repository is a prototype in development; the capabilities below are the target, not a claim that deployment, real-time performance, authentication, or every integration is complete. The [voice-guidance roadmap](docs/superpowers/specs/2026-10-17-voice-guidance-roadmap-design.md) defines the build sequence, and [AGENTS.md](AGENTS.md) contains current implementation instructions.
 
-Walk past any shared bin bank outside a food court or strip mall and you'll see it: a recyclable cup in the trash, a compostable box tossed in with the garbage. It happens constantly, at scale, and nobody finds out. The mistake gets emptied out with the trash, the evidence disappears, and the exact same thing happens again tomorrow — not because anyone's careless, but because no one has ever actually told them it's happening.
+## The customer experience
 
-Meanwhile, there's almost always a security camera pointed at that exact spot already. It's just recording a dumpster for loss-prevention, getting overwritten in 24 hours, and telling nobody anything useful.
+A customer walks toward the bins holding an aluminum can. The camera recognizes the item while they approach. Before they arrive, the speaker says:
 
-## What it does
+> **Recycle. Aluminum can, placed in recycling.**
 
-Caught in 4K points that existing camera at the real problem. It watches a shared bin area, identifies what gets thrown where, and figures out — per restaurant, per item — when a mistake isn't a one-off but a pattern. When it is, it texts that restaurant's manager with a specific, grounded fix (not "please recycle more," but "your cup keeps going in the trash at the patio bins — a sign near pickup could help"), tracks whether they confirm the fix, and keeps watching so it can show whether sorting behavior actually changed afterward.
+The customer will not need to scan a code, open an app, or hold each item in front of a dedicated scanner. The goal is to make the correct destination clear during the approach to the bins.
 
-The loop, end to end:
+The destination will come first: **compost**, **trash**, or **recycle**, followed by a short explanation. Items that belong in none of those bins will receive a **None** announcement with the special-disposal instruction from the local rules—for example, directing a battery to an appropriate collection point.
 
-1. **Watch** — an existing surveillance camera feeds a computer-vision model that detects each item dropped into each bin.
-2. **Identify** — the item and its source business, from packaging and branding, with destinations judged against the site's own sorting rules (trash / recycling / compost).
-3. **Catch the pattern** — one wrong drop isn't a mistake worth flagging; a business's item scoring low across several drops is.
-4. **Tell someone who can fix it** — a text to that business's manager, with the specific item and a concrete suggestion, sent and followed up automatically.
-5. **Close the loop** — the manager confirms the action by text, no app or login required, and the dashboard shows sorting behavior before and after.
+## How it will work
 
-When origin is genuinely unclear — generic packaging, an unreadable logo — it doesn't guess and blame the wrong business. It queues the drop for a human area manager to resolve instead.
+1. **See the item early.** The camera locates a person carrying waste and evaluates the item in their hand while they are still approaching.
+2. **Recognize its type.** Familiar products will match the store's approved catalog and reference images. An unfamiliar item will be described by a vision-language model and evaluated against local rules by Jev.
+3. **Speak at the right moment.** A calibrated view of the floor will help estimate the person's approach to the bin area. The system will play the destination and explanation once per visit, with familiar-item audio prepared in advance.
+4. **Keep a useful record.** The store will retain the recognized item type, category, time, and guidance given. A manager will be able to approve new item types so future visits can use the known-item path.
 
-## What's in the demo
+The current design uses one marked area for the entire group of bins. Its records will describe **items brought to the area and destinations announced**. They will not establish which individual bin the customer actually used or whether the customer followed the guidance.
 
-The staged scenario is **Riverside Food Court**: four restaurants (Bean Co., Taco Stop, Green Bowl, Shake Shack) sharing one patio station with trash, recycling, and compost bins. The demo footage walks through the full range of what the system handles:
+Uncertainty and late answers will be recorded. The current policy defaults uncertain ordinary items to trash when confidence is below 50% or the answer is not ready on arrival; recognized special-disposal items retain their separate instruction. Cached suggestions will remain distinct from manager-approved catalog entries.
 
-- a correct disposal
-- a repeated wrong disposal that crosses the threshold and triggers a text
-- a bin approaching full, with an emptying request and a confirmed reset
-- an item whose source business is unclear, routed to human review instead of guessed at
-- an item the model can't identify at all, correctly never counted as anyone's mistake
-- a manager who doesn't reply in time, and gets one automatic follow-up
+## A separate deployment for each store
 
-The dashboard mirrors what a manager would actually use day to day: a live annotated camera feed, bin fullness with AI-generated illustrations of estimated contents, a per-restaurant sorting-score view, the manager-text conversation history, a review queue for uncertain cases, and the packaging catalog behind all of it.
+Each store will run its own Docker container connected to its camera and speaker. Configuration will define the camera connection, bin area, floor calibration, product catalog, reference images, local disposal rules, and audio output. Production camera support will target RTSP/ONVIF connections.
 
-## Under the hood
+The store's copy will adapt through approved product types, reference images captured by its own camera, and cached decisions. This does not require retraining a model for every store; optional retraining can follow when enough labeled examples exist.
 
-- A Python computer-vision worker processes camera footage into disposal events in real time.
-- A Postgres-backed core service applies the sorting rules, scores items, manages alert and conversation state, and estimates bin fullness.
-- A Next.js dashboard presents all of it live.
-- **Photon 2.0** sends manager texts and receives their replies.
-- **Grok Imagine** illustrates each bin's estimated contents, since a generated image is far cheaper than a live photo feed per bin.
+Footage, reference images, crops, and detailed logs are intended to remain on the store's infrastructure. Cloud recognition calls would send item crops or descriptions to the selected providers. The deployment design must resolve store-controlled API credentials and provider data handling, or use local inference, before claiming fully local processing. Full video frames and faces are not intended inputs to those cloud calls.
 
-## What's real vs. staged
+## A dashboard for each company
 
-This is a hackathon prototype, and it stays honest about it on screen: the demo footage is staged and recorded (not hand-labeled into the pipeline — the model processes it live, same as it would a real feed), any mocked integration is visibly labeled as such in the dashboard rather than hidden, demo timers are shortened from their real-world values, and before/after comparisons are never presented as proof of causation. The production ambition — plug into a business's own existing cameras, no staged footage required — is broader than what a hackathon demo can show in three minutes, but the full pipeline above is the same one that would run it.
+The finished dashboard will show how many items were categorized over time, with breakdowns by destination, product type, site, and camera. Special-disposal results and fallback decisions will be distinguished as the reporting contract is finalized.
+
+Companies will have their own branding, authenticated accounts, and server-enforced access controls. Roles such as company admin and site manager will determine which sites and actions a user can access. Managers will be able to review proposed item types and approve additions to their store's catalog.
+
+The hosting location remains to be decided: the dashboard may run locally with the store deployment, or a central service may receive explicitly agreed aggregate counts. Categorization counts will not be presented as verified disposal outcomes or evidence of reduced contamination.
+
+## Technology
+
+| Component | Role in the target product |
+| --- | --- |
+| Python, OpenCV, NumPy | Video input, image crops, geometry, and worker orchestration. |
+| YOLO11n-pose | Locates people, hands, and floor positions for carrying and approach detection. |
+| CLIP | Matches hand crops to product descriptions and store reference images. |
+| DeepSeek, followed by a Claude adapter | Describes unfamiliar items through a common vision-language interface. |
+| Jev | Selects a destination using the item description and local disposal rules. |
+| FastSAM and the item tracker | Supports the slower analysis path without blocking announcements. |
+| Speech provider interface | Plays cached known-item guidance and synthesizes new explanations; starts with the operating system's voice. |
+| Docker | Packages a separately configured deployment for each store. |
+| Next.js, React, TypeScript, Tailwind CSS | Foundation for the customer dashboard and API. |
+| Shared schemas and backend storage | Will define validated announcement records, category counts, approvals, and access boundaries; the existing backend includes PostgreSQL. |
+
+Hardware performance will be measured on the deployment device. Native Mac model performance does not establish container performance or the time needed to recognize an unfamiliar item through cloud APIs.
+
+## Delivery plan
+
+1. Build and measure the live announcement path, including working voice output before filming.
+2. Film fixed-camera scenarios and evaluate the model with annotated, voiced recordings. Keep development and unseen evaluation takes separate.
+3. Once the team is satisfied with the model, package and validate the store container and camera connections.
+4. Build the company dashboard, reporting contract, authentication, and authorization.
+5. Prepare a separate webcam presentation demo with known props and one unfamiliar item. This simplified hold-up demo will illustrate recognition and speech, not the full surveillance-camera workflow.
+
+Evaluation will measure announcement coverage, correct destinations, false announcements, recognition latency, and how much time the customer has between hearing the guidance and disposing of the item. Prerecorded footage, offline analysis, staged behavior, and live results will be identified explicitly.
+
+## Repository guide
+
+- `worker/` — Python perception, identification, tracking, and video tools; the starting point for voice guidance.
+- `contracts/` — shared types and validation schemas; announcement/counting contracts will be introduced as their semantics are finalized.
+- `packages/core/` — backend logic and persistence.
+- `packages/integrations/` — integration adapters from the prototype.
+- `apps/web/` — dashboard and API application.
+- `docs/superpowers/specs/2026-10-17-voice-guidance-roadmap-design.md` — source roadmap, including the later team decisions.
+
+Some existing modules and documents describe earlier iterations. Use the root [AGENTS.md](AGENTS.md) and the voice-guidance roadmap to determine the active product direction.

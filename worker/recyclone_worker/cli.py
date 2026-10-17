@@ -162,6 +162,34 @@ def cmd_run_items(args, analyze_items=None) -> int:
     print(f"analyzing {args.clip} (cached in {args.items_cache}; a new clip takes ~0.5 s per frame) ...", file=sys.stderr)
     analysis = (analyze_items or analyze)(Path(args.clip), Path(args.items_cache), bins_for)
     print(f"analysis: {len(analysis.events)} drop(s) in {time.monotonic() - t0:.0f} s", file=sys.stderr)
+    if args.namer == "deepseek":
+        from .namer import DeepSeekNamer, pick_views, read_crops
+
+        llm = DeepSeekNamer(WORKER_DIR / "state/vlm-cache")
+        if not llm.available:
+            print("note: --namer deepseek but no DEEPSEEK_API_KEY (env or ~/.config/recyclone/deepseek.env); items named by CLIP", file=sys.stderr)
+        advisor = None
+        if args.local_rules:
+            from .generic import BinAdvisor
+
+            advisor = BinAdvisor(Path(args.local_rules), WORKER_DIR / "state/generic-types.json")
+            if not advisor.available:
+                print("note: no TYPESAFE_API_KEY (env or ~/.config/recyclone/jev.env); new item types get no bin suggestion", file=sys.stderr)
+        for drop in analysis.events:
+            views = pick_views(analysis.tracks, analysis.per_frame, analysis.data, analysis.bins, drop["item_id"], drop["frame"])
+            crops = read_crops(Path(args.clip), views)
+            drop["llm"] = llm.name(crops)
+            if drop["llm"] and drop["llm"]["catalog_item_id"] is None:  # not in the catalog: propose a generic type
+                from .generic import for_event, generic_type
+
+                drop["llm"]["generic"] = llm.describe(crops)
+                gt = generic_type(drop["llm"])
+                if gt is not None:
+                    drop["llm"]["proposed_type"] = for_event(advisor.suggest(gt) if advisor and advisor.available else gt)
+                    pt = drop["llm"]["proposed_type"]
+                    print(f"new item type {pt['generic_type_id']} ({pt['name']}): suggested {pt['suggested_destination']} "
+                          f"({pt['suggestion_confidence']}) under {pt['rule_source']}", file=sys.stderr)
+        print(f"DeepSeek naming: {llm.usage}" + (f"; Jev: {advisor.usage}" if advisor else ""), file=sys.stderr)
     unknown_bins = {e["bin"] for e in analysis.events} - {r.bin_id for r in site.regions}
     if unknown_bins:
         print(f"WARNING: bins not in {args.camera}'s site config (core will reject them): {sorted(unknown_bins)}", file=sys.stderr)
@@ -191,6 +219,201 @@ def cmd_run_items(args, analyze_items=None) -> int:
             sink.close()
     print(f"{len(events)} event(s) from {args.clip}", file=sys.stderr)
     summarize(sink.stats)
+    return 0
+
+
+def cmd_run_station(args, analyze_items=None) -> int:
+    """Several cameras of one station (multicam.py): each camera through the item tracker, unchanged; drops merged
+    across cameras and reported by the camera the person faced; a combined view with the active camera marked."""
+    import subprocess
+
+    from .item_playback import ItemPlayback
+    from .items import analyze, keyframe_boxes, site_bin_boxes
+    from .multicam import CameraRun, StationPlayback, fuse, load_station, station_started_at
+
+    station = load_station(Path(args.station))
+    catalog = load_catalog(os.environ.get("API_BASE_URL"))
+    cams = []
+    for c in station["cameras"]:
+        video = Path(c["video"]).expanduser()
+        if c.get("bins"):
+            bins_for = (lambda spec: lambda size, n: {b["bin_id"]: keyframe_boxes(b, n) for b in spec})(c["bins"])
+        else:
+            site = load_site(c["camera_id"])
+            bins_for = (lambda regions: lambda size, n: site_bin_boxes(regions, size, n))(site.regions)
+        print(f"analyzing {c['camera_id']}: {video} ...", file=sys.stderr)
+        analysis = (analyze_items or analyze)(video, Path(args.items_cache), bins_for)
+        cams.append(CameraRun(c["camera_id"], analysis, float(c.get("offset_s", 0.0)), video))
+        views = {v: cams[-1].facing.count(v) for v in ("front", "back", "unknown", "none")}
+        print(f"  {c['camera_id']}: {len(analysis.events)} drop(s); person facing it {views['front']} frames, back {views['back']}", file=sys.stderr)
+    fused = fuse(cams)
+    print(f"station: {sum(len(c.analysis.events) for c in cams)} camera drop(s) -> {len(fused)} drop(s)", file=sys.stderr)
+    if args.namer == "deepseek":
+        from .namer import DeepSeekNamer, pick_views, read_crops
+
+        llm = DeepSeekNamer(WORKER_DIR / "state/vlm-cache")
+        by_id = {c.camera_id: c for c in cams}
+        for d in fused:  # named once per physical drop, from the camera that reports it
+            c = by_id[d["camera_id"]]
+            a = c.analysis
+            views = pick_views(a.tracks, a.per_frame, a.data, a.bins, d["drop"]["item_id"], d["drop"]["frame"])
+            d["drop"]["llm"] = llm.name(read_crops(c.video, views))
+    sink = PrintingSink() if args.dry_run else make_sink(args)
+    if not args.dry_run and not args.no_background:
+        sink = BackgroundSink(sink)
+    if args.events_out:
+        sink = FileSink(sink, Path(args.events_out))
+    started_at = station_started_at(cams, args.realtime)
+    playbacks = {c.camera_id: ItemPlayback(c.analysis, sink, camera_id=c.camera_id, clip_id=args.clip_id,
+                                           started_at=started_at + timedelta(seconds=c.offset_s),
+                                           evidence_dir=Path(args.evidence_dir), catalog_business=catalog) for c in cams}
+    stream, writer = None, None
+    if not args.no_stream:
+        from .stream import StreamServer
+
+        stream = StreamServer(int(os.environ.get("WORKER_PORT", "8765")), Path(args.evidence_dir))
+        stream.start()
+        print(f"stream: http://localhost:{stream.port}/stream.mjpg", file=sys.stderr)
+
+    def on_frame(grid):
+        nonlocal writer
+        if stream:
+            stream.publish(grid)
+        if args.render:
+            if writer is None:
+                h, w = grid.shape[:2]
+                fps = max(c.fps for c in cams)
+                writer = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+                                           "-r", str(fps), "-i", "-", "-c:v", "libx264", "-crf", "26", "-preset", "veryfast",
+                                           "-pix_fmt", "yuv420p", str(args.render)], stdin=subprocess.PIPE)
+            writer.stdin.write(np.ascontiguousarray(grid).tobytes())
+
+    try:
+        events = StationPlayback(cams, fused, playbacks, on_frame=on_frame if (stream or args.render) else None,
+                                 realtime=args.realtime).run()
+    finally:
+        if stream:
+            stream.stop()
+        if writer:
+            writer.stdin.close()
+            writer.wait()
+        if hasattr(sink, "close"):
+            sink.close()
+    print(f"{len(events)} event(s) from station {station['station_id']}", file=sys.stderr)
+    summarize(sink.stats)
+    return 0
+
+
+def cmd_guide(args, make_guide_parts=None) -> int:
+    """Voice guide (docs/superpowers/specs/2026-10-17-voice-guidance-roadmap-design.md): a person with waste close to
+    the bins hears "<bin>. <explanation>". Live camera (index / Continuity Camera / rtsp://) or a recorded file."""
+    import subprocess
+    import tempfile
+
+    import cv2
+
+    from . import guide_message as gm
+    from .approach import Approach, BinArea
+    from .guide import Guide, YoloPoseTracker
+    from .sources import LiveCameraSource
+    from .voice import SayVoice, SilentVoice, mix_audio
+
+    homography = np.array(json.loads(Path(args.homography).read_text())) if args.homography else None
+    live = args.source.isdigit() or "://" in args.source
+    table = gm.load_bin_table(Path(args.bins))
+    speaker = None
+    if args.speaker != "mac":  # a second phone plays the voice (recyclone_worker/phone_speaker.py)
+        from .phone_speaker import PhoneSpeaker, lan_urls
+
+        speaker = PhoneSpeaker(args.speaker_port)
+        speaker.start()
+        print("phone speaker: open on the speaker phone (same Wi-Fi), tap once:", file=sys.stderr)
+        for url in lan_urls(speaker.port, speaker.token):
+            print(f"  {url}", file=sys.stderr)
+        if not (live or args.realtime):
+            print("note: a file without --realtime is not spoken, so the phone stays silent", file=sys.stderr)
+    if args.voice == "silent":
+        voice = SilentVoice()
+    else:
+        player = (lambda f: None) if args.speaker == "phone" else None  # None = afplay on the Mac
+        voice = SayVoice(WORKER_DIR / "state/voice-cache", play=live or args.realtime, player=player,
+                         on_say=speaker.announce if speaker else None)
+    voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])  # before the camera
+    source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
+    if args.area == "pick":  # draw the box around the bins on the first frame with the mouse
+        first = next(iter(LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))))[2]
+        x, y, w, h = cv2.selectROI("Draw ONE box around all the bins, then press Enter", first, showCrosshair=False)
+        cv2.destroyAllWindows()
+        args.area = f"{x},{y},{x + w},{y + h}"
+        print(f"bin area: --area {args.area}  (reuse it next time)", file=sys.stderr)
+    area = BinArea(*[float(v) for v in args.area.split(",")])
+    if make_guide_parts is not None:
+        pose, watcher = make_guide_parts(args, area)
+    else:
+        from .guide_identify import ItemWatcher
+        from .items import Clip, Scorer, weight
+
+        clip = Clip(weight("clip/ViT-B-32.pt"))
+        namer = advisor = None
+        if args.namer == "deepseek":
+            from .generic import BinAdvisor
+            from .namer import DeepSeekNamer
+
+            namer = DeepSeekNamer(WORKER_DIR / "state/vlm-cache")
+            advisor = BinAdvisor(Path(args.local_rules), WORKER_DIR / "state/generic-types.json")
+            if not namer.available:
+                print("note: no DEEPSEEK_API_KEY; items not recognized by CLIP will be announced as trash", file=sys.stderr)
+        from .guide_identify import ensure_face_detector, guide_prompts
+
+        ensure_face_detector()
+
+        pose = YoloPoseTracker(weight("yolo11n-pose.pt"))
+        watcher = ItemWatcher(clip.images, Scorer(clip, guide_prompts()), table, namer=namer, advisor=advisor)
+    guide = Guide(pose, watcher, Approach(area, homography), voice, log_path=Path(args.log), area=area, homography=homography)
+    stream = writer = tmp = None
+    if not args.no_stream:
+        from .stream import StreamServer
+
+        stream = StreamServer(int(os.environ.get("WORKER_PORT", "8765")), Path(args.evidence_dir))
+        stream.start()
+        print(f"stream: http://localhost:{stream.port}/stream.mjpg", file=sys.stderr)
+
+    def on_frame(img):
+        nonlocal writer, tmp
+        if stream:
+            stream.publish(img)
+        if args.show:  # a window on the laptop with what the "surveillance camera" sees
+            cv2.imshow("Caught in 4K - guide", cv2.resize(img, (img.shape[1] * 720 // img.shape[0], 720)))
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                raise KeyboardInterrupt
+        if args.render:
+            if writer is None:
+                h, w = img.shape[:2]
+                tmp = Path(tempfile.mkdtemp()) / "video.mp4"
+                writer = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+                                           "-r", str(source.fps), "-i", "-", "-c:v", "libx264", "-crf", "24", "-preset", "veryfast",
+                                           "-pix_fmt", "yuv420p", str(tmp)], stdin=subprocess.PIPE)
+            writer.stdin.write(np.ascontiguousarray(img).tobytes())
+
+    frames = _realtime(source, source.fps) if (args.realtime and not live) else source
+    try:
+        guide.run(frames, on_frame=on_frame if (stream or args.render or args.show) else None, cctv=args.cctv)
+    except KeyboardInterrupt:  # Ctrl-C ends a live run: still finish the video and print the numbers
+        print("stopped", file=sys.stderr)
+    finally:
+        if stream:
+            stream.stop()
+        if writer:
+            writer.stdin.close()
+            writer.wait()
+        voice.close()
+        if speaker:
+            speaker.stop()
+    said = guide.said
+    if args.render and tmp is not None:
+        mix_audio(tmp, Path(args.render), voice.spoken)
+        print(f"video with the voice: {args.render}", file=sys.stderr)
+    print(f"guide: {len(said)} announcement(s); fast path {guide.fps:.1f} fps (camera {source.fps:.0f} fps)", file=sys.stderr)
     return 0
 
 
@@ -292,7 +515,7 @@ def cmd_flush(args) -> int:
     return 0 if left == 0 else 1
 
 
-def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None) -> int:
+def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None, make_guide_parts=None) -> int:
     ap = argparse.ArgumentParser(prog="recyclone-worker")
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run", help="process a recorded clip")
@@ -308,8 +531,45 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     run.add_argument("--events-out", help="also write every event to this JSONL file (for `evaluate`)")
     run.add_argument("--no-categories", action="store_true", help="report unregistered items as unknown instead of a generic category")
     run.add_argument("--items-cache", default=str(WORKER_DIR / "state/items-cache"), help="--tracker items: perception cache")
+    run.add_argument("--namer", choices=["clip", "deepseek"], default="clip",
+                     help="--tracker items: who names each dropped item. deepseek = vision LLM on crops of the item only "
+                          "(key: DEEPSEEK_API_KEY or ~/.config/recyclone/deepseek.env; answers cached in state/vlm-cache)")
+    run.add_argument("--local-rules", default=str(WORKER_DIR / "rules/cambridge-ma-2022.md"),
+                     help="--namer deepseek: local rules text used to SUGGEST a bin for item types not in the catalog (Jev); "
+                          "'' to turn off")
     run.add_argument("--item-bins", help="--tracker items: bin boxes per frame (item-tracker config) for a moving camera; "
                                          "default: the camera's fixed bin regions from demo-site.json")
+    gd = sub.add_parser("guide", help="voice guide: tell a person with waste which bin, before they reach the bins")
+    gd.add_argument("--source", required=True, help="camera index (0 = built-in webcam), rtsp:// URL, or a video file")
+    gd.add_argument("--area", required=True, help="one box around all the bins: x0,y0,x1,y1 in pixels, or 'pick' to draw it")
+    gd.add_argument("--show", action="store_true", help="show the camera view in a window (q to stop)")
+    gd.add_argument("--cctv", nargs="?", const="CAM 01", help="surveillance look: camera name + clock on the video")
+    gd.add_argument("--homography", help="optional floor calibration: JSON 3x3 matrix, image pixels -> floor meters")
+    gd.add_argument("--namer", choices=["clip", "deepseek"], default="deepseek")
+    gd.add_argument("--local-rules", default=str(WORKER_DIR / "rules/cambridge-ma-2022.md"))
+    gd.add_argument("--bins", default=str(WORKER_DIR / "rules/cambridge-ma-2022.bins.json"), help="standard bin per catalog item")
+    gd.add_argument("--voice", choices=["say", "silent"], default="say")
+    gd.add_argument("--realtime", action="store_true", help="for a file: play at clip speed and speak aloud")
+    gd.add_argument("--speaker", choices=["mac", "phone", "both"], default="mac",
+                    help="where the voice plays: this Mac, a second phone that opens the printed URL, or both")
+    gd.add_argument("--speaker-port", type=int, default=int(os.environ.get("SPEAKER_PORT", "8766")))
+    gd.add_argument("--render", help="write the annotated video with the voice mixed in to this .mp4")
+    gd.add_argument("--no-stream", action="store_true")
+    gd.add_argument("--evidence-dir", default=str(WORKER_DIR / "evidence"))
+    gd.add_argument("--log", default=str(WORKER_DIR / "state/guide-log.jsonl"))
+    sub.add_parser("cameras", help="list the cameras this computer sees (iPhone via Continuity Camera included)")
+    st = sub.add_parser("run-station", help="several cameras of one station: drops merged, reported by the camera the person faces")
+    st.add_argument("--station", required=True, help='JSON: {"station_id", "cameras": [{"camera_id", "video", "offset_s", "bins"}]}')
+    st.add_argument("--clip-id", required=True)
+    st.add_argument("--items-cache", default=str(WORKER_DIR / "state/items-cache"))
+    st.add_argument("--namer", choices=["clip", "deepseek"], default="clip")
+    st.add_argument("--evidence-dir", default=str(WORKER_DIR / "evidence"))
+    st.add_argument("--dry-run", action="store_true")
+    st.add_argument("--realtime", action="store_true")
+    st.add_argument("--no-stream", action="store_true")
+    st.add_argument("--no-background", action="store_true")
+    st.add_argument("--events-out")
+    st.add_argument("--render", help="also write the combined camera view to this .mp4")
     enroll = sub.add_parser("enroll", help="build reference gallery from an enrollment clip")
     enroll.add_argument("--clip", required=True)
     enroll.add_argument("--segments", required=True, help='JSON: [{"catalog_item_id", "start_s", "end_s"}]')
@@ -348,6 +608,16 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
         p.add_argument("--clip-weights", default=str(DEFAULT_CLIP))
     args = ap.parse_args(argv)
 
+    if args.cmd == "guide":
+        return cmd_guide(args, make_guide_parts)
+    if args.cmd == "cameras":
+        from .guide import list_cameras
+
+        for i, w, h in list_cameras():
+            print(f"--source {i}   {w}x{h}")
+        return 0
+    if args.cmd == "run-station":
+        return cmd_run_station(args, analyze_items)
     if args.cmd == "run" and args.tracker == "items":
         return cmd_run_items(args, analyze_items)
     if args.cmd in ("run", "enroll"):

@@ -74,7 +74,7 @@ describe("security review (17 Oct)", () => {
     expect(last).toBe(429);
   });
   it("refuses an oversized body from its declared length, before reading it", async () => {
-    const r = new Request("http://x", { method: "POST", body: "{}", headers: { "x-guide-token": "demo-token", "content-length": "99999999", "x-real-ip": "9.9.9.9" } });
+    const r = new Request("http://x", { method: "POST", body: "{}", headers: { "x-guide-token": "demo-token", "content-length": "99999999", "cf-connecting-ip": "9.9.9.9" } });
     expect((await handleIdentify(r)).status).toBe(413);
   });
 });

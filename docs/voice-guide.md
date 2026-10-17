@@ -21,6 +21,20 @@ uv run recyclone-worker guide --source 1 --area pick --show --cctv --render ~/Do
 - `--namer deepseek` (default): new items via DeepSeek + Jev. Keys: `~/.config/recyclone/deepseek.env`
   (`DEEPSEEK_API_KEY`), `~/.config/recyclone/jev.env` (`TYPESAFE_API_KEY`), never in the repo.
 
+## Two phones: one camera, one speaker
+
+The model stays on the Mac. Phone A is the camera, phone B plays the voice.
+
+1. Put the Mac and both phones on the same network. Hackathon Wi-Fi often blocks devices from reaching each other,
+   so a phone hotspot is the safe choice.
+2. Camera: phone A through Continuity Camera (`cameras` shows its index), or an IP camera app (`--source http://...`).
+3. `uv run recyclone-worker guide --source 1 --area pick --show --speaker phone` (`both` = Mac and phone).
+4. On phone B, open the printed `http://<mac-ip>:8766/s/<token>/` URL and tap once (iOS only allows sound after a
+   tap). Keep the page open with the screen on. Each sentence plays there and is shown big, colored by bin.
+
+Only text and synthetic speech go to the phone: no camera frames, no crops. The token changes on every run;
+`SPEAKER_PORT` changes the port.
+
 ## What it says
 
 JSON-forced `{"bin": "compost" | "trash" | "recycle" | "none", "explanation": ...}`, spoken as

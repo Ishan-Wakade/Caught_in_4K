@@ -40,6 +40,17 @@ Photon 2.0 is spectrum-ts (`photon.codes`), a messaging SDK, not a plain REST AP
 
 `SPECTRUM_PROJECT_ID`, `SPECTRUM_PROJECT_SECRET` (Spectrum project credentials), `PHOTON_CHANNEL` (`imessage` | `whatsapp_business`), `PHOTON_WEBHOOK_SECRET` (verifies inbound `X-Spectrum-Signature`), `MESSENGER_MODE` (`mock` | `live`). If `PHOTON_CHANNEL=whatsapp_business`: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, optional `WHATSAPP_APP_SECRET`. Separately: `GROK_API_KEY`, `ILLUSTRATOR_MODE` (`mock` | `live`).
 
+## Real texts for the demo (verified 17 Oct)
+
+1. From each phone that should get texts, text the Photon line assigned to that number once (see the note under Build log).
+2. In the root `.env`: `SPECTRUM_PROJECT_ID`, `SPECTRUM_PROJECT_SECRET`, `PHOTON_CHANNEL=imessage`, `MESSENGER_MODE=live`, `CONFIG_PROFILE=demo`, `CORE_STORAGE=memory`, `MANAGER_API_TOKEN`, `WORKER_INGEST_TOKEN`, `NEXT_PUBLIC_DATA_SOURCE=api`, and
+   `CONTACT_PHONES_JSON='{"ct_beanco_mgr":"+1…","ct_area_mgr":"+1…"}'`.
+   **Keep the single quotes**: `source .env` strips unquoted double quotes, and core then refuses the value (every API route returns 503 "Core backend unavailable").
+3. Start the dashboard with that environment: `set -a && source .env && set +a && pnpm --filter @recyclone/web dev`.
+4. Fire the texts: `pnpm --filter @recyclone/integrations demo:trigger`. It resets core and posts the synthetic events re-timed to now, and two real texts arrive within seconds: the Bean Co. cup recommendation and the Patio trash emptying request. Each gets a follow-up after 2 minutes without a reply. Rerun it for another take.
+
+Replies from the phone do not reach the app until the webhook is registered to a public URL for `/api/photon/webhook` (`register-webhook`); until then use the dashboard's mocked reply box.
+
 ## Build log
 
 Status as of this scaffold, so nobody mistakes a stub for a working integration:
@@ -47,6 +58,9 @@ Status as of this scaffold, so nobody mistakes a stub for a working integration:
 - **Built and unit-tested (`pnpm --filter @recyclone/integrations test`, 16 passing):** `MockMessenger`, `MockIllustrator` (placeholder SVG rendered from the real `BinInventorySnapshot`, linked to its `snapshotId`/`binId`), `RuleBasedReplyInterpreter` (keyword-based; covers confirmed/emptied/acknowledged/unclear and the ambiguous-alert case), `InMemoryReplyDedupeStore`, and the `MESSENGER_MODE`/`ILLUSTRATOR_MODE` config switch in `src/config.ts`. Types now come directly from `@recyclone/contracts` (`src/types.ts` mirror deleted).
 - **`PhotonMessenger` is implemented against the real `spectrum-ts` types** (installed as a dependency; typechecks clean against its actual `.d.ts`, see `src/messenger/photonApp.ts` and `photon.ts`). **Not yet run against a real Photon project** — no credentials exist to test with, so this is unverified, not working. `providerMessageId`/`sentAt` come straight off the real `Message.id`/`.timestamp`, no guessing needed there.
 - **`apps/web/app/api/photon/webhook/route.ts` now delegates to `app.webhook(request, handler)`** instead of hand-rolled signature/payload parsing — the SDK does verification and normalization. Uses Next's `after()` to keep `handleReply` work alive past the response (the SDK's own handler is fire-and-forget on serverless; confirm `after()` is available once apps/web's Next version is chosen — needs Next 15+). J's Next.js 16 app now builds with this route. `_replySink.ts` forwards to the provider-aware core sink, tested through the mock route in the built app. Signed live-provider delivery and `after()` lifecycle remain unverified.
+- **Live iMessage verified (17 Oct, project `e6b15b5d…`, line +16465792868):** `send-test-message.mjs` delivered a real text (`mocked: false`), and an in-process `app.messages` listener received a real inbound text. The project gets a **shared**-mode iMessage token (Photon's pooled line, no dedicated number), and a send fails with `PERMISSION_DENIED: Target not allowed for this project` until the recipient has texted the line; after one inbound text from that number, sends succeeded.
+
+> **Before anyone can receive texts:** text the Photon line **assigned to your own phone number** once, from that phone. The Photon dashboard lists each member's number with the line it "texts on" (for +16507884821 it is +16465792868); lines can differ per number, so check yours rather than assuming. Being listed as active or as an owner is not enough. This applies to every manager phone in the demo. An empty `PHOTON_WEBHOOK_SECRET` used to make the SDK refuse to start; `photonApp.ts` now omits it. The HTTP webhook path is still unverified.
 - **`GrokIllustrator` is still a stub that throws** — Grok Imagine's API hasn't been checked yet.
 - This package is part of the root pnpm workspace now: run `pnpm install` at the repo root, then `pnpm --filter @recyclone/integrations test` (not plain `npm`/`npm test`, which bypass the workspace's `@recyclone/contracts` link).
 

@@ -54,7 +54,8 @@ export function getPhotonApp(env: NodeJS.ProcessEnv = process.env): Promise<Spec
       return Spectrum({
         projectId,
         projectSecret,
-        webhookSecret: env.PHOTON_WEBHOOK_SECRET,
+        // The SDK rejects "" (the .env.example default); omit it until a secret exists.
+        webhookSecret: env.PHOTON_WEBHOOK_SECRET || undefined,
         providers: [providerConfig],
       });
     })().catch((err) => {

@@ -89,7 +89,8 @@ def wait(w, track=1):
 def test_catalog_item_answered_without_network():
     namer = FakeNamer()
     w = watch(FakeScorer(0.9, {"item_generic_can": 0.9, "item_napkin": 0.1}), namer=namer)
-    assert w.answer(1, 3.0) == ({"bin": "recycle", "explanation": "aluminum can, placed in recycling"}, "catalog")
+    assert w.answer(1, 3.0) == ({"bin": "recycle", "item": "aluminum can", "place": "recycling",
+                                  "reason": "metal cans are recyclable in Cambridge"}, "catalog")
     assert namer.calls == 0
 
 
@@ -99,14 +100,15 @@ def test_unknown_item_goes_to_llm_then_jev_once():
     w = watch(FakeScorer(0.9, {"item_generic_can": 0.4, "item_napkin": 0.35}), namer=namer, advisor=FakeAdvisor())
     msg, source = wait(w)
     w.answer(1, 11.0)
-    assert source == "llm" and msg["bin"] == "none" and "Recycle Center" in msg["explanation"]
+    assert source == "llm" and msg["bin"] == "none" and msg["place"] == "the Recycle Center"
     assert namer.calls == 1  # asked once, although answer() was called many times
 
 
 def test_llm_catalog_match_uses_the_table():
     namer = FakeNamer(catalog_id="item_napkin")
     w = watch(FakeScorer(0.9, {"item_generic_can": 0.5, "item_napkin": 0.5}), namer=namer)
-    assert wait(w) == ({"bin": "compost", "explanation": "paper napkin, placed in compost"}, "llm")
+    assert wait(w) == ({"bin": "compost", "item": "paper napkin", "place": "compost",
+                        "reason": "napkins and paper towels are compostable"}, "llm")
 
 
 def test_llm_failure_gives_none_so_the_guide_defaults_to_trash():

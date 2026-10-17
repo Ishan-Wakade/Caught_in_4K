@@ -18,7 +18,7 @@ const STEPS = [
 
 export default function InstallPage() {
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-14">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-14 px-6 pt-16 pb-24 sm:px-10">
       <div className="flex flex-col items-center gap-1.5 text-center">
         <h1 className="m-0 font-display text-[clamp(28px,4vw,40px)] leading-tight font-bold">Set it up in your store</h1>
         <span className="text-[15px] text-muted-2">Coming soon.</span>

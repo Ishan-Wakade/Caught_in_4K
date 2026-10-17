@@ -86,7 +86,7 @@ export function PageNav({
 /** One navigation for the whole app: logo left, page links right, as on the camera page. */
 export function SiteHeader({ unseen = {} }: { unseen?: Unseen }) {
   return (
-    <header className="flex items-center justify-between gap-x-7 border-b border-rule-soft px-10 py-2.5">
+    <header className="flex flex-wrap items-center justify-between gap-x-7 gap-y-1 border-b border-rule-soft px-6 py-2.5 sm:px-10">
       <Link href="/" aria-label={`${APP_NAME}, overview`} className="flex min-h-11 items-center gap-2.5 text-forest-deep no-underline hover:text-forest-deep">
         <LogoMark />
         <span className="font-display text-2xl leading-none font-extrabold">{APP_NAME}</span>

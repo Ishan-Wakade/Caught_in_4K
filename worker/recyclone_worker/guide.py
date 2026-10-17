@@ -15,11 +15,13 @@ import cv2
 import numpy as np
 
 from . import guide_message as gm
-from .approach import Approach, BinArea, LEAD_S, distance_m
+from .approach import COOLDOWN_S, Approach, BinArea, LEAD_S, distance_m
 
 BANNER_S = 3.0  # how long a spoken message stays on screen
 SAME_PERSON_S = 4.0   # a new track this soon after an announced person was last seen ...
 SAME_PERSON_BODY = 0.5  # ... and this close (in body heights) is that person re-numbered by the tracker
+ARRIVAL_GRACE_S = 0.6   # at the bins with no answer yet: wait this long for CLIP's votes before saying trash
+FORGET_AFTER_S = COOLDOWN_S + 2.0  # people unseen this long are dropped (a store camera runs all day)
 
 
 def _where(kp):
@@ -57,6 +59,9 @@ class Guide:
         self.log_path, self.area, self.homography = (Path(log_path) if log_path else None), area or approach.area, homography
         self.pending: dict[int, float] = {}       # track_id -> time the trigger fired, answer not ready yet
         self.announced_at: dict[int, tuple] = {}  # track_id -> (last seen, (x, y, body px)) of announced people
+        self.first_seen: dict[int, float] = {}
+        self.last_seen: dict[int, float] = {}
+        self.warmed: set[int] = set()
         self.said: list[dict] = []
         self.people: list[tuple[int, np.ndarray]] = []
         self.fps = 0.0
@@ -68,7 +73,14 @@ class Guide:
         self.people = self.pose(frame)
         made = []
         for tid, kp in self.people:
+            self.first_seen.setdefault(tid, t)
+            self.last_seen[tid] = t
             self.watcher.observe(tid, t, frame, kp)
+            if tid not in self.warmed and hasattr(self.voice, "warm"):
+                ans = self.watcher.answer(tid, t)
+                if ans is not None:  # render the sentence now, before the person arrives
+                    self.voice.warm(gm.spoken(ans[0]))
+                    self.warmed.add(tid)
         for tid, kp in self.people:
             if tid in self.announced_at:
                 self.announced_at[tid] = (t, _where(kp))
@@ -80,10 +92,27 @@ class Guide:
                 a = self._decide(tid, t, kp)
                 if a is not None:
                     made.append(self._speak(idx, t, tid, *a))
-        for tid in [p for p in self.pending if p not in {i for i, _ in self.people}]:  # out of view: wait, then default
-            if t - self.pending[tid] >= LEAD_S:
+        for tid in [p for p in self.pending if p not in {i for i, _ in self.people}]:  # out of view: answer, or default
+            ans = self.watcher.answer(tid, t)
+            if ans is not None:
+                made.append(self._speak(idx, t, tid, *ans))
+            elif t - self.pending[tid] >= LEAD_S:
                 made.append(self._speak(idx, t, tid, gm.default_trash(None), "default"))
+        self._forget_gone(t)
         return made
+
+    def _forget_gone(self, t: float) -> None:
+        for tid in [i for i, seen in self.last_seen.items() if t - seen > FORGET_AFTER_S and i not in self.pending]:
+            self.approach.left(tid, t)
+            for d in (self.approach.hist, self.approach.fired, self.approach.last_near):
+                d.pop(tid, None)
+            if hasattr(self.watcher, "forget"):
+                self.watcher.forget(tid)
+            for d in (self.last_seen, self.first_seen):
+                d.pop(tid, None)
+            self.warmed.discard(tid)
+        for tid in [i for i, (seen, _) in self.announced_at.items() if t - seen > max(SAME_PERSON_S, FORGET_AFTER_S)]:
+            self.announced_at.pop(tid, None)
 
     def _already_told(self, tid: int, t: float, kp) -> bool:
         """The tracker gave an announced person a new id (turned around, briefly hidden): do not repeat."""
@@ -91,8 +120,10 @@ class Guide:
         if here is None:
             return False
         visible = {i for i, _ in self.people}
-        for other, (seen, there) in self.announced_at.items():  # only people no longer visible: a re-numbered id
-            if other != tid and other not in visible and there is not None and t - seen <= SAME_PERSON_S:
+        born = self.first_seen.get(tid, t)
+        for other, (seen, there) in self.announced_at.items():
+            # a re-numbered id appears AFTER the old one vanished; someone seen alongside it is another person
+            if other != tid and other not in visible and there is not None and t - seen <= SAME_PERSON_S and born > seen:
                 if np.hypot(here[0] - there[0], here[1] - there[1]) <= SAME_PERSON_BODY * max(here[2], there[2]):
                     self.announced_at[tid] = (t, here)
                     return True
@@ -102,8 +133,9 @@ class Guide:
         ans = self.watcher.answer(tid, t)
         if ans is not None:
             return ans
-        arrived = distance_m(kp, self.area, self.homography) == 0.0
-        if self.watcher.failed(tid) or arrived or t - self.pending[tid] >= LEAD_S:
+        waited = t - self.pending[tid]
+        arrived = distance_m(kp, self.area, self.homography) == 0.0 and waited >= ARRIVAL_GRACE_S
+        if self.watcher.failed(tid) or arrived or waited >= LEAD_S:
             return gm.default_trash(None), "default"
         return None
 

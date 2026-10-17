@@ -119,3 +119,28 @@ def test_clip_runs_at_most_every_observe_interval():
     for k in range(30):  # one second at 30 fps
         w.observe(1, k / 30, FRAME, arm_kp())
     assert len(calls) <= 1 / gi.OBSERVE_EVERY_S + 1
+
+
+# ---- review fixes (17 Oct)
+def test_face_is_blanked_in_kept_crops():
+    frame = np.full((480, 640, 3), 255, np.uint8)
+    k = arm_kp()
+    k[0] = (300, 330, 0.9)  # the nose sits inside the hand crop (drinking)
+    w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
+    w.observe(1, 0.0, frame, k)
+    crop = w.people[1].crops[0][2]
+    from recyclone_worker.items import hand_box
+    x0, y0, _, _ = (int(v) for v in hand_box(k, "L", 640, 480))
+    assert crop[330 - y0, 300 - x0].sum() == 0
+
+
+def test_guide_vocabulary_has_dangerous_items_that_are_not_in_the_catalog():
+    prompts = gi.guide_prompts()
+    hazards = [c for c in prompts if c.startswith("hazard:")]
+    assert hazards and not set(hazards) & set(TABLE)  # never answered from the catalog: always the LLM path
+
+
+def test_forget_drops_a_person():
+    w = watch(FakeScorer(0.9, {"item_napkin": 1.0}))
+    w.forget(1)
+    assert 1 not in w.people and w.answer(1, 3.0) is None

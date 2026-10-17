@@ -17,7 +17,7 @@ import numpy as np
 from recyclone_worker import guide_message as gm
 from recyclone_worker.approach import Approach, BinArea
 from recyclone_worker.guide import Guide, YoloPoseTracker
-from recyclone_worker.guide_identify import ItemWatcher
+from recyclone_worker.guide_identify import ItemWatcher, guide_prompts
 from recyclone_worker.items import WORKER, Clip, Scorer, keyframe_boxes, weight
 from recyclone_worker.sources import RecordedClipSource
 from recyclone_worker.voice import SayVoice, mix_audio
@@ -38,7 +38,7 @@ def main():
     render_dir = Path(sys.argv[sys.argv.index("--render-dir") + 1]).expanduser() if "--render-dir" in sys.argv else None
     table = gm.load_bin_table(gm.WORKER_RULES / "cambridge-ma-2022.bins.json")
     clip = Clip(weight("clip/ViT-B-32.pt"))
-    scorer = Scorer(clip)
+    scorer = Scorer(clip, guide_prompts())
     namer = advisor = None
     if use_llm:
         from recyclone_worker.generic import BinAdvisor
@@ -60,6 +60,7 @@ def main():
             frames = []
             on_frame = (lambda img: frames.append(img)) if render_dir else None
             said = guide.run(src, on_frame=on_frame)
+            voice.close()
             fps_all.append(guide.fps)
             truths = spec.get("truths") or []
             truths_n += len(truths)

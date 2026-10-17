@@ -7,6 +7,7 @@ of the bins) and says where they go instead (team, 17 Oct). Catalog items take t
 """
 
 import json
+import re
 from functools import cache
 from pathlib import Path
 
@@ -19,9 +20,11 @@ BINS = ("compost", "trash", "recycle")
 BIN_NOUN = {"compost": "compost", "trash": "trash", "recycle": "recycling"}
 JEV_TO_BIN = {"compost": "compost", "trash": "trash", "recycling": "recycle"}
 HAZARD_DROPOFF = [  # from the local rules text: where dangerous items go instead (Cambridge guide, "SPECIAL")
-    (("battery", "batteries", "electronic", "phone", "charger", "cable", "bulb", "lamp"), "the Recycle Center"),
-    (("paint", "chemical", "propane", "medication", "medicine", "pesticide", "oil", "solvent"), "a hazardous waste drop-off"),
+    (("battery", "batteries", "electronic", "electronics", "phone", "charger", "cable", "bulb", "lamp", "vape"), "the Recycle Center"),
+    (("paint", "chemical", "chemicals", "propane", "medication", "medicine", "pesticide", "oil", "solvent", "aerosol"),
+     "a hazardous waste drop-off"),
 ]
+_HAZARD_RE = [(re.compile(r"\b(" + "|".join(words) + r")\b"), place) for words, place in HAZARD_DROPOFF]
 MESSAGE_SCHEMA = {
     "type": "object",
     "properties": {"bin": {"enum": [*BINS, "none"]}, "explanation": {"type": "string", "minLength": 1, "maxLength": 200}},
@@ -76,21 +79,23 @@ def default_trash(what: str | None) -> dict:
     return _placed("trash", what or "not sure what this is")
 
 
-def _dropoff(name: str, form: str) -> str:
+def _hazard_place(name: str, form: str) -> str | None:
+    """Where a dangerous item goes, if its name or form names one (whole words: "foil" is not "oil")."""
     text = f"{name} {form}".lower()
-    for words, place in HAZARD_DROPOFF:
-        if any(w in text for w in words):
+    for rx, place in _HAZARD_RE:
+        if rx.search(text):
             return place
-    return "a hazardous waste drop-off"
+    return None
 
 
 def from_suggestion(pt: dict) -> dict:
     """Message for a new item type from its proposed_type (generic.for_event fields, Jev's suggestion)."""
-    name = (pt.get("name") or "item").strip()
+    name = (pt.get("name") or "").strip() or "this item"
     dest, conf = pt.get("suggested_destination"), pt.get("suggestion_confidence")
-    if pt.get("hazardous") and dest in ("special", "trash", None):  # dangerous: never into any of the bins
+    place = _hazard_place(name, pt.get("form") or "")
+    if pt.get("hazardous") or place:  # dangerous: never into any of these bins, whatever was suggested
         m = {"bin": "none", "explanation": f"{name} is dangerous to place in any of these bins. Place it in "
-                                           f"{_dropoff(name, pt.get('form') or '')} instead"}
+                                           f"{place or 'a hazardous waste drop-off'} instead"}
         validate_message(m)
         return m
     if conf is None or conf < DEFAULT_TRASH_BELOW or dest not in JEV_TO_BIN:

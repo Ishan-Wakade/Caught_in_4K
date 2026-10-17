@@ -12,11 +12,36 @@ item, >= 0.5 s apart, are kept for the LLM.
 import sys
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 
+import cv2
 import numpy as np
 
 from . import guide_message as gm
 from .generic import for_event, generic_type
+from .categories import ITEM_PROMPTS
 from .items import hand_box
+
+# Dangerous items the catalog never has: CLIP may vote for them, and then the item always goes to the LLM path
+# (never answered from the catalog), so a battery is never told "recycle" because it looked like a can.
+HAZARD_PROMPTS = {
+    "hazard:battery": ["a battery", "a lithium battery", "a AA battery"],
+    "hazard:electronics": ["a phone", "a charging cable", "a small electronic device", "an e-cigarette vape"],
+    "hazard:chemical": ["a can of paint", "a bottle of chemicals", "a propane canister", "an aerosol spray can"],
+}
+FACE_KPS = (0, 1, 2, 3, 4)  # nose, eyes, ears: blanked in every kept crop (faces never leave the device)
+
+
+def guide_prompts() -> dict:
+    """CLIP vocabulary for the voice guide: the catalog (answers from the bin table) plus dangerous items."""
+    return {**ITEM_PROMPTS, **HAZARD_PROMPTS}
+
+
+def _blank_face(crop: np.ndarray, kp, x0: int, y0: int) -> np.ndarray:
+    eyes = [kp[j][:2] for j in (1, 2) if kp[j][2] > 0.3]
+    r = int(max(12, 1.5 * float(np.hypot(*(eyes[0] - eyes[1]))) if len(eyes) == 2 else 0.12 * max(crop.shape[:2])))
+    for j in FACE_KPS:
+        if kp[j][2] > 0.3:
+            cv2.circle(crop, (int(kp[j][0]) - x0, int(kp[j][1]) - y0), r, (0, 0, 0), -1)
+    return crop
 
 ITEM_P = 0.5        # CLIP P(item) for a hand crop to count as holding something
 KNOWN_P = 0.6       # share of category votes needed to answer from the catalog without the LLM
@@ -60,7 +85,7 @@ class ItemWatcher:
             if b is not None:
                 x0, y0, x1, y1 = (int(v) for v in b)
                 if x1 > x0 + 4 and y1 > y0 + 4:
-                    crops.append(frame[y0:y1, x0:x1].copy())
+                    crops.append(_blank_face(frame[y0:y1, x0:x1].copy(), kp, x0, y0))
         if not crops:
             return
         p_item, p_cat = self.scorer(self.embed(crops))
@@ -102,6 +127,13 @@ class ItemWatcher:
         if p.job is not None and p.job.done() and p.job.exception() is None and p.job.result() is not None:
             return p.job.result(), "llm"
         return None
+
+    def forget(self, track_id: int) -> None:
+        """The person is gone: drop their crops and votes, and cancel an LLM job that has not started."""
+        p = self.people.pop(track_id, None)
+        if p is not None and p.job is not None:
+            p.job.cancel()
+        self.last_observed.pop(track_id, None)
 
     def failed(self, track_id: int) -> bool:
         p = self.people.get(track_id)

@@ -337,8 +337,10 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             advisor = BinAdvisor(Path(args.local_rules), WORKER_DIR / "state/generic-types.json")
             if not namer.available:
                 print("note: no DEEPSEEK_API_KEY; items not recognized by CLIP will be announced as trash", file=sys.stderr)
+        from .guide_identify import guide_prompts
+
         pose = YoloPoseTracker(weight("yolo11n-pose.pt"))
-        watcher = ItemWatcher(clip.images, Scorer(clip), table, namer=namer, advisor=advisor)
+        watcher = ItemWatcher(clip.images, Scorer(clip, guide_prompts()), table, namer=namer, advisor=advisor)
     play = live or args.realtime
     voice = SilentVoice() if args.voice == "silent" else SayVoice(WORKER_DIR / "state/voice-cache", play=play)
     voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])
@@ -366,13 +368,17 @@ def cmd_guide(args, make_guide_parts=None) -> int:
 
     frames = _realtime(source, source.fps) if (args.realtime and not live) else source
     try:
-        said = guide.run(frames, on_frame=on_frame if (stream or args.render) else None)
+        guide.run(frames, on_frame=on_frame if (stream or args.render) else None)
+    except KeyboardInterrupt:  # Ctrl-C ends a live run: still finish the video and print the numbers
+        print("stopped", file=sys.stderr)
     finally:
         if stream:
             stream.stop()
         if writer:
             writer.stdin.close()
             writer.wait()
+        voice.close()
+    said = guide.said
     if args.render and tmp is not None:
         mix_audio(tmp, Path(args.render), voice.spoken)
         print(f"video with the voice: {args.render}", file=sys.stderr)

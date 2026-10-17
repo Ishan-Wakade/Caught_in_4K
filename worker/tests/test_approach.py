@@ -84,8 +84,35 @@ def test_live_source_reads_any_opencv_source_with_wall_clock_times(tmp_path):
         LiveCameraSource("rtsp://127.0.0.1:1/nothing", open_timeout_s=1)
 
 
-def test_without_feet_a_hand_inside_the_bin_area_counts_as_arrived():
+def test_without_feet_there_is_no_distance_even_with_a_hand_in_the_area():
+    # plan Review Focus 4 (reviewer, 17 Oct): only an arm in view -> no announcement (it would come as the item goes in)
     k = person(900, 650)
-    k[15, 2] = k[16, 2] = 0.0             # feet out of the picture (close-up)
-    k[7], k[9] = (880, 400, 0.9), (900, 500, 0.9)  # elbow, wrist; wrist inside the area
-    assert ap.distance_m(k, AREA) == 0.0
+    k[15, 2] = k[16, 2] = 0.0
+    k[7], k[9] = (880, 400, 0.9), (900, 500, 0.9)
+    assert ap.distance_m(k, AREA) is None
+
+
+def test_live_source_reconnects_after_a_dropped_read():
+    from recyclone_worker.sources import LiveCameraSource
+
+    class FakeCap:
+        def __init__(self, script):
+            self.script = script
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            return self.script.pop(0) if self.script else (False, None)
+
+        def get(self, prop):
+            return 30.0
+
+        def release(self):
+            pass
+
+    first, second = np.full((4, 4, 3), 1, np.uint8), np.full((4, 4, 3), 2, np.uint8)
+    caps = [FakeCap([(True, first), (False, None)]), FakeCap([(True, second), (True, second)])]
+    src = LiveCameraSource("rtsp://cam", opener=lambda: caps.pop(0) if caps else FakeCap([]), max_reconnects=1, retry_s=0.0)
+    got = list(src)  # ends: the third connection gives nothing
+    assert got and int(got[-1][2][0, 0, 0]) == 2  # frames from the second connection, not an end at the first failure

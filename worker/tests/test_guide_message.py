@@ -67,3 +67,25 @@ def test_catalog_message_reads_like_the_team_example():
 def test_default_trash():
     assert gm.default_trash(None) == {"bin": "trash", "explanation": "not sure what this is, placed in trash"}
     assert gm.default_trash("plastic glove")["explanation"] == "plastic glove, placed in trash"
+
+
+# ---- review fixes (17 Oct): dangerous items are ALWAYS "none"
+def _battery(**kw):
+    pt = {"name": "battery", "form": "battery", "hazardous": True, "suggested_destination": "recycling", "suggestion_confidence": 0.8}
+    pt.update(kw)
+    return pt
+
+
+def test_hazardous_is_none_whatever_jev_says():
+    for dest, conf in (("recycling", 0.8), ("compost", 0.9), ("trash", 0.9), ("recycling", 0.2)):
+        assert gm.from_suggestion(_battery(suggested_destination=dest, suggestion_confidence=conf))["bin"] == "none"
+
+
+def test_dangerous_name_is_none_even_if_not_flagged_hazardous():
+    m = gm.from_suggestion(_battery(name="lithium battery", hazardous=False, suggested_destination="trash", suggestion_confidence=0.9))
+    assert m["bin"] == "none" and "Recycle Center" in m["explanation"]
+
+
+def test_hazard_words_match_whole_words_only():
+    assert gm.from_suggestion({"name": "aluminum foil", "form": "foil", "hazardous": False,
+                               "suggested_destination": "recycling", "suggestion_confidence": 0.9})["bin"] == "recycle"

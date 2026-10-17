@@ -3,14 +3,11 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { Asked, Speak } from "@/lib/guide/assist";
 import { GuideEngine, GuideSession, type AssistDeps, type Backend, type Banner, type GuideFrame, type Progress } from "@/lib/guide/engine";
-import { spoken } from "@/lib/guide/message";
+import { spoken, type GuideMessage } from "@/lib/guide/message";
+import { BAR_S, drawOverlay } from "@/lib/guide/overlay";
 import { loadFaceFinder, readGuideKey, redactedCrop, type FaceFinder } from "@/lib/guide/redact";
 
 export type GuideStatus = "loading" | "starting" | "live" | "paused" | "blocked" | "error";
-
-const SKELETON = [[5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [0, 5], [0, 6]];
-// Bin colours from lib/format.ts BIN_HEX (fill); clay for "not sure" and for dangerous items.
-const BOX_COLOR = { recycle: "#4A77A3", compost: "#4A8539", trash: "#5A5C58", none: "#A4502F", fallback: "#A4502F" };
 
 /** True while this tab is visible. The camera is on only then. */
 export function usePageVisible(): boolean {
@@ -70,30 +67,15 @@ function speaker(token: string) {
   };
 }
 
-function draw(canvas: HTMLCanvasElement, video: HTMLVideoElement, frame: GuideFrame) {
+/** Same picture as the worker's rendered videos (lib/guide/overlay.ts), on the video's own pixels. */
+function draw(canvas: HTMLCanvasElement, video: HTMLVideoElement, frame: GuideFrame, caption: GuideMessage | null, fps: number) {
   if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
   }
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const line = Math.max(2, canvas.width / 400);
-  for (const p of frame.people) {
-    ctx.strokeStyle = "rgba(230,240,225,0.9)";
-    ctx.lineWidth = line;
-    for (const [a, b] of SKELETON) {
-      if (p.kp[a][2] > 0.3 && p.kp[b][2] > 0.3) {
-        ctx.beginPath();
-        ctx.moveTo(p.kp[a][0], p.kp[a][1]);
-        ctx.lineTo(p.kp[b][0], p.kp[b][1]);
-        ctx.stroke();
-      }
-    }
-    const color = p.holding && frame.banner ? BOX_COLOR[frame.banner.fallback ? "fallback" : frame.banner.message.bin] : "rgba(200,200,200,0.8)";
-    ctx.strokeStyle = color;
-    ctx.lineWidth = p.holding ? line * 2 : line / 2;
-    for (const [x0, y0, x1, y1] of p.hands) ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-  }
+  drawOverlay(canvas.getContext("2d")!, canvas.width, canvas.height, {
+    people: frame.people, answer: frame.banner?.message ?? null, caption, cam: "CAM 01", now: new Date(), fps,
+  });
 }
 
 /**
@@ -163,12 +145,19 @@ export function useBrowserGuide(
         setStatus("live");
 
         const session = new GuideSession(engine, token && face ? serverModel(token, face) : undefined);
+        let caption: { message: GuideMessage; at: number } | null = null;
+        let fps = 0, prev = 0;
         while (!stopped) {
           if (video.readyState >= 2 && video.videoWidth) {
             // Always the newest frame: while a step runs, the camera keeps going and the frames in between are skipped.
-            const frame = await session.step(video, performance.now() / 1000);
+            const now = performance.now() / 1000;
+            const frame = await session.step(video, now);
             if (stopped) break;
-            if (canvasRef.current) draw(canvasRef.current, video, frame);
+            if (prev) fps = fps ? 0.9 * fps + 0.1 / (now - prev) : 1 / (now - prev);  // frames the model processed per second
+            prev = now;
+            if (frame.banner) caption = { message: frame.banner.message, at: now };  // the bottom bar, like the worker's
+            if (caption && now - caption.at > BAR_S) caption = null;
+            if (canvasRef.current) draw(canvasRef.current, video, frame, caption?.message ?? null, fps);
             if (say && soundRef.current) frame.speak.forEach(say);
             const key = frame.banner ? JSON.stringify(frame.banner) : "";
             if (frame.people.length !== last.current.people) setPeople((last.current.people = frame.people.length));

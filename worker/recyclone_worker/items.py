@@ -204,9 +204,10 @@ def in_box(pt, box, margin=BIN_MARGIN) -> bool:
 class Scorer:
     """CLIP zero-shot: P(item) vs background, and the item's category (bin rule comes from the catalog)."""
 
-    def __init__(self, clip):
-        self.cats = list(ITEM_PROMPTS)
-        flat = [(c, p) for c in self.cats for p in ITEM_PROMPTS[c]]
+    def __init__(self, clip, prompts: dict | None = None):
+        prompts = ITEM_PROMPTS if prompts is None else prompts
+        self.cats = list(prompts)
+        flat = [(c, p) for c in self.cats for p in prompts[c]]
         self.item_owner = np.array([self.cats.index(c) for c, _ in flat])
         self.item_text = clip.texts([p for _, p in flat])
         self.bg_text = clip.texts(BACKGROUND)

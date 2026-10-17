@@ -166,7 +166,8 @@ def test_another_persons_head_in_the_crop_is_blanked():
     frame = np.full((480, 640, 3), 255, np.uint8)
     w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
     other = np.zeros((17, 3), np.float32)
-    other[0], other[5], other[6] = (310, 340, 0.9), (290, 380, 0.9), (330, 380, 0.9)  # someone's face behind the hand
+    other[0], other[5], other[6] = (310, 340, 0.9), (280, 380, 0.9), (340, 380, 0.9)  # someone's face behind the hand
+    other[11], other[12] = (285, 520, 0.9), (335, 520, 0.9)
     w.set_heads([gi.head_box(other)])
     w.observe(1, 0.0, frame, arm_kp())
     crop = w.people[1].crops[0][2]
@@ -221,5 +222,22 @@ def test_head_size_scales_with_the_person():
     for k, s in ((small, 1.0), (big, 3.0)):
         k[0], k[1], k[2] = (100 * s, 50 * s, 0.9), (95 * s, 45 * s, 0.9), (105 * s, 45 * s, 0.9)
         k[5], k[6], k[15] = (80 * s, 80 * s, 0.9), (120 * s, 80 * s, 0.9), (100 * s, 300 * s, 0.9)
+        k[11], k[12] = (85 * s, 200 * s, 0.9), (115 * s, 200 * s, 0.9)
     (b_small, ok_small), (b_big, ok_big) = gi.head_box(small), gi.head_box(big)
     assert ok_small and ok_big and (b_big[2] - b_big[0]) > 2.5 * (b_small[2] - b_small[0])
+
+
+def test_shoulder_only_head_too_small_to_trust_is_unreliable():
+    k = np.zeros((17, 3), np.float32)
+    k[5], k[6] = (100, 100, 0.9), (110, 100, 0.9)  # shoulders 10 px apart: a head box that small cannot be trusted
+    (_, reliable) = gi.head_box(k)
+    assert not reliable
+
+
+def test_low_confidence_points_do_not_size_the_body():
+    k = np.zeros((17, 3), np.float32)
+    k[0] = (300, 330, 0.9)
+    for j, y in ((11, 600), (13, 800), (15, 900)):
+        k[j] = (300, y, 0.1)  # unsure lower-body points must not make a tiny face look "reliably sized"
+    (_, reliable) = gi.head_box(k)
+    assert not reliable

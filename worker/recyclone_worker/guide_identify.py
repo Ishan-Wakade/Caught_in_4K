@@ -30,6 +30,8 @@ HAZARD_PROMPTS = {
 }
 FACE_KPS = (0, 1, 2, 3, 4)  # nose, eyes, ears
 FACE_KP_MIN = 0.05          # fail closed: blank even face points the pose model is unsure about
+SIZE_KP_MIN = 0.5           # only confident shoulder/hip pairs may SIZE a head (security review, 17 Oct)
+HEAD_MIN_PX = 25.0          # smallest head box; a head that measures smaller than this is "unreliable" -> crop dropped
 
 
 def head_box(kp):
@@ -38,22 +40,25 @@ def head_box(kp):
     Around any face keypoint (even low confidence), else the square above the shoulders. Its size scales with the
     person (shoulder width, face span, body extent); "reliable" is False when none of those can be measured, and then
     a crop touching that head is dropped instead of sent (fail closed)."""
-    vis = [kp[j][:2] for j in range(17) if kp[j][2] > FACE_KP_MIN]
-    face = [kp[j][:2] for j in FACE_KPS if kp[j][2] > FACE_KP_MIN]
-    sh = [kp[j][:2] for j in (5, 6) if kp[j][2] > FACE_KP_MIN]
-    width = float(abs(sh[0][0] - sh[1][0])) if len(sh) == 2 else 0.0
-    body = float(max(p[1] for p in vis) - min(p[1] for p in vis)) if len(vis) >= 4 else 0.0
+    def seen(j, c=FACE_KP_MIN):
+        return kp[j][2] > c
+
+    face = [kp[j][:2] for j in FACE_KPS if seen(j)]
+    sh = [kp[j][:2] for j in (5, 6) if seen(j)]
+    width = float(abs(sh[0][0] - sh[1][0])) if len(sh) == 2 and all(seen(j, SIZE_KP_MIN) for j in (5, 6)) else 0.0
+    torso = [abs(float(kp[a][1] - kp[b][1])) for a, b in ((5, 11), (6, 12)) if seen(a, SIZE_KP_MIN) and seen(b, SIZE_KP_MIN)]
     span = float(max(p[0] for p in face) - min(p[0] for p in face)) if len(face) >= 2 else 0.0
-    r = max(0.6 * width, 1.2 * span, 0.12 * body)
-    reliable = r >= 12.0
+    r = max(0.6 * width, 1.2 * span, 0.5 * max(torso, default=0.0))  # head ~ half a torso; only confident pairs
+    reliable = r >= HEAD_MIN_PX
+    r = max(r, HEAD_MIN_PX)
     if face:
         xs, ys = [float(p[0]) for p in face], [float(p[1]) for p in face]
-        r = max(r, 12.0)
         cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
         return (cx - r, cy - r, cx + r, cy + r), reliable
-    if width:
-        cx, top = float(sh[0][0] + sh[1][0]) / 2, float(min(sh[0][1], sh[1][1]))
-        return (cx - 0.6 * width, top - 1.2 * width, cx + 0.6 * width, top), True
+    if sh:
+        cx = float(sum(p[0] for p in sh)) / len(sh)
+        top = float(min(p[1] for p in sh))
+        return (cx - r, top - 2 * r, cx + r, top), reliable
     return None
 
 

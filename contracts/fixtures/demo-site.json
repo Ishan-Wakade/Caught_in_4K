@@ -164,7 +164,7 @@
       "branding_text": [
         "TACO STOP"
       ],
-      "destination": "compost",
+      "destination": "trash",
       "condition_rule": null,
       "volume_ml": 900,
       "volume_source": "assumption: outer box volume"
@@ -177,7 +177,7 @@
       "branding_text": [
         "GREEN BOWL"
       ],
-      "destination": "compost",
+      "destination": "trash",
       "condition_rule": null,
       "volume_ml": 1000,
       "volume_source": "assumption: nominal bowl volume"
@@ -236,7 +236,7 @@
       "branding_text": [
         "SHAKE SHACK"
       ],
-      "destination": "compost",
+      "destination": "trash",
       "condition_rule": null,
       "volume_ml": 1200,
       "volume_source": "assumption: outer box volume"
@@ -333,8 +333,8 @@
       "business_id": null,
       "reference_photos": [],
       "branding_text": [],
-      "destination": "compost",
-      "condition_rule": "food-soiled paperboard goes to compost",
+      "destination": "trash",
+      "condition_rule": "Cambridge: paper takeout containers are not recycling, and curbside compost takes only food, napkins and paper towels",
       "volume_ml": 900,
       "volume_source": "assumption: typical size, generic category"
     },

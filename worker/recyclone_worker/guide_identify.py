@@ -32,71 +32,102 @@ FACE_KPS = (0, 1, 2, 3, 4)  # nose, eyes, ears
 FACE_KP_MIN = 0.05          # fail closed: blank even face points the pose model is unsure about
 
 
-def head_box(kp) -> tuple[float, float, float, float] | None:
-    """A person's head region in the frame: around any face keypoint (even low confidence), else the square above the
-    shoulders. Used to blank EVERY tracked person's head in crops that leave the device."""
+def head_box(kp):
+    """((x0, y0, x1, y1), reliable) of a person's head, or None when no head point is seen at all (back turned).
+
+    Around any face keypoint (even low confidence), else the square above the shoulders. Its size scales with the
+    person (shoulder width, face span, body extent); "reliable" is False when none of those can be measured, and then
+    a crop touching that head is dropped instead of sent (fail closed)."""
+    vis = [kp[j][:2] for j in range(17) if kp[j][2] > FACE_KP_MIN]
     face = [kp[j][:2] for j in FACE_KPS if kp[j][2] > FACE_KP_MIN]
     sh = [kp[j][:2] for j in (5, 6) if kp[j][2] > FACE_KP_MIN]
-    width = float(abs(sh[0][0] - sh[1][0])) if len(sh) == 2 else None
+    width = float(abs(sh[0][0] - sh[1][0])) if len(sh) == 2 else 0.0
+    body = float(max(p[1] for p in vis) - min(p[1] for p in vis)) if len(vis) >= 4 else 0.0
+    span = float(max(p[0] for p in face) - min(p[0] for p in face)) if len(face) >= 2 else 0.0
+    r = max(0.6 * width, 1.2 * span, 0.12 * body)
+    reliable = r >= 12.0
     if face:
         xs, ys = [float(p[0]) for p in face], [float(p[1]) for p in face]
-        r = max(25.0, 0.6 * (width or 0.0), 1.2 * (max(xs) - min(xs)))
+        r = max(r, 12.0)
         cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-        return cx - r, cy - r, cx + r, cy + r
+        return (cx - r, cy - r, cx + r, cy + r), reliable
     if width:
         cx, top = float(sh[0][0] + sh[1][0]) / 2, float(min(sh[0][1], sh[1][1]))
-        return cx - 0.6 * width, top - 1.2 * width, cx + 0.6 * width, top
+        return (cx - 0.6 * width, top - 1.2 * width, cx + 0.6 * width, top), True
     return None
 
 
 FACE_MODEL_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
 FACE_MODEL = Path(__file__).resolve().parents[1] / "weights" / "face_detection_yunet_2023mar.onnx"
+FACE_MODEL_MIN_BYTES = 100_000  # the published model is ~230 KB; anything smaller is a broken download
 _DETECTOR: dict = {}
 
 
 def ensure_face_detector() -> bool:
-    """Download OpenCV's YuNet face detector (~230 KB, opencv_zoo) once; the guide calls this at start."""
+    """Download OpenCV's YuNet face detector once (temp file, size check, atomic rename); the guide calls this."""
     if not FACE_MODEL.exists():
+        tmp = FACE_MODEL.with_suffix(".part")
         try:
+            import os
             import urllib.request
 
             FACE_MODEL.parent.mkdir(parents=True, exist_ok=True)
-            urllib.request.urlretrieve(FACE_MODEL_URL, FACE_MODEL)
-        except Exception as e:  # noqa: BLE001 - head boxes from the skeleton still blank faces
-            print(f"note: face detector not available ({type(e).__name__}); blanking heads from the skeleton only", file=sys.stderr)
+            urllib.request.urlretrieve(FACE_MODEL_URL, tmp)
+            if tmp.stat().st_size < FACE_MODEL_MIN_BYTES:
+                raise ValueError("download too small")
+            os.replace(tmp, FACE_MODEL)
+        except Exception as e:  # noqa: BLE001
+            tmp.unlink(missing_ok=True)
+            print(f"note: face detector not available ({type(e).__name__}); no item crops will leave this machine",
+                  file=sys.stderr)
             return False
-    return True
+    return face_detector_ready()
+
+
+def face_detector_ready() -> bool:
+    """True only when the face detector is on disk AND loads. Crops leave the machine only then (fail closed)."""
+    if "yunet" in _DETECTOR:
+        return _DETECTOR["yunet"] is not None
+    try:
+        ok = FACE_MODEL.exists() and FACE_MODEL.stat().st_size >= FACE_MODEL_MIN_BYTES
+        _DETECTOR["yunet"] = cv2.FaceDetectorYN.create(str(FACE_MODEL), "", (320, 320), 0.6, 0.3, 50) if ok else None
+    except Exception:  # noqa: BLE001 - a model that does not load counts as missing
+        _DETECTOR["yunet"] = None
+    return _DETECTOR["yunet"] is not None
 
 
 def detect_faces(crop: np.ndarray) -> list[tuple[int, int, int, int]]:
-    """Faces in a crop (OpenCV YuNet), a second blanking layer that does not depend on the skeleton.
-    Without the model file (not downloaded): no detections; the head boxes still apply."""
-    if not FACE_MODEL.exists():
-        return []
-    h, w = crop.shape[:2]
+    """Faces in a crop (OpenCV YuNet), a blanking layer that does not depend on the skeleton."""
     det = _DETECTOR.get("yunet")
-    if det is None:
-        det = _DETECTOR["yunet"] = cv2.FaceDetectorYN.create(str(FACE_MODEL), "", (w, h), 0.6, 0.3, 50)
+    h, w = crop.shape[:2]
     det.setInputSize((w, h))
     _, faces = det.detect(crop)
-    if faces is None:
-        return []
-    return [(int(f[0]), int(f[1]), int(f[2]), int(f[3])) for f in faces]
+    return [] if faces is None else [(int(f[0]), int(f[1]), int(f[2]), int(f[3])) for f in faces]
+
+
+def _redact(crop: np.ndarray, x0: int, y0: int, heads: list) -> np.ndarray | None:
+    """The crop as it may leave the machine, or None (dropped). Fail closed: no detector -> None; a head whose size
+    cannot be estimated touching the crop -> None; otherwise every head region and every detected face blacked out."""
+    if not face_detector_ready():
+        return None
+    h, w = crop.shape[:2]
+    for head in heads:
+        if head is None:
+            continue
+        (hx0, hy0, hx1, hy1), reliable = head
+        touches = hx1 - x0 > 0 and hy1 - y0 > 0 and hx0 - x0 < w and hy0 - y0 < h
+        if touches and not reliable:
+            return None
+        if touches:
+            cv2.rectangle(crop, (int(hx0) - x0, int(hy0) - y0), (int(hx1) - x0, int(hy1) - y0), (0, 0, 0), -1)
+    for fx, fy, fw, fh in detect_faces(crop):
+        cv2.rectangle(crop, (fx, fy), (fx + fw, fy + fh), (0, 0, 0), -1)
+    return crop
 
 
 def guide_prompts() -> dict:
     """CLIP vocabulary for the voice guide: the catalog (answers from the bin table) plus dangerous items."""
     return {**ITEM_PROMPTS, **HAZARD_PROMPTS}
-
-
-def _blank_faces(crop: np.ndarray, x0: int, y0: int, heads: list) -> np.ndarray:
-    """Fail closed: black out every head region (all tracked people) and every face the detector finds."""
-    for h in heads:
-        if h is not None:
-            cv2.rectangle(crop, (int(h[0]) - x0, int(h[1]) - y0), (int(h[2]) - x0, int(h[3]) - y0), (0, 0, 0), -1)
-    for fx, fy, fw, fh in detect_faces(crop):
-        cv2.rectangle(crop, (fx, fy), (fx + fw, fy + fh), (0, 0, 0), -1)
-    return crop
 
 
 ITEM_P = 0.5        # CLIP P(item) for a hand crop to count as holding something
@@ -136,13 +167,14 @@ class ItemWatcher:
             return
         self.last_observed[track_id] = t
         h, w = frame.shape[:2]
-        crops = []
+        crops, origins = [], []
         for side in ("L", "R"):
             b = hand_box(kp, side, w, h)
             if b is not None:
                 x0, y0, x1, y1 = (int(v) for v in b)
                 if x1 > x0 + 4 and y1 > y0 + 4:
-                    crops.append(_blank_faces(frame[y0:y1, x0:x1].copy(), x0, y0, [head_box(kp), *self.heads]))
+                    crops.append(frame[y0:y1, x0:x1])  # CLIP sees the raw crop, on this machine only
+                    origins.append((x0, y0))
         if not crops:
             return
         p_item, p_cat = self.scorer(self.embed(crops))
@@ -153,9 +185,11 @@ class ItemWatcher:
         p.last_held = t
         p.votes += p_cat[k] * p_item[k]
         p.n_votes += 1
-        if all(abs(t - c[0]) >= CROP_GAP_S for c in p.crops):
-            p.crops.append((t, float(p_item[k]), crops[k]))
-            p.crops = sorted(p.crops, key=lambda c: -c[1])[:KEEP_CROPS]
+        if all(abs(t - c[0]) >= CROP_GAP_S for c in p.crops):  # kept for the LLM: redacted, or not kept at all
+            safe = _redact(crops[k].copy(), *origins[k], [head_box(kp), *self.heads])
+            if safe is not None:
+                p.crops.append((t, float(p_item[k]), safe))
+                p.crops = sorted(p.crops, key=lambda c: -c[1])[:KEEP_CROPS]
         if (p.job is None and self.namer is not None and len(p.crops) >= MIN_CROPS and p.n_votes >= MIN_VOTES
                 and self._catalog(p) is None):  # CLIP had its votes and still is not sure: ask the LLM
             p.job = self.executor.submit(self._identify, [c[2] for c in sorted(p.crops)])
@@ -186,7 +220,7 @@ class ItemWatcher:
         return None
 
     def set_heads(self, heads: list) -> None:
-        """Head regions of everyone in the current frame (the guide sets this each frame)."""
+        """head_box() of everyone in the current frame (the guide sets this each frame)."""
         self.heads = [h for h in heads if h is not None]
 
     def forget(self, track_id: int) -> None:

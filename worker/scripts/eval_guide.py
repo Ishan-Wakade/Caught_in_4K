@@ -57,9 +57,20 @@ def main():
             voice = SayVoice(WORKER / "state/voice-cache", play=False)
             watcher = ItemWatcher(clip.images, scorer, table, namer=namer, advisor=advisor)
             guide = Guide(YoloPoseTracker(weight("yolo11n-pose.pt")), watcher, Approach(area), voice, area=area)
-            frames = []
-            on_frame = (lambda img: frames.append(img)) if render_dir else None
-            said = guide.run(src, on_frame=on_frame)
+            pipe = {}
+
+            def on_frame(img, pipe=pipe, name=name, fps=src.fps):  # stream frames to ffmpeg (holding them used GBs)
+                if "p" not in pipe:
+                    import subprocess
+
+                    render_dir.mkdir(parents=True, exist_ok=True)
+                    h, w = img.shape[:2]
+                    pipe["raw"] = render_dir / f"{name}_noaudio.mp4"
+                    pipe["p"] = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
+                                                  "-s", f"{w}x{h}", "-r", str(fps), "-i", "-", "-c:v", "libx264", "-crf", "24",
+                                                  "-preset", "veryfast", "-pix_fmt", "yuv420p", str(pipe["raw"])], stdin=subprocess.PIPE)
+                pipe["p"].stdin.write(np.ascontiguousarray(img).tobytes())
+            said = guide.run(src, on_frame=on_frame if render_dir else None)
             voice.close()
             fps_all.append(guide.fps)
             truths = spec.get("truths") or []
@@ -87,21 +98,11 @@ def main():
             false_n += len(extra)
             rows.append(f"{name:16s} {guide.fps:5.1f} fps | " + " | ".join(cells) + (f" | +{len(extra)} extra: " + "; ".join(f"{s['t']:.1f}s {s['spoken']}" for s in extra) if extra else ""))
             print(rows[-1], flush=True)
-            if render_dir and frames:
-                import subprocess
-
-                render_dir.mkdir(parents=True, exist_ok=True)
-                raw = render_dir / f"{name}_noaudio.mp4"
-                h, w = frames[0].shape[:2]
-                p = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
-                                      "-r", str(src.fps), "-i", "-", "-c:v", "libx264", "-crf", "24", "-preset", "veryfast",
-                                      "-pix_fmt", "yuv420p", str(raw)], stdin=subprocess.PIPE)
-                for img in frames:
-                    p.stdin.write(np.ascontiguousarray(img).tobytes())
-                p.stdin.close()
-                p.wait()
-                mix_audio(raw, render_dir / f"{name}_guide.mp4", voice.spoken)
-                raw.unlink()
+            if "p" in pipe:
+                pipe["p"].stdin.close()
+                pipe["p"].wait()
+                mix_audio(pipe["raw"], render_dir / f"{name}_guide.mp4", voice.spoken)
+                pipe["raw"].unlink()
     print(f"\ntold before/at the drop: {told}/{truths_n}; right bin {right}/{told}; extra announcements {false_n}; "
           f"lead time median {np.median(leads) if leads else float('nan'):.1f}s (min {min(leads) if leads else float('nan'):.1f}s); "
           f"fast path {np.median(fps_all):.1f} fps median")

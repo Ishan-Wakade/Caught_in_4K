@@ -8,6 +8,21 @@ from recyclone_worker import guide_identify as gi
 from recyclone_worker import guide_message as gm
 
 TABLE = gm.load_bin_table(gm.WORKER_RULES / "cambridge-ma-2022.bins.json")
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def face_detector(monkeypatch):
+    """Tests run without the YuNet file: pretend it is loaded and finds nothing (tests opt out explicitly)."""
+    monkeypatch.setattr(gi, "face_detector_ready", lambda: True)
+    monkeypatch.setattr(gi, "detect_faces", lambda crop: [])
+
+
+def kept_or_dropped(w, track=1):
+    crops = w.people[track].crops
+    return crops[0][2] if crops else None
 FRAME = np.zeros((480, 640, 3), np.uint8)
 
 
@@ -128,10 +143,10 @@ def test_face_is_blanked_in_kept_crops():
     k[0] = (300, 330, 0.9)  # the nose sits inside the hand crop (drinking)
     w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
     w.observe(1, 0.0, frame, k)
-    crop = w.people[1].crops[0][2]
+    crop = kept_or_dropped(w)
     from recyclone_worker.items import hand_box
     x0, y0, _, _ = (int(v) for v in hand_box(k, "L", 640, 480))
-    assert crop[330 - y0, 300 - x0].sum() == 0
+    assert crop is None or crop[330 - y0, 300 - x0].sum() == 0  # dropped, or the face blanked
 
 
 def test_guide_vocabulary_has_dangerous_items_that_are_not_in_the_catalog():
@@ -168,7 +183,8 @@ def test_low_confidence_face_points_are_still_blanked():
     w.observe(1, 0.0, frame, k)
     from recyclone_worker.items import hand_box
     x0, y0, _, _ = (int(v) for v in hand_box(k, "L", 640, 480))
-    assert w.people[1].crops[0][2][330 - y0, 300 - x0].sum() == 0
+    crop = kept_or_dropped(w)
+    assert crop is None or crop[330 - y0, 300 - x0].sum() == 0
 
 
 def test_faces_found_by_the_face_detector_are_blanked(monkeypatch):
@@ -177,3 +193,33 @@ def test_faces_found_by_the_face_detector_are_blanked(monkeypatch):
     w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
     w.observe(1, 0.0, frame, arm_kp())
     assert w.people[1].crops[0][2][6, 6].sum() == 0
+
+
+# ---- security review 2 (17 Oct): no crop leaves the device unless faces can be removed
+def test_without_a_face_detector_no_crop_is_sent(monkeypatch):
+    monkeypatch.setattr(gi, "face_detector_ready", lambda: False)
+    namer = FakeNamer(catalog_id=None, generic={"name": "x", "material": "mixed", "form": "thing", "condition": "clean", "hazardous": False})
+    w = watch(FakeScorer(0.9, {"item_generic_can": 0.4, "item_napkin": 0.35}), namer=namer)
+    import time
+    time.sleep(0.1)
+    assert namer.calls == 0 and w.holding(1, 2.0)  # still seen as holding (local CLIP), just never sent
+
+
+def test_a_head_whose_size_cannot_be_estimated_drops_the_crop(monkeypatch):
+    monkeypatch.setattr(gi, "face_detector_ready", lambda: True)
+    frame = np.full((480, 640, 3), 255, np.uint8)
+    k = arm_kp()
+    k[0] = (300, 330, 0.9)  # a lone nose point inside the crop: no eyes, no shoulders, nothing to size the head by
+    k[7, 2] = 0.25           # elbow barely visible: the body extent is unknown too
+    w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
+    w.observe(1, 0.0, frame, k)
+    assert w.holding(1, 0.5) and w.people[1].crops == []
+
+
+def test_head_size_scales_with_the_person():
+    small, big = np.zeros((17, 3), np.float32), np.zeros((17, 3), np.float32)
+    for k, s in ((small, 1.0), (big, 3.0)):
+        k[0], k[1], k[2] = (100 * s, 50 * s, 0.9), (95 * s, 45 * s, 0.9), (105 * s, 45 * s, 0.9)
+        k[5], k[6], k[15] = (80 * s, 80 * s, 0.9), (120 * s, 80 * s, 0.9), (100 * s, 300 * s, 0.9)
+    (b_small, ok_small), (b_big, ok_big) = gi.head_box(small), gi.head_box(big)
+    assert ok_small and ok_big and (b_big[2] - b_big[0]) > 2.5 * (b_small[2] - b_small[0])

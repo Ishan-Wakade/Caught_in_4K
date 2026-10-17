@@ -304,6 +304,82 @@ def cmd_run_station(args, analyze_items=None) -> int:
     return 0
 
 
+def cmd_guide(args, make_guide_parts=None) -> int:
+    """Voice guide (docs/superpowers/specs/2026-10-17-voice-guidance-roadmap-design.md): a person with waste close to
+    the bins hears "<bin>. <explanation>". Live camera (index / Continuity Camera / rtsp://) or a recorded file."""
+    import subprocess
+    import tempfile
+
+    from . import guide_message as gm
+    from .approach import Approach, BinArea
+    from .guide import Guide, YoloPoseTracker
+    from .sources import LiveCameraSource
+    from .voice import SayVoice, SilentVoice, mix_audio
+
+    area = BinArea(*[float(v) for v in args.area.split(",")])
+    homography = np.array(json.loads(Path(args.homography).read_text())) if args.homography else None
+    live = args.source.isdigit() or "://" in args.source
+    source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
+    table = gm.load_bin_table(Path(args.bins))
+    if make_guide_parts is not None:
+        pose, watcher = make_guide_parts(args, area)
+    else:
+        from .guide_identify import ItemWatcher
+        from .items import Clip, Scorer, weight
+
+        clip = Clip(weight("clip/ViT-B-32.pt"))
+        namer = advisor = None
+        if args.namer == "deepseek":
+            from .generic import BinAdvisor
+            from .namer import DeepSeekNamer
+
+            namer = DeepSeekNamer(WORKER_DIR / "state/vlm-cache")
+            advisor = BinAdvisor(Path(args.local_rules), WORKER_DIR / "state/generic-types.json")
+            if not namer.available:
+                print("note: no DEEPSEEK_API_KEY; items not recognized by CLIP will be announced as trash", file=sys.stderr)
+        pose = YoloPoseTracker(weight("yolo11n-pose.pt"))
+        watcher = ItemWatcher(clip.images, Scorer(clip), table, namer=namer, advisor=advisor)
+    play = live or args.realtime
+    voice = SilentVoice() if args.voice == "silent" else SayVoice(WORKER_DIR / "state/voice-cache", play=play)
+    voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])
+    guide = Guide(pose, watcher, Approach(area, homography), voice, log_path=Path(args.log), area=area, homography=homography)
+    stream = writer = tmp = None
+    if not args.no_stream:
+        from .stream import StreamServer
+
+        stream = StreamServer(int(os.environ.get("WORKER_PORT", "8765")), Path(args.evidence_dir))
+        stream.start()
+        print(f"stream: http://localhost:{stream.port}/stream.mjpg", file=sys.stderr)
+
+    def on_frame(img):
+        nonlocal writer, tmp
+        if stream:
+            stream.publish(img)
+        if args.render:
+            if writer is None:
+                h, w = img.shape[:2]
+                tmp = Path(tempfile.mkdtemp()) / "video.mp4"
+                writer = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+                                           "-r", str(source.fps), "-i", "-", "-c:v", "libx264", "-crf", "24", "-preset", "veryfast",
+                                           "-pix_fmt", "yuv420p", str(tmp)], stdin=subprocess.PIPE)
+            writer.stdin.write(np.ascontiguousarray(img).tobytes())
+
+    frames = _realtime(source, source.fps) if (args.realtime and not live) else source
+    try:
+        said = guide.run(frames, on_frame=on_frame if (stream or args.render) else None)
+    finally:
+        if stream:
+            stream.stop()
+        if writer:
+            writer.stdin.close()
+            writer.wait()
+    if args.render and tmp is not None:
+        mix_audio(tmp, Path(args.render), voice.spoken)
+        print(f"video with the voice: {args.render}", file=sys.stderr)
+    print(f"guide: {len(said)} announcement(s); fast path {guide.fps:.1f} fps (camera {source.fps:.0f} fps)", file=sys.stderr)
+    return 0
+
+
 def cmd_enroll(args, make_tracker, make_embedder) -> int:
     from .enroll import enroll_from_segments
 
@@ -402,7 +478,7 @@ def cmd_flush(args) -> int:
     return 0 if left == 0 else 1
 
 
-def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None) -> int:
+def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None, make_guide_parts=None) -> int:
     ap = argparse.ArgumentParser(prog="recyclone-worker")
     sub = ap.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run", help="process a recorded clip")
@@ -426,6 +502,19 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
                           "'' to turn off")
     run.add_argument("--item-bins", help="--tracker items: bin boxes per frame (item-tracker config) for a moving camera; "
                                          "default: the camera's fixed bin regions from demo-site.json")
+    gd = sub.add_parser("guide", help="voice guide: tell a person with waste which bin, before they reach the bins")
+    gd.add_argument("--source", required=True, help="camera index (0 = built-in webcam), rtsp:// URL, or a video file")
+    gd.add_argument("--area", required=True, help="one box around all the bins: x0,y0,x1,y1 in pixels")
+    gd.add_argument("--homography", help="optional floor calibration: JSON 3x3 matrix, image pixels -> floor meters")
+    gd.add_argument("--namer", choices=["clip", "deepseek"], default="deepseek")
+    gd.add_argument("--local-rules", default=str(WORKER_DIR / "rules/cambridge-ma-2022.md"))
+    gd.add_argument("--bins", default=str(WORKER_DIR / "rules/cambridge-ma-2022.bins.json"), help="standard bin per catalog item")
+    gd.add_argument("--voice", choices=["say", "silent"], default="say")
+    gd.add_argument("--realtime", action="store_true", help="for a file: play at clip speed and speak aloud")
+    gd.add_argument("--render", help="write the annotated video with the voice mixed in to this .mp4")
+    gd.add_argument("--no-stream", action="store_true")
+    gd.add_argument("--evidence-dir", default=str(WORKER_DIR / "evidence"))
+    gd.add_argument("--log", default=str(WORKER_DIR / "state/guide-log.jsonl"))
     st = sub.add_parser("run-station", help="several cameras of one station: drops merged, reported by the camera the person faces")
     st.add_argument("--station", required=True, help='JSON: {"station_id", "cameras": [{"camera_id", "video", "offset_s", "bins"}]}')
     st.add_argument("--clip-id", required=True)
@@ -476,6 +565,8 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
         p.add_argument("--clip-weights", default=str(DEFAULT_CLIP))
     args = ap.parse_args(argv)
 
+    if args.cmd == "guide":
+        return cmd_guide(args, make_guide_parts)
     if args.cmd == "run-station":
         return cmd_run_station(args, analyze_items)
     if args.cmd == "run" and args.tracker == "items":

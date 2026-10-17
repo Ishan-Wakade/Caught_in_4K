@@ -5,7 +5,11 @@ GET /evidence/<path>  files under evidence_dir only
 
 Camera frames can show people, so: bound to 127.0.0.1, no CORS header (the dashboard uses
 <img src>, which needs none), and requests whose Host is not localhost are refused (DNS rebinding).
+When shared through a public tunnel (scripts/share-stream.sh), a token is required as a path
+prefix: GET /s/<token>/stream.mjpg. Anything else is 404, so the hostname alone shows nothing.
 """
+
+import hmac
 
 import threading
 import time
@@ -35,8 +39,9 @@ def annotate(frame: np.ndarray, tracks, regions) -> np.ndarray:
 
 
 class StreamServer:
-    def __init__(self, port: int, evidence_dir: Path, fps: float = 15.0):
+    def __init__(self, port: int, evidence_dir: Path, fps: float = 15.0, token: str | None = None):
         self.port, self.evidence_dir, self.interval = port, Path(evidence_dir).resolve(), 1 / fps
+        self.token = token or None
         self._jpeg: bytes | None = None
         self._lock = threading.Lock()
         self._httpd: ThreadingHTTPServer | None = None
@@ -60,6 +65,11 @@ class StreamServer:
                 if host not in ("localhost", "127.0.0.1", "::1"):
                     return self.send_error(403)
                 path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
+                if server.token:
+                    given, slash, rest = path.removeprefix("/s/").partition("/")
+                    if not (path.startswith("/s/") and slash and hmac.compare_digest(given.encode(), server.token.encode())):
+                        return self.send_error(404)
+                    path = "/" + rest
                 if path == "/stream.mjpg":
                     return self._stream()
                 if path.startswith("/evidence/"):

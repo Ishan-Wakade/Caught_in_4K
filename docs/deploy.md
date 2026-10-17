@@ -65,7 +65,7 @@ configuration differs from the runtime one.
 | `MESSENGER_MODE` | `mock` (until S's live Photon setup is ready) |
 | `ILLUSTRATOR_MODE` | `mock` |
 | `ENABLE_MOCK_REPLY` | `true` for the demo |
-| `NEXT_PUBLIC_WORKER_URL` | the tunnel URL from step 4 (no trailing slash) |
+| `NEXT_PUBLIC_WORKER_URL` | tunnel URL + `/s/<WORKER_STREAM_TOKEN>` from step 4 (no trailing slash) |
 
 `NEXT_PUBLIC_*` values are baked in at build time, so **redeploy after changing
 `NEXT_PUBLIC_WORKER_URL`**. Tokens and phone numbers go only in Vercel, never in git.
@@ -74,16 +74,29 @@ configuration differs from the runtime one.
 
 The dashboard is served over https and loads `NEXT_PUBLIC_WORKER_URL/stream.mjpg`
 directly in the browser. A browser will not load `http://localhost` from an https page,
-and teammates cannot reach your laptop at all, so the stream needs a public https URL:
+and teammates cannot reach your laptop at all, so the stream needs a public https URL.
+
+The camera can show people, so the public URL is protected by a token. With
+`WORKER_STREAM_TOKEN` set, the worker serves only `/s/<token>/stream.mjpg` and
+`/s/<token>/evidence/...` and answers everything else with 404. The script refuses to
+start without a token of 24+ characters.
 
 ```sh
-worker/scripts/share-stream.sh     # prints https://<random>.trycloudflare.com
+export WORKER_STREAM_TOKEN=$(openssl rand -hex 24)   # in the worker's shell too
+worker/scripts/share-stream.sh                       # prints https://<random>.trycloudflare.com
+# Vercel: NEXT_PUBLIC_WORKER_URL=https://<random>.trycloudflare.com/s/<token>, then redeploy
 ```
 
-The worker's stream server rejects requests whose `Host` is not localhost (DNS-rebinding
-guard in `worker/recyclone_worker/stream.py`). The script makes cloudflared rewrite
-`Host` to localhost instead of loosening that check. A quick-tunnel URL changes on
-every start; a named Cloudflare tunnel gives a fixed one if this gets annoying.
+Limits, stated plainly: the token is part of a `NEXT_PUBLIC_` value, so every dashboard
+visitor's browser receives it. It stops people who only learn the hostname, not
+dashboard visitors. So also turn on **Vercel Deployment Protection** (password or
+Vercel login) for the dashboard, and stop the tunnel when you are not demoing. If the
+stream ever needs real per-viewer auth, use a named tunnel with Cloudflare Access.
+
+The worker's stream server also rejects requests whose `Host` is not localhost (a
+DNS-rebinding guard for your own browser, `worker/recyclone_worker/stream.py`). The
+script makes cloudflared rewrite `Host` to localhost for tunnel traffic. A quick-tunnel
+URL changes on every start, so update `NEXT_PUBLIC_WORKER_URL` and redeploy each time.
 
 Then run the worker against the deployed API:
 

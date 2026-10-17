@@ -97,9 +97,11 @@ def cmd_run(args, make_tracker, make_embedder) -> int:
     if not args.no_stream:
         from .stream import StreamServer, annotate
 
-        stream = StreamServer(int(os.environ.get("WORKER_PORT", "8765")), Path(args.evidence_dir))
+        stream = StreamServer(int(os.environ.get("WORKER_PORT", "8765")), Path(args.evidence_dir),
+                              token=os.environ.get("WORKER_STREAM_TOKEN"))
         stream.start()
-        print(f"stream: http://localhost:{stream.port}/stream.mjpg", file=sys.stderr)
+        prefix = "/s/<WORKER_STREAM_TOKEN>" if stream.token else ""
+        print(f"stream: http://localhost:{stream.port}{prefix}/stream.mjpg", file=sys.stderr)
     on_frame = (lambda frame, tracks, regions: stream.publish(annotate(frame, tracks, regions))) if stream else None
     sink = PrintingSink() if args.dry_run else make_sink(args)
     if not args.dry_run and not args.no_background:

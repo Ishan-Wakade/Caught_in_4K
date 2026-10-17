@@ -58,3 +58,28 @@ def test_foreign_host_header_refused(server, path):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(req, timeout=3)
     assert e.value.code == 403
+
+
+@pytest.fixture
+def token_server(tmp_path):
+    (tmp_path / "clip").mkdir()
+    (tmp_path / "clip" / "1_entry.jpg").write_bytes(b"\xff\xd8fake")
+    srv = StreamServer(free_port(), tmp_path, token="s3cret-token")
+    srv.start()
+    yield srv
+    srv.stop()
+
+
+def test_token_prefix_serves(token_server):
+    """With WORKER_STREAM_TOKEN set (public tunnel), files are only reachable under /s/<token>/."""
+    with urllib.request.urlopen(f"http://127.0.0.1:{token_server.port}/s/s3cret-token/evidence/clip/1_entry.jpg", timeout=3) as r:
+        assert r.read().startswith(b"\xff\xd8")
+
+
+@pytest.mark.parametrize("path", ["/stream.mjpg", "/evidence/clip/1_entry.jpg", "/s/wrong/stream.mjpg",
+                                  "/s/s3cret-tokenX/stream.mjpg", "/s//stream.mjpg", "/s/s3cret-token"])
+def test_token_required(token_server, path):
+    """Anyone who learns the tunnel hostname must still not see the camera without the token."""
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(f"http://127.0.0.1:{token_server.port}{path}", timeout=3)
+    assert e.value.code == 404

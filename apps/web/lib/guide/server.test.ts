@@ -74,7 +74,20 @@ describe("security review (17 Oct)", () => {
     expect(last).toBe(429);
   });
   it("refuses an oversized body from its declared length, before reading it", async () => {
-    const r = new Request("http://x", { method: "POST", body: "{}", headers: { "x-guide-token": "demo-token", "content-length": "99999999" } });
+    const r = new Request("http://x", { method: "POST", body: "{}", headers: { "x-guide-token": "demo-token", "content-length": "99999999", "x-real-ip": "9.9.9.9" } });
     expect((await handleIdentify(r)).status).toBe(413);
+  });
+});
+
+describe("rate limit buckets (security review 2)", () => {
+  it("one client hitting its limit does not lock out another", async () => {
+    vi.stubEnv("GUIDE_TOKEN", "bucket-token");
+    const fake = async () => ({ message: null, source: "nothing_held" as const });
+    const call = (ip: string) => handleIdentify(new Request("http://x", { method: "POST", body: JSON.stringify({ crops: ["data:image/jpeg;base64,AA"] }),
+      headers: { "x-guide-token": "bucket-token", "x-real-ip": ip } }), fake);
+    let a = 200;
+    for (let k = 0; k < 125; k++) a = (await call("1.1.1.1")).status;
+    expect(a).toBe(429);
+    expect((await call("2.2.2.2")).status).toBe(200);
   });
 });

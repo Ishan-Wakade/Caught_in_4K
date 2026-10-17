@@ -10,7 +10,8 @@ import { defaultTrash, spoken, validateMessage, type GuideMessage } from "./mess
 
 const MAX_CROPS = 3;
 const MAX_CROP_CHARS = 300_000; // ~220 KB of JPEG per crop (the phone sends ~320 px crops)
-const RATE_PER_MIN = 120;      // per demo token (a header the caller sets cannot be trusted for this)
+const RATE_PER_MIN = 120;       // per client address (as set by Vercel's edge)
+const RATE_TOTAL_PER_MIN = 600; // overall ceiling for this instance
 const hits = new Map<string, number[]>();
 const audioCache = new Map<string, ArrayBuffer>(); // per instance; speech for repeated messages is free
 
@@ -28,9 +29,12 @@ function guard(request: Request): Response | null {
   if (a.length !== e.length || !timingSafeEqual(a, e)) return err(401, "invalid guide token");
   const now = Date.now();
   for (const [k, ts] of hits) if (ts.every((t) => now - t >= 60_000)) hits.delete(k);
-  const recent = (hits.get(token) ?? []).filter((t) => now - t < 60_000);
-  if (recent.length >= RATE_PER_MIN) return err(429, "too many requests");
-  hits.set(token, [...recent, now]);
+  // per client: the address Vercel's edge sets (x-real-ip; client-sent x-forwarded-for is never trusted here)
+  const client = `ip:${request.headers.get("x-real-ip") ?? "unknown"}`;
+  for (const [key, cap] of [[client, RATE_PER_MIN], ["all", RATE_TOTAL_PER_MIN]] as const) {
+    if ((hits.get(key) ?? []).filter((t) => now - t < 60_000).length >= cap) return err(429, "too many requests");
+  }
+  for (const key of [client, "all"]) hits.set(key, [...(hits.get(key) ?? []).filter((t) => now - t < 60_000), now]);
   return null;
 }
 

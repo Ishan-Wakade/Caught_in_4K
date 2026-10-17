@@ -1,6 +1,7 @@
-import type { ReplySink } from "@recyclone/integrations";
-import { getCore } from "../_core/runtime";
+import type { ReplySink } from "@recyclone/contracts";
+import { getCoreReplySink } from "../_core/reply-sink";
 
+// Core owns durable deduplication, manager-contact resolution and state changes.
 export function getReplySink(): ReplySink {
-  return { handleReply: async (reply) => (await getCore()).handleReply(reply) };
+  return getCoreReplySink();
 }

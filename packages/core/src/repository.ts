@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { readFile } from "node:fs/promises";
+import { CORE_STATE_MIGRATION } from "./migration.js";
 import type { CoreState } from "./model.js";
 export interface Repository {
   close?(): Promise<void>;
@@ -31,7 +31,7 @@ export class PostgresRepository implements Repository {
   async close(): Promise<void> { await this.pool.end?.(); }
   async migrate(): Promise<void> {
     const client = await this.pool.connect();
-    try { await client.query(await readFile(new URL("../migrations/001_core_state.sql", import.meta.url), "utf8")); }
+    try { await client.query(CORE_STATE_MIGRATION); }
     finally { client.release(); }
   }
   async transaction<T>(change: (state: CoreState) => T | Promise<T>): Promise<T> {

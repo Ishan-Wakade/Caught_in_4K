@@ -1,45 +1,19 @@
-import crypto from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
-import { handleInboundReply } from "../_shared";
-import { getActiveModes } from "@recyclone/integrations";
-import { requireManager } from "../../_core/http";
+import { randomUUID } from "node:crypto";
 import { CoreError } from "@recyclone/core";
+import { handleInboundReply } from "../_shared";
+import { integrationMode } from "../../_core/adapters";
+import { body, requireManager, respond } from "../../_core/http";
+export const runtime = "nodejs";
 
-// Demo-only: lets the presenter type a manager reply instead of a real
-// Photon message arriving. Enters the exact same path as the real webhook
-// (contract §6). J's Messages scene shows the input box this calls only
-// while the messenger is mocked; this route enforces that server-side too.
-//
-// This endpoint has no signature verification (unlike the real webhook), so
-// it is double-gated: it refuses to run unless an operator has explicitly
-// opted in with ENABLE_MOCK_REPLY=true, and every call still needs a valid
-// manager token (requireManager) even in mock mode.
-export async function POST(request: NextRequest) {
-  if (getActiveModes().messenger !== "mock") {
-    return NextResponse.json({ error: "mock-reply is only available while MESSENGER_MODE=mock" }, { status: 403 });
-  }
-  if (process.env.ENABLE_MOCK_REPLY !== "true") {
-    return NextResponse.json({ error: "mock-reply is disabled; set ENABLE_MOCK_REPLY=true to enable it" }, { status: 403 });
-  }
-  try {
+// Uses the same reply sink as the verified provider webhook. Native Request /
+// Response are supported by Next.js and make this handler independently testable.
+export async function POST(request: Request) {
+  return respond(async () => {
+    if (integrationMode(process.env.MESSENGER_MODE, "MESSENGER_MODE") !== "mock") throw new CoreError(403, "mock-reply is only available while MESSENGER_MODE=mock");
+    if (process.env.ENABLE_MOCK_REPLY !== "true") throw new CoreError(403, "mock-reply is disabled; set ENABLE_MOCK_REPLY=true to enable it");
     requireManager(request);
-  } catch (error) {
-    if (error instanceof CoreError) return NextResponse.json({ error: error.message }, { status: error.status });
-    throw error;
-  }
-
-  const body = await request.json();
-  const contactId = String(body?.contactId ?? "");
-  const text = String(body?.body ?? "");
-  if (!contactId || !text) {
-    return NextResponse.json({ error: "contactId and body are required" }, { status: 400 });
-  }
-
-  const result = await handleInboundReply({
-    providerMessageId: `mock_reply_${crypto.randomUUID()}`,
-    from: { contactId },
-    body: text,
-    receivedAt: new Date().toISOString(),
+    const input = await body(request);
+    if (!input || typeof input !== "object" || !("contactId" in input) || !("body" in input) || typeof input.contactId !== "string" || !input.contactId.trim() || typeof input.body !== "string" || !input.body.trim()) throw new CoreError(400, "contactId and body must be nonempty strings");
+    return handleInboundReply({ providerMessageId: `mock_reply_${randomUUID()}`, from: { contactId: input.contactId }, body: input.body, receivedAt: new Date().toISOString() });
   });
-  return NextResponse.json(result);
 }

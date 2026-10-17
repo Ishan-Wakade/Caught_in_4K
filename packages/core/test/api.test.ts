@@ -91,3 +91,27 @@ test("API runtime loads E's demo fixture and survives a restart using network Po
     Object.assign(process.env, previous); await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("core's public Photon reply bridge records manager actions and persists reply deduplication", async () => {
+  const { getCoreReplySink } = await import("../../../apps/web/app/api/_core/reply-sink.js");
+  const { getCore } = await import("../../../apps/web/app/api/_core/runtime.js");
+  const dir = await mkdtemp(join(tmpdir(), "recyclone-reply-bridge-"));
+  const previous = { ...process.env };
+  const shared = globalThis as typeof globalThis & { recycloneCore?: ReturnType<typeof getCore> };
+  try {
+    await writeFile(join(dir, "site.json"), JSON.stringify(testSeed));
+    Object.assign(process.env, { CONFIG_PROFILE: "demo", CORE_STORAGE: "memory", CORE_SITE_CONFIG_PATH: join(dir, "site.json"), MESSENGER_MODE: "mock", ILLUSTRATOR_MODE: "mock", WORKER_INGEST_TOKEN: "worker_test" });
+    const events = Array.from({ length: 3 }, (_, i) => event(`bridge${i}`, { occurred_at: new Date().toISOString() }));
+    assert.equal((await ingest(req("events", { events }))).status, 200);
+    const sink = getCoreReplySink();
+    const reply = { providerMessageId: "bridge_confirmation", from: { contactId: "manager" }, body: "The sign is installed", receivedAt: new Date().toISOString() };
+    assert.equal((await sink.handleReply(reply)).status, "applied");
+    assert.equal((await sink.handleReply(reply)).status, "duplicate");
+    assert.equal((await (await getCore()).getItem("cup")).interventions.length, 1);
+    await assert.rejects(sink.handleReply({ ...reply, providerMessageId: "unknown", from: { contactId: "unknown_sender" } }), /not a configured/);
+  } finally {
+    if (shared.recycloneCore) await (await shared.recycloneCore).close(); delete shared.recycloneCore;
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key]; Object.assign(process.env, previous);
+    await rm(dir, { recursive: true, force: true });
+  }
+});

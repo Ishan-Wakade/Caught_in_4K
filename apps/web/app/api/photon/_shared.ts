@@ -1,33 +1,16 @@
-// Shared by webhook/route.ts and mock-reply/route.ts so both enter the exact
-// same path (contract §5/§6). Not itself a route — Next's App Router only
-// treats files named route.ts as endpoints.
-import {
-  InMemoryReplyDedupeStore,
-  type InboundReply,
-  type Message,
-  type ReplyDedupeStore,
-  type ReplySink,
-} from "@recyclone/integrations";
+// Both provider-verified webhooks and the server-enforced mock route use this path.
+import type { InboundReply, ReplySink } from "@recyclone/contracts";
+import type { Message } from "@recyclone/integrations";
 import { getReplySink } from "./_replySink";
 
-// Module-level singleton: Next.js keeps one Node process per server instance
-// in dev/this demo, so this survives across requests. Swap for a persistent
-// store before relying on it across multiple instances or restarts.
-const dedupeStore: ReplyDedupeStore = new InMemoryReplyDedupeStore();
-
-/**
- * Pulls plain reply text out of a Spectrum Message's content. Managers are
- * expected to reply with ordinary text/markdown; any other content type
- * (attachment, reaction, poll, …) has no text to interpret and comes back
- * as "", which RuleBasedReplyInterpreter correctly reads as "unclear".
- */
 function extractReplyText(content: Message["content"]): string {
   if (content.type === "text") return content.text;
   if (content.type === "markdown") return content.markdown;
   return "";
 }
 
-/** Builds the InboundReply contract §5 shape from a real Spectrum inbound message. */
+// Called after the Photon SDK verifies and deserializes a provider message.
+// The sink resolves sender.id against configured manager phone/handle/aliases.
 export function toInboundReply(message: Message): InboundReply {
   return {
     providerMessageId: message.id,
@@ -37,15 +20,10 @@ export function toInboundReply(message: Message): InboundReply {
   };
 }
 
-export type HandleInboundReplyResult = { status: "applied" | "duplicate" | "needs_clarification" };
+export type HandleInboundReplyResult = Awaited<ReturnType<ReplySink["handleReply"]>>;
 
-/** Entry point shared by the real webhook and the mock-reply route. */
 export async function handleInboundReply(reply: InboundReply): Promise<HandleInboundReplyResult> {
-  const isNew = await dedupeStore.markSeen(reply.providerMessageId);
-  if (!isNew) {
-    return { status: "duplicate" };
-  }
-
-  const replySink: ReplySink = getReplySink();
-  return replySink.handleReply(reply);
+  // Do not mark seen before core accepts a reply: configuration failures must
+  // remain retryable. Core persists provider-ID deduplication across instances.
+  return getReplySink().handleReply(reply);
 }

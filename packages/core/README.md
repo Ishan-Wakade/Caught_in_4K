@@ -6,7 +6,7 @@ scoring, alert/reply state, estimated bin inventories, and API projections. I ow
 
 ## Current status
 
-Aligned to E's shared package from `e/contracts`, merged at `c67d66d`:
+Aligned to E's shared contracts and verified against main at `8e8e016`:
 
 - Event validation uses the real `DisposalEventSchema`; unknown item/business
   confidences can be null. No temporary contract harness is needed.
@@ -21,10 +21,12 @@ Aligned to E's shared package from `e/contracts`, merged at `c67d66d`:
   network PostgreSQL 16 server, including concurrent duplicate intake, rollback,
   and reinitializing the API singleton without losing events.
 
-S's integration implementation and J's runnable Next.js app are not yet present
-on the main branch used for this change. Real adapter construction, webhook
-wiring, Next.js build, and deployed/live demo verification remain pending. This
-is backend/contract verification, not a claim of full application completion.
+S's adapter factories are now connected automatically, and the actual Photon
+mock-reply route reaches core. Provider senders are resolved to configured manager
+contacts before interpretation. Tests cover E's Python HTTP client through the
+API and S's mock adapters. J's runnable Next.js app and workspace dependencies
+are now present. Live services and the deployed API remain unverified. GrokIllustrator is
+still a live-mode stub owned by S. This is not full application completion.
 
 ## Install and verify
 
@@ -40,8 +42,12 @@ pnpm --filter @recyclone/contracts typecheck
 ```
 
 The core tsconfig points test-time package resolution at the actual workspace
-sources. It does not contain replacement types. J still needs to declare the core
-and contracts workspace dependencies in the web package for Next.js builds.
+sources. It does not contain replacement types. The web package declares core, contracts, and integrations workspace dependencies
+and transpiles their TypeScript sources for Next.js builds.
+
+The Python worker-client smoke test also runs when `jsonschema` is importable;
+set `CORE_TEST_PYTHON` to the worker environment's Python executable to select it.
+No model download is needed for that client test.
 
 Network database tests are optional in the ordinary suite. To exercise them,
 point the following variable at a disposable PostgreSQL database:
@@ -70,10 +76,14 @@ checks.
 | `RECYCLONE_ROOT` | Optional absolute repository root |
 | `CORE_SITE_CONFIG_PATH` | Optional absolute shared-format site JSON path |
 | `CORE_CONFIG_JSON` | Optional JSON overrides using internal `CoreConfig` field names |
-| `MANAGER_API_TOKEN` | Optional bearer token protecting catalog/review/reset writes; set before deploying |
+| `MANAGER_API_TOKEN` | Required bearer token protecting catalog/review/reset writes and mock replies |
 | `MESSENGER_MODE` | `mock` (default) or `live`; live requires S's configured adapters |
 | `ILLUSTRATOR_MODE` | `mock` (default) or `live`; live requires S's configured adapters |
 | `CORE_TEST_DATABASE_URL` | Tests only: isolated PostgreSQL connection |
+| `CORE_TEST_PYTHON` | Tests only: Python executable with `jsonschema` |
+| `ENABLE_MOCK_REPLY` | Must be `true` to enable mock manager replies, along with the manager token |
+| `CONTACT_PHONES_JSON` | Optional JSON object mapping configured contact IDs to recipient phone strings |
+| `PHOTON_CONTACT_MAP` | Optional JSON object mapping verified provider sender IDs to local contact IDs |
 
 `CORE_EVENT_SCHEMA_PATH` is retired. Intake imports E's Zod schema directly;
 E's generated draft-2020-12 JSON Schema remains the Python worker's validator.
@@ -81,7 +91,8 @@ Core tests also run E's published cross-language parity cases.
 
 Memory storage is single-process and nonpersistent. It is not suitable for a
 multi-instance Vercel deployment. Persistent state uses an idempotent SQL migration
-in `migrations/001_core_state.sql`.
+in `migrations/001_core_state.sql`. Runtime SQL is bundled from `src/migration.ts`
+to work inside Next/webpack; a test enforces parity with the standalone SQL file.
 
 The manager token is not a complete role/authentication system. API reads currently
 follow the draft contract without authentication; deployment access control remains
@@ -178,28 +189,54 @@ outbound messages/images preserve their flags; mocked feed activity is identifie
 in its summary because E's FeedItem has no mocked field. UI copy must label images
 illustrative and before/after changes observational.
 
-## Integration handoff to S
+## Connected integrations and replies
 
-`createCore({ seed, config, repository, messenger, illustrator, interpreter })`
-returns `handleReply` (the shared ReplySink), API methods, `tick()`, and `close()`.
-The optional clock supports deterministic timing checks. Input validation defaults
-to E's real schema.
+`apps/web/app/api/_core/adapters.ts` constructs S's public `createMessenger`,
+`createIllustrator`, and `createReplyInterpreter` adapters within each server
+instance. Both mode values are validated strictly before any factory runs. Mock
+outputs come from S's actual mock implementations; live mode never silently falls
+back. The test hook `configureCoreAdapters` still permits explicit injection.
 
-The API runtime exports `configureCoreAdapters({messenger, illustrator,
-interpreter})` and `getCore()`. Adapter construction still needs to be wired when
-S's module lands on main. Call `configureCoreAdapters` before singleton creation,
-then forward verified replies to `(await getCore()).handleReply(reply)`. Final
-wiring must construct adapters within each server instance; it cannot rely on a
-webhook initializing a different serverless process first.
+Live messaging requires S's `SPECTRUM_PROJECT_ID`, `SPECTRUM_PROJECT_SECRET`,
+`PHOTON_CHANNEL`, and the chosen channel's configuration. A signed inbound webhook
+also needs its configured signing secret and a public endpoint. This change does
+not send real messages or register an external webhook. Live Grok generation still
+requires S to implement `GrokIllustrator`; constructing its current stub does not
+prove generation works.
 
-For now, both modes must be `mock` to use local contract-shaped stubs. A live mode
-without adapters fails visibly. Core controls when to send, calls the injected
-interpreter, and sends clarifications. Duplicate provider reply IDs are deduplicated
-again in core.
+Both the verified webhook and the actual mock endpoint now use
+`getCoreReplySink()` from `_core/reply-sink.ts`. The previous throwing sink and
+preemptive in-memory "mark seen" layer have been removed. Core's persisted provider
+message ID handles successful duplicate deliveries. A failed contact lookup remains
+retryable after configuration is corrected.
 
-`inboundRepliesMocked` is an explicit core construction option because the shared
-InboundReply has no source-mode flag. Runtime derives it from messenger mode.
-Do not silently add fields to the shared reply payload.
+The sink calls `core.handleProviderReply`: mock mode accepts configured local
+contact IDs, while live provider IDs must match a configured phone/handle or an
+explicit `PHOTON_CONTACT_MAP` alias. Phone normalization removes formatting only;
+it does not invent a country code. Ambiguous matches fail rather than selecting a
+manager. Example mapping (use actual verified provider IDs):
+
+```json
+{"provider_sender_id":"ct_beanco_mgr"}
+```
+
+`POST /api/photon/mock-reply` remains disabled in live mode and unless
+`ENABLE_MOCK_REPLY=true`. It validates body JSON and string fields, requires
+`MANAGER_API_TOKEN`, and returns normal API errors.
+The handler uses native Request/Response so it can be checked independently of a
+Next app. The real SDK webhook route still requires Next's request lifecycle and
+still needs a signed provider-delivery check in the deployed app.
+
+Core narrows replies by explicit alert ID or bin ID/name before interpretation.
+It does not apply completion intents to explicit negatives, future promises, or
+messages saying work is in progress. An acknowledgement remains distinct from a
+completed intervention. These conservative checks are not a general-purpose
+language-understanding accuracy claim.
+
+`createCore` exposes the canonical `handleReply`, provider-aware
+`handleProviderReply`, API methods, `tick()`, and `close()`. It can still be tested
+with an injected clock/adapters. Shared types are imported by both core and S's
+integration package rather than copied.
 
 ## Persistence and operational limits
 

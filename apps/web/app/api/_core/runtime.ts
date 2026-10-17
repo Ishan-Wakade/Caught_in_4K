@@ -1,28 +1,25 @@
 import { readFile, access } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
-import type { Messenger, Illustrator, ReplyInterpreter } from "@recyclone/contracts";
-import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, createLocalMocks, validateSeed, type Core, type CoreConfig, type SiteSeed } from "@recyclone/core";
-import { createMessenger, createIllustrator, createReplyInterpreter } from "@recyclone/integrations";
+import { createIntegrationAdapters, integrationMode, type IntegrationAdapters } from "./adapters.js";
+import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, validateSeed, type Core, type CoreConfig, type SiteSeed } from "@recyclone/core";
 
-/**
- * Seed fixtures keep every contact's phone as null so real numbers never
- * land in git (contract: demo-site.json is committed, phones are not).
- * CONTACT_PHONES_JSON lets an operator supply them at runtime instead, e.g.
- * CONTACT_PHONES_JSON={"ct_shakeshack_mgr":"+1...","ct_area_mgr":"+1..."}.
- */
+/** Real recipient numbers stay in runtime configuration, outside committed fixtures. */
 function applyContactPhones(seed: SiteSeed, raw: string | undefined) {
   if (!raw) return;
-  let phones: Record<string, string>;
+  let phones: unknown;
   try { phones = JSON.parse(raw); }
-  catch { throw new Error("CONTACT_PHONES_JSON must be valid JSON mapping contact_id to phone number"); }
+  catch { throw new Error("CONTACT_PHONES_JSON must be valid JSON mapping contact IDs to phone numbers"); }
+  if (!phones || typeof phones !== "object" || Array.isArray(phones) ||
+      Object.entries(phones).some(([id, phone]) => !seed.contacts.some(c => c.contact_id === id) || typeof phone !== "string" || !phone.trim())) {
+    throw new Error("CONTACT_PHONES_JSON must map configured contact IDs to nonempty phone strings");
+  }
   for (const contact of seed.contacts) {
-    const phone = phones[contact.contact_id];
-    if (phone) contact.phone = phone;
+    if (Object.hasOwn(phones, contact.contact_id)) contact.phone = (phones as Record<string, string>)[contact.contact_id]!;
   }
 }
 
-type Adapters = { messenger: Messenger; illustrator: Illustrator; interpreter: ReplyInterpreter };
+type Adapters = IntegrationAdapters;
 const shared = globalThis as typeof globalThis & { recycloneCore?: Promise<Core>; recycloneAdapters?: Adapters };
 /** S can register real/mock adapters before getCore(); the webhook calls getCore().handleReply(). */
 export function configureCoreAdapters(adapters: Adapters) {
@@ -49,20 +46,9 @@ async function initialize(): Promise<Core> {
   applyContactPhones(seed, process.env.CONTACT_PHONES_JSON);
   const overrides = process.env.CORE_CONFIG_JSON ? JSON.parse(process.env.CORE_CONFIG_JSON) as Partial<CoreConfig> : {};
   const config = configFromSite(profile, seed.config_profiles[profile], overrides);
-  let adapters = shared.recycloneAdapters;
-  if (!adapters) {
-    const messengerMode = process.env.MESSENGER_MODE ?? "mock";
-    const illustratorMode = process.env.ILLUSTRATOR_MODE ?? "mock";
-    if (messengerMode === "mock" && illustratorMode === "mock") {
-      adapters = createLocalMocks();
-    } else {
-      // At least one mode is "live": wire the real integrations adapters
-      // (each factory reads its own mode independently, so e.g. a live
-      // messenger with a still-mocked illustrator works correctly here).
-      adapters = { messenger: createMessenger(), illustrator: createIllustrator(), interpreter: createReplyInterpreter() };
-      configureCoreAdapters(adapters);
-    }
-  }
+  const messengerMode = integrationMode(process.env.MESSENGER_MODE, "MESSENGER_MODE");
+  integrationMode(process.env.ILLUSTRATOR_MODE, "ILLUSTRATOR_MODE");
+  const adapters = shared.recycloneAdapters ?? createIntegrationAdapters();
   const state = initialState(seed, config);
   const storage = process.env.CORE_STORAGE ?? "postgres";
   let repository;
@@ -77,5 +63,5 @@ async function initialize(): Promise<Core> {
       if (!isDeepStrictEqual(s.config, config)) throw new Error("Persisted configuration differs from runtime. Use a separate site/database for each profile, or explicitly migrate configuration.");
     }); } catch (error) { await repository.close(); throw error; }
   } else throw new Error("CORE_STORAGE must be postgres or memory");
-  return createCore({ seed, config, repository, ...adapters, inboundRepliesMocked: (process.env.MESSENGER_MODE ?? "mock") === "mock", validateEvent: createEventValidator() });
+  return createCore({ seed, config, repository, ...adapters, inboundRepliesMocked: messengerMode === "mock", validateEvent: createEventValidator() });
 }

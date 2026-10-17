@@ -86,7 +86,14 @@ remaining S/J integration work. Shared schemas are imported, never copied. Core
 and API tests no longer use an external type harness.
 
 Additional variables for E to collect: `CORE_STORAGE`, `RECYCLONE_ROOT`,
-`CORE_SITE_CONFIG_PATH`, `CORE_CONFIG_JSON`, and optional `MANAGER_API_TOKEN`.
+`CORE_SITE_CONFIG_PATH`, `CORE_CONFIG_JSON`, and required `MANAGER_API_TOKEN`.
 `CORE_TEST_DATABASE_URL` enables isolated network PostgreSQL tests.
+`CORE_TEST_PYTHON` selects Python for the real worker HTTP-client smoke test.
+`CONTACT_PHONES_JSON` supplies runtime recipient numbers. `ENABLE_MOCK_REPLY=true`
+is required for the mock reply endpoint. `PHOTON_CONTACT_MAP` maps verified provider sender IDs to configured manager IDs.
 `CORE_EVENT_SCHEMA_PATH` is retired. The API also reads S's `MESSENGER_MODE` and
 `ILLUSTRATOR_MODE`. Never silently substitute mocks when live mode is requested.
+
+S's factories and reply sink are now wired. User authorization to fix the required
+Photon files superseded the cross-agent ownership restriction for this integration
+change. See HANDOFF.md for the exact exceptions; other owners' work is preserved.

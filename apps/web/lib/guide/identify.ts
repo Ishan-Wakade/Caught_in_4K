@@ -9,7 +9,8 @@ import { CATALOG_IDS, defaultTrash, fromCatalog, fromSuggestion, type GuideMessa
 import { LOCAL_RULES, RULES_SOURCE } from "./rules";
 
 export type Keys = { deepseek: string; jev: string };
-export type Result = { message: GuideMessage | null; source: "catalog" | "llm" | "default" | "nothing_held" };
+/** `name`/`confidence` are only set for source "llm" — what it was, and how sure Jev's destination suggestion was; the dashboard logs it as a new-item sighting. */
+export type Result = { message: GuideMessage | null; source: "catalog" | "llm" | "default" | "nothing_held"; name?: string; confidence?: number | null };
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Response>;
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -96,6 +97,8 @@ export async function identify(crops: string[], keys: Keys, fetchFn: Fetch = fet
       message: fromSuggestion({ name: item.name, form: item.form, hazardous: item.hazardous,
         suggested_destination: suggestion.choice ?? null, suggestion_confidence: suggestion.confidence ?? null }),
       source: "llm",
+      name: item.name,
+      confidence: suggestion.confidence ?? null,
     };
   } catch {
     return { message: defaultTrash(null), source: "default" };

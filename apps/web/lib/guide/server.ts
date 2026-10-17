@@ -7,6 +7,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { identify as realIdentify, type Keys, type Result } from "./identify";
 import { defaultTrash, fromCatalog, spoken, validateMessage, type GuideMessage } from "./message";
+import { recordSighting, slugify } from "../dashboard/db";
 
 const MAX_CROPS = 3;
 const MAX_CROP_CHARS = 300_000; // ~220 KB of JPEG per crop (the phone sends ~320 px crops)
@@ -99,6 +100,12 @@ export async function handleIdentify(request: Request, identify: Identify = real
   const keys = { deepseek: process.env.DEEPSEEK_API_KEY ?? "", jev: process.env.TYPESAFE_API_KEY ?? "" };
   if (!keys.deepseek) return err(503, "DEEPSEEK_API_KEY is not configured");
   const r = await identify(crops as string[], keys);
+  // A new/unrecognized item just got a Jev-suggested destination — log it for manager review.
+  // Fire-and-forget: a DB hiccup must never delay or break the spoken response.
+  if (r.source === "llm" && r.message && r.name) {
+    recordSighting({ id: slugify(r.name), name: r.name, destination: r.message.bin, basis: r.message.explanation, confidence: r.confidence })
+      .catch((error) => console.error("recordSighting failed:", error instanceof Error ? error.message : error));
+  }
   return Response.json({ ...r, spoken: r.message ? spoken(r.message) : null, sig: r.message ? signMessage(r.message) : null },
     { headers: { "Cache-Control": "no-store" } });
 }

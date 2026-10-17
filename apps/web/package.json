@@ -16,12 +16,14 @@
     "@recyclone/integrations": "workspace:*",
     "next": "^16.4.2",
     "onnxruntime-web": "1.30.0",
+    "pg": "^8.16.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4.3.3",

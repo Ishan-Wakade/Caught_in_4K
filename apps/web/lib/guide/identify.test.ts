@@ -37,7 +37,7 @@ describe("identify (DeepSeek, then Jev for items not in the catalog)", () => {
     const r = await identify([CROP], KEYS, fakeFetch({ catalog: { catalog_item_id: null, what: "a glove" },
       generic: { holding: true, name: "disposable glove", material: "plastic_film", form: "glove", condition: "clean", hazardous: false },
       jev: { type: "choice", choice: "trash", confidence: 0.83 } }, calls) as never);
-    expect(r).toEqual({ message: { bin: "trash", explanation: "disposable glove, placed in trash" }, source: "llm" });
+    expect(r).toEqual({ message: { bin: "trash", explanation: "disposable glove, placed in trash" }, source: "llm", name: "disposable glove", confidence: 0.83 });
     const jev = calls.find((c) => c.url.includes("typesafe"))!.body;
     expect(Object.keys(jev.questions.bin.criteria)).toEqual(["recycling", "compost", "trash", "special"]);
     expect(JSON.parse(jev.state).local_rules).toContain("City of Cambridge");

@@ -109,15 +109,14 @@ NO_BUSINESS = {"business_id": None, "confidence": None, "basis": []}
 
 
 def business_from_candidates(item: dict, catalog_business: dict[str, str | None]) -> dict:
-    """Business evidence from reference matching, as raw evidence for core (contract §6).
+    """Business evidence from the TOP match only (raw evidence for core, contract §6).
 
-    The best-scoring candidate that belongs to a business gives that business and its own score.
-    For a branded top candidate, core uses the catalog's business anyway. For an unbranded top
-    candidate (a plain cup) with a branded runner-up (a Shake Shack cup), this is weak evidence, and
-    core sends the event to the area manager's review queue when it is below the business threshold.
+    Brand is optional (Eymen, 16 Oct). A branded runner-up behind a plain-cup match is not used: in the
+    16 Oct end-to-end run it sent every plain cup to the review queue. Unattributed items instead
+    reach the area manager (core routing).
     """
-    for c in item["candidates"]:
-        business = catalog_business.get(c["catalog_item_id"])
-        if business:
-            return {"business_id": business, "confidence": c["score"], "basis": ["reference_match"]}
+    top = item["candidates"][0] if item["candidates"] else None
+    business = catalog_business.get(top["catalog_item_id"]) if top else None
+    if business:
+        return {"business_id": business, "confidence": top["score"], "basis": ["reference_match"]}
     return dict(NO_BUSINESS, basis=[])

@@ -94,9 +94,11 @@ def test_branded_top_candidate_gives_its_business():
         {"business_id": "biz_shakeshack", "confidence": 0.8, "basis": ["reference_match"]}
 
 
-def test_generic_top_with_branded_runner_up_is_weak_evidence():
+def test_branded_runner_up_is_not_business_evidence():
+    """Brand is optional (Eymen, 16 Oct): a plain cup with a Shake Shack runner-up stays unattributed, so it
+    goes to the area manager instead of flooding the review queue (seen in the 16 Oct end-to-end run)."""
     assert business_from_candidates(_item(("item_generic_cup", 0.7), ("item_shakeshack_cup", 0.45)), CATALOG_BIZ) == \
-        {"business_id": "biz_shakeshack", "confidence": 0.45, "basis": ["reference_match"]}
+        {"business_id": None, "confidence": None, "basis": []}
 
 
 def test_no_branded_candidate_means_no_business():

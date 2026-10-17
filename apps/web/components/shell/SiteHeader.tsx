@@ -7,6 +7,7 @@ import { useResource } from "@/hooks/useResource";
 import { useScenes } from "@/hooks/useScenes";
 import { api } from "@/lib/api";
 import { LogoMark } from "./Logo";
+import { APP_NAME } from "@/lib/config";
 
 type NavLink = { href: string; label: string; scene?: "live" | "bins" | "messages"; match?: (p: string) => boolean };
 
@@ -63,9 +64,9 @@ export function SiteHeader() {
   // Three columns so the nav stays centred on every page, whatever sits either side.
   return (
     <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-7 border-b border-rule-soft px-10 py-2.5">
-      <Link href="/live" aria-label="Recyclone, demo start" className="flex min-h-11 items-center gap-2.5 justify-self-start text-forest-deep no-underline hover:text-forest-deep">
+      <Link href="/live" aria-label={`${APP_NAME}, demo start`} className="flex min-h-11 items-center gap-2.5 justify-self-start text-forest-deep no-underline hover:text-forest-deep">
         <LogoMark />
-        <span className="font-display text-2xl leading-none font-extrabold">Recyclone</span>
+        <span className="font-display text-2xl leading-none font-extrabold">{APP_NAME}</span>
       </Link>
       <nav aria-label="Pages" className="flex flex-wrap items-center justify-center">
         <span className="pr-1.5 text-xs text-muted-2">Demo</span>

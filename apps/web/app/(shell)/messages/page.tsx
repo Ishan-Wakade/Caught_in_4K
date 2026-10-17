@@ -9,6 +9,7 @@ import { ALERT_STATE_LABEL, BIN_LABEL, dayTime, fullnessPercent, shortTime } fro
 import type { Alert, AlertMessage, BinStatus, ItemSummary } from "@/lib/types";
 import { LogoMark } from "@/components/shell/Logo";
 import { Dot, Empty, LoadError, Mono } from "@/components/ui";
+import { APP_NAME } from "@/lib/config";
 
 const isClosed = (a: Alert) => a.state === "action_confirmed" || a.state === "emptied";
 
@@ -21,7 +22,7 @@ function Why({ alert, item, bin }: { alert: Alert; item?: ItemSummary; bin?: Bin
     return (
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-2.5">
-          <span className="text-sm text-muted">Why Recyclone texted the {who}</span>
+          <span className="text-sm text-muted">Why {APP_NAME} texted the {who}</span>
           <p className="m-0 font-display text-[38px] leading-[1.08] font-bold tracking-[-0.01em] text-balance">
             {bin ? `${bin.name} looked nearly full` : alert.trigger}
           </p>
@@ -54,7 +55,7 @@ function Why({ alert, item, bin }: { alert: Alert; item?: ItemSummary; bin?: Bin
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2.5">
-        <span className="text-sm text-muted">Why Recyclone texted the {who}</span>
+        <span className="text-sm text-muted">Why {APP_NAME} texted the {who}</span>
         <p className="m-0 font-display text-[38px] leading-[1.08] font-bold tracking-[-0.01em] text-balance">
           {scoreKnown ? `${item.name} goes in the right bin ${Math.round((item.score as { percent: number }).percent)}% of the time` : alert.trigger}
         </p>
@@ -161,7 +162,7 @@ function Phone({ alert, mocked }: { alert: Alert; mocked: boolean }) {
     <figure className="m-0 flex flex-none flex-col items-center gap-2">
       <div
         role="group"
-        aria-label={`The ${alert.contact.name}'s phone showing the text conversation with Recyclone`}
+        aria-label={`The ${alert.contact.name}'s phone showing the text conversation with ${APP_NAME}`}
         className="box-border h-[750px] w-[450px] max-w-full rounded-[60px] bg-[#33382F] p-3.5 shadow-[0_26px_54px_rgba(50,45,25,0.22),0_8px_18px_rgba(50,45,25,0.12)]"
       >
         <div className="flex h-full flex-col overflow-hidden rounded-[48px] bg-card text-ink">
@@ -169,7 +170,7 @@ function Phone({ alert, mocked }: { alert: Alert; mocked: boolean }) {
             <span className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-mint">
               <LogoMark size={24} />
             </span>
-            <span className="text-base font-bold">Recyclone</span>
+            <span className="text-base font-bold">{APP_NAME}</span>
           </div>
           <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 pt-3 pb-4 text-[15.5px] leading-[1.36]">
             {alert.messages.map((m, i) => (
@@ -313,7 +314,7 @@ export default function MessagesPage() {
   if (!alerts.data.alerts.length)
     return (
       <Empty title="No texts yet">
-        When an item keeps going in the wrong bin, or a bin fills up, Recyclone texts the right person. The conversation shows up here.
+        When an item keeps going in the wrong bin, or a bin fills up, {APP_NAME} texts the right person. The conversation shows up here.
       </Empty>
     );
 

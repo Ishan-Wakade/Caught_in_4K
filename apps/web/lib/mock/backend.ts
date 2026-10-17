@@ -45,6 +45,7 @@ import {
 } from "./fixtures";
 import { SCRIPT, type ScriptStep } from "./script";
 import { mockIllustrationSvg } from "./illustration";
+import { APP_NAME } from "@/lib/config";
 
 type StoredEvent = {
   event: DisposalEvent;
@@ -302,7 +303,7 @@ export class MockBackend {
     this.sendMessage(
       alert,
       "recommendation",
-      `Hi, this is Recyclone at the shared patio. ${cat.name}s went into the right bin ${pct}% of the time (${s.assessed_count} seen). Here they go in ${cap(cat.correct_destination)}. Could you put a small sign where customers pick them up? Reply DONE once it's up.`,
+      `Hi, this is ${APP_NAME} at the shared patio. ${cat.name}s went into the right bin ${pct}% of the time (${s.assessed_count} seen). Here they go in ${cap(cat.correct_destination)}. Could you put a small sign where customers pick them up? Reply DONE once it's up.`,
     );
   }
 

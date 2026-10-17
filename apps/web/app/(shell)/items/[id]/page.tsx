@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { BIN_LABEL, day, scoreLabel, shortTime, time } from "@/lib/format";
 import type { BinType, Period } from "@/lib/types";
 import { BinTag, Dot, Empty, LoadError, Mono } from "@/components/ui";
+import { APP_NAME } from "@/lib/config";
 
 function Big({ label, p, tone }: { label: string; p: Period; tone: "before" | "after" }) {
   const known = p.score.status === "ok";
@@ -76,7 +77,7 @@ export default function ItemPage() {
                   <Big label="after" p={iv.after} tone="after" />
                 </div>
                 <p className="m-0 max-w-[700px] text-base leading-normal text-pretty text-ink-2">
-                  The manager&apos;s reply: “{iv.action.replace(/[.!\s]+$/, "")}”. These are counts before and after the time they confirmed it. Recyclone only sees what goes into
+                  The manager&apos;s reply: “{iv.action.replace(/[.!\s]+$/, "")}”. These are counts before and after the time they confirmed it. {APP_NAME} only sees what goes into
                   the bins, so it can&apos;t say the change caused any difference; crowds, staff and weather vary too.
                   {iv.after.assessed_count < item.min_assessed && " The after period still has very few drops."}
                 </p>
@@ -98,7 +99,7 @@ export default function ItemPage() {
                   {item.score.status === "insufficient_data"
                     ? "We haven't seen this item go into a bin we could judge yet."
                     : item.assessed_count < item.min_assessed
-                      ? `Recyclone waits for at least ${item.min_assessed} drops before texting anyone about an item.`
+                      ? `${APP_NAME} waits for at least ${item.min_assessed} drops before texting anyone about an item.`
                       : "No change has been confirmed for this item yet, so there's no before and after."}
                 </p>
               </>

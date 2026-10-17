@@ -8,6 +8,7 @@ import { SITE } from "@/lib/site";
 import type { Alert, ItemSummary } from "@/lib/types";
 import { MiniBin, fillUnknown } from "@/components/BinFigure";
 import { Dot, Mono, Page } from "@/components/ui";
+import { APP_NAME } from "@/lib/config";
 
 const siteTitle = SITE.site.name.replace(/\s*\(demo\)\s*$/i, "");
 
@@ -213,7 +214,7 @@ export default function OverviewPage() {
                   <span className="text-xs leading-snug text-muted">
                     {iv.before.assessed_count} drops before · {iv.after.assessed_count} after
                     <br />
-                    Recyclone can&apos;t tell what caused the change.
+                    {APP_NAME} can&apos;t tell what caused the change.
                   </span>
                 </Link>
               );

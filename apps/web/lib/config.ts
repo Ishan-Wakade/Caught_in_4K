@@ -16,3 +16,6 @@ export function evidenceUrl(uri: string): string | null {
 }
 
 export const FEED_POLL_MS = 1000;
+
+/** Product name shown in the UI (user's choice, 2026-10-16). Code and packages keep "recyclone". */
+export const APP_NAME = "Caught in 4K";

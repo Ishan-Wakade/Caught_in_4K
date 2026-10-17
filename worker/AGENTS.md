@@ -132,6 +132,30 @@ views (the older motion tracker near the bins) is the next step. Categories are 
 came out "wrapper", a bag "paper cup"; out-of-catalog items need catalog entries (contract fixture), not more prompts.
 Bins must be marked once per camera (`demo-site.json` regions, or `--item-bins` keyframes for a moving camera).
 
+## New item types: DeepSeek describes, Jev suggests a bin (17 Oct)
+
+`run --tracker items --namer deepseek` (with `--local-rules`, default `rules/cambridge-ma-2022.md`): when DeepSeek
+says no catalog item fits, the event carries `item.proposed_type` (contract §1.1):
+- **DeepSeek, second small call** (`namer.describe`, `GENERIC_PROMPT`): generic name, material, form, condition,
+  hazardous, from the same crops. Kept separate from the catalog prompt because appending it there dropped catalog
+  naming on dev from 9/10 to 6/10. Type id = material + form (`gen_textile_mask`), so the next mask gets the same id.
+- **Jev** (`generic.BinAdvisor`, TypeSafe `jev choice`, text only, never images): the type, DeepSeek's full description
+  and the local rules text -> trash / recycling / compost / special, with its probability. Sent raw (no threshold in
+  the worker); one call per new type (cached in `state/generic-types.json`, keyed by a state version).
+- It is a proposal: core must keep such events out of correctness scoring until the area manager approves the type.
+- Keys: `DEEPSEEK_API_KEY` / `~/.config/recyclone/deepseek.env`, `TYPESAFE_API_KEY` / `~/.config/recyclone/jev.env`
+  (Eymen's personal keys, chmod 600, never in the repo). The global `jev` login on this Mac is a different key.
+- `rules/cambridge-ma-2022.md`: only what the city's 2022/23 guide and recycling page say, with the source; NOT
+  confirmed by the city for this project.
+
+Check on the 10 dev drops (Jev's bin vs the catalog's rule; the catalog's rules are our own demo assumptions):
+agree 4/9 (clear cup, paper cup, 2 napkins). Disagreements: kraft burger box trash 0.40 vs catalog compost (the
+city's guide supports trash: no paper takeout containers in recycling, compost takes food + napkins/towels only);
+sauce cup recycling 0.69 vs trash (depends on rinsing); two paper bags DeepSeek mis-described (napkin; plastic film
+-> special 0.93); a paper card trash 0.39. The face mask (not in the catalog): special 0.96 ("textiles banned from
+trash"), debatable. Most wrong suggestions trace to DeepSeek's description or rules that do not decide the case;
+human approval is required by design. Not tuned further on these items.
+
 ## Model v2 (17 Oct, branch e/model-v2)
 
 Splits now: **dev** = 10 clips / 10 drops (5 phone, 2 YouTube from Eymen, 3 street clips IMG_2958-2960 that were

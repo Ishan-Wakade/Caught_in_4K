@@ -69,6 +69,11 @@ def main():
         from recyclone_worker.namer import DeepSeekNamer, pick_views, read_crops
 
         llm = DeepSeekNamer(it.WORKER / "state/vlm-cache")
+        advisor = None
+        if "--jev" in sys.argv:
+            from recyclone_worker.generic import BinAdvisor
+
+            advisor = BinAdvisor(it.WORKER / "rules/cambridge-ma-2022.md", it.WORKER / "state/generic-types.json")
         if not llm.available:
             raise SystemExit("no DEEPSEEK_API_KEY (env or ~/.config/recyclone/deepseek.env)")
 
@@ -77,7 +82,14 @@ def main():
             bins = {b["bin_id"]: it.keyframe_boxes(b, n) for b in spec["bins"]}
             for e in events:
                 views = pick_views(tracks, per_frame, data, bins, e["item_id"], e["frame"])
-                answer = llm.name(read_crops(Path(spec["video"]).expanduser(), views))
+                crops = read_crops(Path(spec["video"]).expanduser(), views)
+                answer = llm.name(crops)
+                if answer is not None and advisor is not None:  # --jev: generic type + Jev bin for EVERY drop (a check)
+                    from recyclone_worker.generic import generic_type
+
+                    answer["generic"] = llm.describe(crops)
+                    gt = generic_type(answer)
+                    answer["jev"] = advisor.suggest(gt) if gt else None
                 if answer is not None:
                     e["item"] = answer["catalog_item_id"]
                     e["item_bin_rule"] = it.CATALOG.get(answer["catalog_item_id"], {}).get("destination")
@@ -90,7 +102,9 @@ def main():
             for r in rows:
                 for g, e in r["matched"]:
                     print(f"   {r['clip']} f{g['frame']}: truth {g.get('what')} -> {e.get('item')} ({e.get('item_bin_rule')})"
-                          + (f" | llm: {e['llm']['what']}, {e['llm']['material']}, conf {e['llm']['confidence']}" if "llm" in e else ""))
+                          + (f" | llm: {e['llm']['what']}, {e['llm']['material']}, conf {e['llm']['confidence']}" if "llm" in e else "")
+                          + (f" | generic {e['llm']['jev']['generic_type_id']} -> Jev {e['llm']['jev']['suggested_destination']}"
+                             f" ({e['llm']['jev']['suggestion_confidence']}) vs truth rule {g.get('rule')}" if e.get("llm", {}).get("jev") else ""))
         total += rows
         print(summarize(Path(config).stem, rows))
     if len(pairs) > 1:

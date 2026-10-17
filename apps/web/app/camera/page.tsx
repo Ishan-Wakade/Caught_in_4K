@@ -14,6 +14,8 @@ import type { BinType } from "@/lib/types";
 const HOLD_MS = 800;
 
 const BIN_TYPE: Record<string, BinType> = { recycle: "recycling", compost: "compost", trash: "trash" };
+/** Who answered: CLIP on this device, or DeepSeek + Jev on the server (the full model). */
+const SOURCE: Record<string, string> = { clip: "on-device CLIP", llm: "DeepSeek + Jev", catalog: "DeepSeek", default: "not sure: trash" };
 
 function useHeldBanner(banner: Banner | null): Banner | null {
   const key = banner ? JSON.stringify(banner) : null;
@@ -69,6 +71,9 @@ function BinBanner({ banner, status, error }: { banner: Banner | null; status: G
       <div className="mt-2 text-[clamp(22px,2.4vw,34px)] leading-snug text-card">
         {explanation.charAt(0).toUpperCase() + explanation.slice(1)}.
       </div>
+      {banner.source && SOURCE[banner.source] ? (
+        <div className="mt-1 font-mono text-[15px] text-card/75">{SOURCE[banner.source]}</div>
+      ) : null}
     </div>
   );
 }
@@ -77,7 +82,7 @@ export default function CameraPage() {
   const visible = usePageVisible();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { status, progress, people, banner, error } = useBrowserGuide(visible, videoRef, canvasRef);
+  const { status, progress, people, banner, error, smart, sound, enableSound } = useBrowserGuide(visible, videoRef, canvasRef);
   const shown = useHeldBanner(status === "live" ? banner : null);
   const dot = status === "live" ? "bg-compost" : status === "loading" || status === "starting" ? "bg-muted-2" : "bg-clay";
 
@@ -103,7 +108,18 @@ export default function CameraPage() {
       >
         <span className={`h-3 w-3 rounded-full ${dot}`} />
         {statusText(status, people, progress)}
+        {smart ? " · DeepSeek + Jev" : ""}
       </span>
+      {smart ? (
+        <button
+          type="button"
+          onClick={enableSound}
+          aria-pressed={sound}
+          className="absolute top-20 right-10 z-10 min-h-11 rounded-full bg-black/45 px-5 font-mono text-[17px] text-card"
+        >
+          {sound ? "🔊 Sound on" : "🔇 Sound off"}
+        </button>
+      ) : null}
 
       <div aria-live="polite">
         <BinBanner banner={shown} status={status} error={error} />

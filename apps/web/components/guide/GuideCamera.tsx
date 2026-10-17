@@ -6,6 +6,7 @@
  * falling back to the phone's own voice. Hand crops leave the phone only with every head and face blacked out.
  */
 import { FaceDetector, FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { FACE_MODEL, redactedCrop } from "@/lib/guide/redact";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { distanceM, Tracker, type Box } from "@/lib/guide/approach";
 import { spoken, type GuideMessage } from "@/lib/guide/message";
@@ -13,7 +14,6 @@ import { fromMediaPipe, GuideSession } from "@/lib/guide/session";
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm";
 const POSE_MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
-const FACE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.task";
 const SILENCE = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7pyn3Xf//WreyTRUoAWgBgkOAGbZHBgG1OF6zM82DWbZaUmMBptgQhGjsyYqc9ae9XFz280948NMBWInljyzsNRFLPWdnZGWrddDsjK1unuSrVN9jJsK8KuQtQCtMBjCEtImISdNKJOopIpBFpNSMbIHCSRpRR5iakjTiyzLhchUUBwCgyKiweBv/7UsQbg8isVNoMPMjAAAA0gAAABEVFGmgqK////9bP/6XCykxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 
 type LogLine = { t: number; text: string; source: string; ms?: number };
@@ -83,30 +83,8 @@ export default function GuideCamera() {
     setLog((l) => [{ t: Date.now(), text, source, ms: Math.round(performance.now() - started) }, ...l].slice(0, 6));
   }, [token]);
 
-  const capture = useCallback((box: Box, heads: Array<{ box: Box; reliable: boolean }>): string | null => {
-    const video = videoRef.current, face = faceRef.current;
-    if (!video || !face) return null;  // no face detector: nothing may leave the phone (fail closed)
-    const w = box.x1 - box.x0, h = box.y1 - box.y0;
-    const s = Math.min(1, 320 / Math.max(w, h));
-    const c = document.createElement("canvas");
-    c.width = Math.round(w * s);
-    c.height = Math.round(h * s);
-    const g = c.getContext("2d")!;
-    g.drawImage(video, box.x0, box.y0, w, h, 0, 0, c.width, c.height);
-    g.fillStyle = "#000";
-    for (const hd of heads) {
-      const b = hd.box;
-      const touches = b.x1 > box.x0 && b.y1 > box.y0 && b.x0 < box.x1 && b.y0 < box.y1;
-      if (!touches) continue;
-      if (!hd.reliable) return null;  // a head we cannot size touches the crop: drop it
-      g.fillRect((b.x0 - box.x0) * s, (b.y0 - box.y0) * s, (b.x1 - b.x0) * s, (b.y1 - b.y0) * s);
-    }
-    for (const d of face.detect(c).detections) {
-      const bb = d.boundingBox;
-      if (bb) g.fillRect(bb.originX - 4, bb.originY - 4, bb.width + 8, bb.height + 8);
-    }
-    return c.toDataURL("image/jpeg", 0.8);
-  }, []);
+  const capture = useCallback((box: Box, heads: Array<{ box: Box; reliable: boolean }>): string | null =>
+    videoRef.current ? redactedCrop(videoRef.current, box, heads, faceRef.current) : null, []);
 
   const start = useCallback(async () => {
     if (!token) { setStatus("Add the demo key first (…/guide#key=…)."); return; }

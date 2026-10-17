@@ -133,14 +133,25 @@ export class Watcher {
     return p?.firstHeld == null ? 0 : t - p.firstHeld;
   }
 
+  /** When the current item was first seen in this person's hand (it identifies the item), or null. */
+  itemStart(id: number): number | null {
+    return this.people.get(id)?.firstHeld ?? null;
+  }
+
   answer(id: number): GuideMessage | null {
+    const cid = this.answerId(id);
+    return cid ? fromCatalog(cid, this.data) : null;
+  }
+
+  /** The catalog item the votes settled on, or null. */
+  answerId(id: number): string | null {
     const p = this.people.get(id);
     if (!p || p.nVotes < this.data.constants.min_votes) return null;
     const total = p.votes.reduce((a, b) => a + b, 0);
     if (total <= 0) return null;
     const k = p.votes.reduce((best, v, i) => (v > p.votes[best] ? i : best), 0);
     const cid = this.data.cats[k];
-    return p.votes[k] / total >= this.data.constants.known_p && cid in this.data.table ? fromCatalog(cid, this.data) : null;
+    return p.votes[k] / total >= this.data.constants.known_p && cid in this.data.table ? cid : null;
   }
 
   /** Hold-up demo only (not in the worker): an empty hand for `after` seconds starts a new item. */

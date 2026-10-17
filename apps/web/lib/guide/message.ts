@@ -45,7 +45,7 @@ function placed(bin: Exclude<Bin, "none">, what: string): GuideMessage {
 }
 
 export function fromCatalog(id: string): GuideMessage {
-  const row = TABLE[id];
+  const row = Object.hasOwn(TABLE, id) ? TABLE[id] : undefined;
   if (!row) throw new Error(`not in the bin table: ${id}`);
   return placed(row.bin, row.name);
 }

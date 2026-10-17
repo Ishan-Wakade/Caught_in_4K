@@ -6,7 +6,7 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { identify as realIdentify, type Keys, type Result } from "./identify";
-import { defaultTrash, spoken, validateMessage, type GuideMessage } from "./message";
+import { defaultTrash, fromCatalog, spoken, validateMessage, type GuideMessage } from "./message";
 
 const MAX_CROPS = 3;
 const MAX_CROP_CHARS = 300_000; // ~220 KB of JPEG per crop (the phone sends ~320 px crops)
@@ -111,6 +111,8 @@ export async function handleSpeak(request: Request, fetchFn: Fetch = fetch as un
     const body = await json(request, 4_000);
     if (body?.kind === "default") {
       msg = defaultTrash(null);  // the phone's fixed fallback: requested by name, never as free text
+    } else if (body?.kind === "catalog") {
+      msg = fromCatalog(String(body.id));  // the camera's on-device catalog answer: also fixed text, by id
     } else {
       msg = body?.message;
       validateMessage(msg);

@@ -39,15 +39,17 @@ The announcement path must use only current and past frames. Measure throughput 
 
 ## Destination and speech policy
 
-Use structured JSON validated against an explicit destination enum before speaking. The normal message is:
+Use structured JSON validated against an explicit destination enum before speaking. The normal message is (team, 17 Oct evening):
 
 ```json
-{"bin": "recycle", "explanation": "aluminum can, placed in recycling"}
+{"bin": "recycle", "item": "aluminum can", "place": "recycling", "reason": "metal cans are recyclable in Cambridge"}
 ```
 
-- Ordinary first words are exactly `compost`, `trash`, or `recycle`, followed by a short explanation of at most eight words.
+spoken as "Recycling. Aluminum can should be placed in recycling because metal cans are recyclable in Cambridge."
+
+- The first word is `Recycling`, `Compost`, or `Trash` (`None` for dangerous items); the item is at most six words and the reason at most fourteen. Catalog reasons are fixed per item in the bin table (written from each item's rule basis); for a new item the vision LLM (Claude Haiku 5.5 by default; DeepSeek optional) writes a reason for each destination and the reason of the destination Jev chooses is spoken.
 - Per the later team decision, when the best answer is below 50% confidence or no answer is ready on arrival, announce `trash`. This supersedes the draft's earlier silence fallback. Log that fallback; do not present its confidence as calibrated accuracy.
-- For recognized items that local rules exclude from all three bins, the first word is `None`. Explain that the item is dangerous in these bins and name the disposal location from the local rules. This special-disposal message is the exception to the ordinary three-word enum and short-explanation template. Preserve an already known special-disposal determination when handling uncertainty or delays elsewhere in the pipeline.
+- For recognized items that local rules exclude from all three bins, the first word is `None`, the place is the disposal location from the local rules, and the reason is that the item is dangerous in any of these bins. Preserve an already known special-disposal determination when handling uncertainty or delays elsewhere in the pipeline.
 - The site's official local rules are the common standard for catalog entries and Jev suggestions. The demo source is `worker/rules/cambridge-ma-2022.md`; its age and applicability must be checked for the intended deployment. If the rules do not decide a case, record that ambiguity and obtain a human decision.
 
 ## Data and deployment

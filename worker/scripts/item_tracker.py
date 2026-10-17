@@ -142,7 +142,7 @@ def perceive(video: Path, cache: Path, sam, pose, clip, min_area: float = MIN_AR
         kps.append(kp)
         i += 1
         if i % 50 == 0:
-            print(f"  {video.stem}: {i} frames", flush=True)
+            print(f"  {cache.stem}: {i} frames", flush=True)
     data = {"boxes": np.array(boxes, np.float32).reshape(-1, 5), "src": np.array(src, np.int8),
             "emb": np.array(emb, np.float16).reshape(-1, 512), "kps": np.array(kps, np.float32), "fps": np.float32(fps),
             "size": np.array([w, h])}
@@ -529,6 +529,7 @@ ARMS = [(5, 7), (7, 9), (6, 8), (8, 10)]
 
 
 def render(video: Path, out: Path, data, bins, tracks, per_frame, roles, events):
+    title = out.stem.removesuffix("_items")
     cap = cv2.VideoCapture(str(video))
     w, h = (int(v) for v in data["size"])
     fps = float(data["fps"])
@@ -578,7 +579,7 @@ def render(video: Path, out: Path, data, bins, tracks, per_frame, roles, events)
                 text(f, f"DROP item {names[e['item_id']]} -> {e['bin']}: {e['item']} (rule {e['item_bin_rule']}, {e['how']})",
                      (int(30 * big), h - int(60 * big)), (80, 255, 80), ts)
         seen = sorted({names[identity[t]] for t2 in range(i + 1) for _, t, _ in data["_links"][t2] if t in identity})
-        text(f, f"{video.stem}  frame {i}  brought by a person: {', '.join(seen) or '-'}  drops {sum(e['frame'] <= i for e in events)}",
+        text(f, f"{title}  frame {i}  brought by a person: {', '.join(seen) or '-'}  drops {sum(e['frame'] <= i for e in events)}",
              (int(30 * big), int(60 * big)), (255, 255, 255), ts)
         ff.stdin.write(f.tobytes())
         i += 1
@@ -602,17 +603,17 @@ def main():
     rows, score = [], {"strict": [0, 0, 0], "loose": [0, 0, 0]}  # tp, fn, fp
     for name, spec in config.items():
         video = Path(spec["video"]).expanduser()
-        cache = out_dir / "cache" / f"{video.stem}.npz"
+        cache = out_dir / "cache" / f"{name}.npz"  # config name: several clips may share a file name (video.mp4)
         if not cache.exists() and sam is None:
             sam, pose = FastSAM(str(WORKER / "weights/FastSAM-s.pt")), YOLO(str(WORKER / "weights/yolo11n-pose.pt"))
         data = perceive(video, cache, sam, pose, clip, spec.get("min_item_area", MIN_AREA))
         n = len(data["kps"])
         bins = {b["bin_id"]: keyframe_boxes(b, n) for b in spec["bins"]}
-        motion = ego_motion(video, out_dir / "cache" / f"{video.stem}_motion.npy")
+        motion = ego_motion(video, out_dir / "cache" / f"{name}_motion.npy")
         tracks, per_frame = track(data, bins, scorer, motion)
         events, roles = decide(tracks, data, bins, float(data["fps"]), motion, per_frame)
         if "--no-video" not in sys.argv:
-            render(video, out_dir / f"{video.stem}_items.mp4", data, bins, tracks, per_frame, roles, events)
+            render(video, out_dir / f"{name}_items.mp4", data, bins, tracks, per_frame, roles, events)
         count = {r: sum(v == r for v in roles.values()) for r in ("carried", "re-found", "already in bin")}
         count["items brought"] = len(set(data["_identity"].values()))
         results[name] = {"events": events, "roles": count,

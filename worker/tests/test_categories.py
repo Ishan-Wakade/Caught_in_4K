@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from fakes import BLUE, GREEN, RED, FakeEmbedder, solid
 
-from recyclone_worker.categories import GENERIC_PROMPTS, CategoryClassifier
+from recyclone_worker.categories import GENERIC_PROMPTS, ITEM_PROMPTS, PRODUCT_PROMPTS, CategoryClassifier
 from recyclone_worker.events import build_event, validate_event
 from recyclone_worker.identify import Gallery, identify
 
@@ -66,3 +66,12 @@ def test_every_generic_category_is_in_the_catalog(contracts_dir):
         assert cid in catalog, cid
         assert catalog[cid]["business_id"] is None, f"{cid}: generic categories belong to no business"
         assert prompts and all(isinstance(p, str) and p for p in prompts)
+
+
+def test_products_are_described_without_registration(contracts_dir):
+    """Branded catalog items get text descriptions, so they can be recognized with no photos registered."""
+    catalog = {i["catalog_item_id"]: i for i in json.loads((contracts_dir / "fixtures/demo-site.json").read_text())["catalog"]}
+    for cid in PRODUCT_PROMPTS:
+        assert cid in catalog, cid
+    assert "item_shakeshack_cup" in PRODUCT_PROMPTS and catalog["item_shakeshack_cup"]["business_id"] == "biz_shakeshack"
+    assert set(ITEM_PROMPTS) == set(PRODUCT_PROMPTS) | set(GENERIC_PROMPTS)

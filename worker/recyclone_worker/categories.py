@@ -1,4 +1,4 @@
-"""Generic categories for items that are not registered: offline CLIP zero-shot over text prompts.
+"""Recognize items from text descriptions: offline CLIP zero-shot, no photos needed.
 
 Registered products (reference gallery) come first: they are exact. When none matches well enough,
 the crop is compared with short descriptions of generic categories, each of which is a catalog item
@@ -26,10 +26,26 @@ GENERIC_PROMPTS: dict[str, list[str]] = {
 }
 
 
-class CategoryClassifier:
-    """Zero-shot over GENERIC_PROMPTS. `embedder` needs embed(image) and embed_text(list[str])."""
+# Specific catalog products described in words, so they are recognized with NO registered photos.
+# 16 Oct test on Eymen's real items, nothing registered: 5/7 right (Shake Shack box, Biscoff,
+# Goldfish, Quaker, logo-side Shake Shack cup); a side-on cup fell back to the generic cup and the
+# sauce cup to "plastic container". Registered photos, when present, still take priority.
+PRODUCT_PROMPTS: dict[str, list[str]] = {
+    "item_shakeshack_cup": ["a Shake Shack plastic cup", "a clear cup with the Shake Shack burger logo"],
+    "item_shakeshack_box": ["a Shake Shack burger box", "a kraft paper box with the Shake Shack logo"],
+    "item_biscoff_wrapper": ["a Lotus Biscoff cookie wrapper", "a red Biscoff wrapper"],
+    "item_goldfish_bag": ["a Goldfish crackers bag", "a Pepperidge Farm Goldfish snack bag"],
+    "item_granola_wrapper": ["a Quaker Chewy granola bar wrapper"],
+    "item_sauce_cup": ["a small plastic sauce cup with a lid", "a condiment portion cup"],
+}
 
-    def __init__(self, embedder, prompts: dict[str, list[str]] = GENERIC_PROMPTS, logit_scale: float = 100.0):
+ITEM_PROMPTS: dict[str, list[str]] = {**PRODUCT_PROMPTS, **GENERIC_PROMPTS}
+
+
+class CategoryClassifier:
+    """Zero-shot over ITEM_PROMPTS (products + generic categories). `embedder` needs embed(image) and embed_text(list[str])."""
+
+    def __init__(self, embedder, prompts: dict[str, list[str]] = ITEM_PROMPTS, logit_scale: float = 100.0):
         self.embedder, self.logit_scale = embedder, logit_scale
         self.flat = [(cid, p) for cid, ps in prompts.items() for p in ps]
         self.ids = list(prompts)

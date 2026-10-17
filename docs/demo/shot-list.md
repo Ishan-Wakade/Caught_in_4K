@@ -1,5 +1,9 @@
 # Demo filming plan (Agent E)
 
+**Minimum needed from the team: Clip 2 (the demo) only.** Items are recognized from text
+descriptions with no photos registered (16 Oct test: 5/7 brands right, the rest fell back to the
+right generic category). Clip 1 is an optional accuracy boost; no training clip is needed.
+
 Two clips, same camera, same spot, same light. **Do not move the camera between them or after
 calibrating**: the bin regions are stored as fractions of the frame.
 
@@ -16,7 +20,7 @@ calibrating**: the bin regions are stored as fractions of the frame.
   (`item_granola_wrapper`). Also bring **a plain clear cup with no logo** (`item_generic_cup`) and
   **one thing that is not in the catalog** (e.g. a receipt balled up, or a paper napkin).
 
-## Clip 1: enrollment (`enroll.mp4`, ~1 min)
+## Clip 1 (optional): enrollment (`enroll.mp4`, ~1 min)
 
 Hold each catalog item in front of the bins, at the height where you will drop it, for 6 seconds,
 turning it slowly (front, side, back, crumpled if it crumples). Say its name out loud at the start so

@@ -1,0 +1,8 @@
+{
+  // `pnpm typecheck`: the web app's own code only. Next's generated .next/types
+  // import I's API routes (app/api), which are type-checked by I (packages/core
+  // tsconfig.api.json); `next build` still checks everything.
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "app/api", ".next"]
+}

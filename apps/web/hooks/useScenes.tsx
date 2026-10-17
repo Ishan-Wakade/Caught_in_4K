@@ -18,8 +18,7 @@ import {
   type Scene,
 } from "@/lib/sceneDirector";
 
-// bins is "/" now — it swapped routes with Overview (2026-10-17).
-export const SCENE_PATH: Record<Scene, string> = { live: "/live", bins: "/" };
+export const SCENE_PATH: Record<Scene, string> = { live: "/live", bins: "/bins" };
 
 export function sceneForPath(path: string): Scene | null {
   return (Object.keys(SCENE_PATH) as Scene[]).find((s) => SCENE_PATH[s] === path) ?? null;

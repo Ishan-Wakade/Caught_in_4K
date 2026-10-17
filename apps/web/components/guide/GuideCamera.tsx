@@ -47,8 +47,13 @@ export default function GuideCamera() {
   const faceRef = useRef<FaceDetector | null>(null);
 
   useEffect(() => {
-    const k = new URLSearchParams(window.location.search).get("key");
-    if (k) setToken(k);
+    // The key travels in the URL fragment (#key=…), which browsers never send to the server; it is stored on this
+    // phone and erased from the address bar at once. An old ?key= link still works once and is erased the same way.
+    const k = new URLSearchParams(window.location.hash.slice(1)).get("key") ?? new URLSearchParams(window.location.search).get("key");
+    if (k) {
+      setToken(k);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     try { areaRef.current = areaText ? JSON.parse(areaText) : null; } catch { areaRef.current = null; }
   }, [areaText]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -104,7 +109,7 @@ export default function GuideCamera() {
   }, []);
 
   const start = useCallback(async () => {
-    if (!token) { setStatus("Add the demo key first (…/guide?key=…)."); return; }
+    if (!token) { setStatus("Add the demo key first (…/guide#key=…)."); return; }
     const audio = audioRef.current!;
     audio.src = SILENCE;
     audio.play().catch(() => {});                        // unlock audio on iOS (needs this tap)

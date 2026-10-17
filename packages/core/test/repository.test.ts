@@ -1,4 +1,6 @@
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
+import { CORE_STATE_MIGRATION } from "../src/migration.js";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { PostgresRepository, type SqlPool } from "../src/repository.js";
@@ -22,4 +24,9 @@ test("Postgres migration, persistence across repository instances and transactio
     const rows = await db.query<{ revision: number }>("SELECT revision FROM recyclone_core_state");
     assert.equal(Number(rows.rows[0].revision), 3);
   } finally { await db.close(); }
+});
+
+test("bundled migration matches the standalone SQL migration", async () => {
+  const sql = await readFile(new URL("../migrations/001_core_state.sql", import.meta.url), "utf8");
+  assert.equal(CORE_STATE_MIGRATION, sql);
 });

@@ -19,23 +19,34 @@
   duplicated types file stays deleted.
 - Root environment example now uses S's real Spectrum variable names and lists
   core runtime/contact mapping options, without credentials.
-- Regenerated the workspace lockfile to include S and the test dependency. The
-  optional protobufjs postinstall only prints dependency-version advice; explicitly
-  disabling it makes installation reproducible without running that script.
+- Main's workspace manifests and lockfile already include the required dependencies.
+  The explicit policy disabling the optional protobufjs advisory is preserved.
+- PostgreSQL migration SQL is bundled as TypeScript data, avoiding webpack
+  rewriting a filesystem URL into an asset URL. A parity test keeps it synchronized
+  with the standalone SQL migration.
 
 ## Cross-area edits
 
 The user explicitly authorized fixing what was needed after being asked about the
 ownership restriction. Exceptions are limited to Photon reply wiring/mock handler,
-S's shared-interface imports/package dependency/documentation, the environment
-example, workspace build policy, and the generated lockfile. Worker, shared
+S's integration documentation, the environment example, and a workspace build-policy
+comment. Main's shared-contract imports and lockfile were retained. Worker, shared
 contracts/fixtures, and J's dashboard implementation were not edited.
 
 ## Verification
 
 Rebased on main at `8e8e016`, preserving J's dashboard and upstream integration
-changes. Checks are rerun after conflict resolution; results are recorded below.
-No live external message or deployment is performed by this change.
+changes. All 49 core tests passed with zero skips, including isolated PostgreSQL
+and E's Python HTTP client. Integrations: 23 tests; contracts: 55; dashboard: 34.
+All package/API type checks, the integrations build, frozen install, and the
+Next.js production build passed.
+
+The built Next.js app was run against isolated PostgreSQL over HTTP. It accepted
+11 synthetic events and deduplicated their replay, enforced manager auth, applied
+J's reported "DONE, sign is up at the counter" confirmation, reset one named bin
+while preserving other bins/history, and served the review queue and Live page.
+Photon and image generation were mocked throughout. No external messages were
+sent and no deployment was performed.
 
 Core suite includes real isolated PostgreSQL tests and a Python HTTP-client test
 that imports E's actual client, posts all 11 synthetic events through the API and
@@ -53,6 +64,9 @@ pnpm --filter @recyclone/contracts test
 pnpm --filter @recyclone/contracts typecheck
 pnpm --filter @recyclone/integrations test
 pnpm --filter @recyclone/integrations typecheck
+pnpm --filter @recyclone/web test
+pnpm --filter @recyclone/web typecheck
+pnpm --filter @recyclone/web build
 ```
 
 Set `CORE_TEST_DATABASE_URL` to a disposable PostgreSQL instance and

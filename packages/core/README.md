@@ -91,7 +91,8 @@ Core tests also run E's published cross-language parity cases.
 
 Memory storage is single-process and nonpersistent. It is not suitable for a
 multi-instance Vercel deployment. Persistent state uses an idempotent SQL migration
-in `migrations/001_core_state.sql`.
+in `migrations/001_core_state.sql`. Runtime SQL is bundled from `src/migration.ts`
+to work inside Next/webpack; a test enforces parity with the standalone SQL file.
 
 The manager token is not a complete role/authentication system. API reads currently
 follow the draft contract without authentication; deployment access control remains

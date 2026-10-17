@@ -61,6 +61,7 @@ What exists (branch `j/dashboard-scaffold`), and what is still provisional:
 - `NEXT_PUBLIC_DATA_SOURCE=mock` (default) runs `lib/mock/` (a ~3-minute scripted run on E's demo site covering all six scenarios); `api` calls I's routes. Both produce the view models in `lib/view.ts`.
 - `lib/adapters/core.ts` converts the contract DTOs (`contracts/src/api.ts`, which core returns) into those view models. Tested against responses captured from a running core on E's site file (`lib/adapters/__fixtures__/core-responses.json`). Gaps the contract leaves, and how the UI fills them: per-item bin counts (the Bins page counts this session's feed), interventions on the item list (`lib/api.ts` fetches item details), outcome / labeled input / mocked on feed items (parsed from core's summary text).
 - The web package depends on `@recyclone/contracts`, `@recyclone/core` and `@recyclone/integrations` (for the API routes I and S own under `app/api/`), all in `transpilePackages`.
+- Write routes (catalog, reviews, demo reset, mock reply) require `MANAGER_API_TOKEN`; the mock reply also needs `ENABLE_MOCK_REPLY=true` on the server (S's guard). The dashboard never bundles the token: on the first 401 it asks for it (`lib/managerToken.ts`) and keeps it in the tab's sessionStorage.
 - `lib/site.ts` reads business names, contact names, and demo-profile settings from `contracts/fixtures/demo-site.json`, because core's API does not return them.
 - Toast and unseen-tab logic: `lib/sceneDirector.ts` (pure, tested; never changes the page).
 - One app-wide `/api/feed` poller (`hooks/useFeed.tsx`, ~1 s) runs on every page, driving the backend's lazy time-based work. The first load is backlog and raises no toasts or tab dots.
@@ -74,7 +75,7 @@ What exists (branch `j/dashboard-scaffold`), and what is still provisional:
 
 **Requests to other owners (not edited by J):**
 
-- **S/I:** `POST /api/photon/mock-reply` exists but fails: "No ReplySink wired yet" (`app/api/photon/_replySink.ts` still waits for core's `createCore`). Until it's wired, the dashboard's mock reply box shows that error in api mode (mock mode is unaffected).
+- **S/I:** with core in demo memory mode and one open Bean Co. recommendation, `POST /api/photon/mock-reply` `{contactId: "ct_beanco_mgr", body: "DONE, sign is up at the counter"}` returns `needs_clarification` (core sends a clarification text) instead of recording an intervention, although "done" is a confirmation keyword. Likely the open-alert lookup passed to the interpreter is empty; not debugged by J.
 - **E (contract):** `BinSummary` has only `observed_count`; add per-item counts so the Bins page needn't rebuild them from the feed. `FeedItem` has no `outcome`, `source_mode` or `mocked`; core puts them in `summary` text ("(incorrect)", "[labeled backup input]", "(mocked)"), which J parses. `FeedResponse` has no `demo` flag. `AlertSummary` has no contact or business names (J reads them from the site file).
 - **I:** outbound message bodies still carry an `[alert_id]` prefix (J hides it), and `trigger` is the whole message body (J shows its first sentence).
 - **E:** clarify whether `evidence[].uri` includes the `evidence/` prefix (the §1 sample does; §4 serves `/evidence/<path>`). J accepts both.

@@ -5,6 +5,7 @@
  * MockBackend so the dashboard runs without a backend.
  */
 import { DATA_SOURCE } from "./config";
+import { askForManagerToken, getManagerToken } from "./managerToken";
 import { MockBackend } from "./mock/backend";
 import type { CatalogItem as ContractCatalogItem, ItemDetail as ContractItemDetail, ItemSummary as ContractItemSummary } from "@recyclone/contracts";
 import * as core from "./adapters/core";
@@ -44,7 +45,19 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-const post = <T,>(path: string, body: unknown) => http<T>(path, { method: "POST", body: JSON.stringify(body) });
+/** Write routes need the manager token; ask for it once if the server refuses, then retry. */
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const send = (token: string | null) =>
+    http<T>(path, { method: "POST", body: JSON.stringify(body), headers: token ? { authorization: `Bearer ${token}` } : {} });
+  try {
+    return await send(getManagerToken());
+  } catch (e) {
+    if (!(e instanceof Error) || !/ → 401/.test(e.message)) throw e;
+    const token = askForManagerToken("This action needs the area manager's token.");
+    if (!token) throw new Error("Cancelled: this action needs the manager token.");
+    return send(token);
+  }
+}
 
 // Core's catalog is needed to name things in several responses; cache it briefly.
 let catalogCache: { at: number; items: Promise<CatalogItem[]> } | null = null;

@@ -94,12 +94,15 @@ labels are fine for generic variants.
 
 ## 4. Scenario mix (fixed BEFORE generating; same proportions in every split)
 
+*v2 change (16 Oct, made before any v2 data existed): "clean" 25% → 21%, new "several items dumped at once" 4%.*
+
 Each clip is 20–40 s with 1–5 throws and at least 2 s of empty scene at the start (the worker's
 background model needs it).
 
 | Scenario | Share | Ground truth |
 |---|---|---|
-| clean throw/drop into a bin | 25% | disposal, that bin |
+| clean throw/drop into a bin | 21% | disposal, that bin |
+| several items dumped at once from one hand/bag | 4% | one disposal per item that stays in |
 | underhand toss from 1–2 m | 10% | disposal or miss, as physics decides |
 | bounces off the rim **and falls in** | 8% | disposal |
 | bounces off the rim **and lands on the floor** | 8% | **no disposal** |

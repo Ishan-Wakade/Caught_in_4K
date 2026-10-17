@@ -30,6 +30,7 @@ Environment (see the root `.env.example`): `API_BASE_URL`, `WORKER_INGEST_TOKEN`
 | `uv run recyclone-worker suggest-thresholds --gallery state/gallery.npz` | Calibrate core's confidence thresholds for CLIP (TACO litter as not-in-catalog examples) |
 | `... run ... --tracker motion` | Background-subtraction tracker near the bins, for items YOLO can't name (wrappers, bags) |
 | `... run ... --tracker world` | YOLO-World with packaging prompts (slower; compare on real footage) |
+| `... run --tracker items --namer deepseek --local-rules rules/cambridge-ma-2022.md` | Items not in the catalog get a proposed generic type (DeepSeek) and a suggested bin under the local rules (Jev), sent as `item.proposed_type` for the area manager to approve. Keys: `~/.config/recyclone/{deepseek,jev}.env`. |
 | `... run ... --no-categories` | Report unregistered items as unknown instead of a generic category (on by default) |
 | `uv run recyclone-worker run --tracker items --clip demo.mp4 --clip-id clip_demo_v1 --realtime` | **Best on real footage.** Item tracker: analyzes the whole clip first (~0.4 s per frame, cached in `state/items-cache/`, so run it once before the demo), then plays it at clip speed, sending each drop's event when the video reaches it. Bins come from `demo-site.json`; `--item-bins state/my.json` gives per-frame boxes for a moving camera. `--gallery` is ignored (items are named from text). |
 

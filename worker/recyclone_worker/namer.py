@@ -34,6 +34,17 @@ Catalog (id: description):
 {catalog}
 Answer JSON only: {{"catalog_item_id": id or null, "what": "short description of the object", "material": "main material", "brand_visible": "brand or null", "confidence": 0.0-1.0}}"""
 
+# Asked separately (not appended to PROMPT): on 17 Oct, adding these lines to the catalog prompt dropped catalog
+# naming on the dev drops from 9/10 to 6/10, because the model then answered "none fits" more often.
+GENERIC_PROMPT = """These {n} images are crops of ONE object a person is carrying to a waste bin (a hand may be in the crop).
+Describe the object generically, for deciding which waste bin it belongs in:
+- name: short generic name including its use ("disposable face mask", "paper takeout box", "paper coffee cup")
+- material: one of plastic_film, rigid_plastic, paper, cardboard, metal, glass, organic, textile, foam, mixed, unknown
+- form: one word for its shape or use ("cup", "bag", "mask", "wrapper", "box", "napkin", "bottle", "glove", "battery")
+- condition: one of clean, food_residue, liquid, unknown (only what you can see)
+- hazardous: true only for batteries, electronics, chemicals, needles, or items labeled hazardous
+Answer JSON only: {{"name": "...", "material": "...", "form": "...", "condition": "...", "hazardous": false}}"""
+
 
 def api_key() -> str | None:
     key = os.environ.get("DEEPSEEK_API_KEY")
@@ -76,15 +87,19 @@ class DeepSeekNamer:
 
     def name(self, crops: list[np.ndarray]) -> dict | None:
         """{"catalog_item_id", "what", "material", "brand_visible", "confidence"} or None (no key, error, bad answer)."""
+        return self._ask(crops, PROMPT)
+
+    def _ask(self, crops: list[np.ndarray], template: str, raw: bool = False) -> dict | None:
         if not crops:
             return None
         images = [_jpeg(c) for c in crops]
-        prompt = PROMPT.format(n=len(images), catalog="\n".join(f"{cid}: {name}" for cid, name in self.catalog))
+        prompt = template.format(n=len(images), catalog="\n".join(f"{cid}: {name}" for cid, name in self.catalog))
         key = hashlib.sha256(json.dumps([MODEL, prompt] + ([] if THINKING else ["no-think"])).encode() + b"".join(images)).hexdigest()[:24]
         cached = self.cache_dir / f"{key}.json"
         if cached.exists():
             self.usage["cached"] += 1
-            return self._clean(json.loads(cached.read_text()))
+            a = json.loads(cached.read_text())
+            return (a if isinstance(a, dict) else None) if raw else self._clean(a)
         if not self.key:
             return None
         content = [{"type": "text", "text": prompt}] + [
@@ -111,7 +126,11 @@ class DeepSeekNamer:
                     print(f"note: DeepSeek naming failed ({type(e).__name__}); keeping the CLIP item", file=sys.stderr)
                     return None
         cached.write_text(json.dumps(answer))
-        return self._clean(answer)
+        return (answer if isinstance(answer, dict) else None) if raw else self._clean(answer)
+
+    def describe(self, crops: list[np.ndarray]) -> dict | None:
+        """The generic description (GENERIC_PROMPT) of the same crops, or None. Its own call and cache entry."""
+        return self._ask(crops, GENERIC_PROMPT, raw=True)
 
     def _clean(self, a: dict) -> dict | None:
         if not isinstance(a, dict):
@@ -132,8 +151,11 @@ def item_from_answer(answer: dict, clip_item: dict) -> dict:
     cid, conf = answer["catalog_item_id"], answer["confidence"]
     lead = [{"catalog_item_id": cid, "score": round(conf if conf is not None else 0.0, 4)}] if cid else []
     rest = [c for c in clip_item.get("candidates", []) if c["catalog_item_id"] != cid]
-    return {"catalog_item_id": cid, "label": answer.get("what"), "confidence": round(conf, 4) if (cid and conf is not None) else None,
+    item = {"catalog_item_id": cid, "label": answer.get("what"), "confidence": round(conf, 4) if (cid and conf is not None) else None,
             "candidates": lead + rest}
+    if cid is None and answer.get("proposed_type"):  # not in the catalog: a generic type proposal (contract §1.1)
+        item["proposed_type"] = answer["proposed_type"]
+    return item
 
 
 def pick_views(tracks: list[dict], per_frame: list, data: dict, bins: dict, item_id: int, until: int, k: int = 3,

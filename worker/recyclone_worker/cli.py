@@ -168,10 +168,28 @@ def cmd_run_items(args, analyze_items=None) -> int:
         llm = DeepSeekNamer(WORKER_DIR / "state/vlm-cache")
         if not llm.available:
             print("note: --namer deepseek but no DEEPSEEK_API_KEY (env or ~/.config/recyclone/deepseek.env); items named by CLIP", file=sys.stderr)
+        advisor = None
+        if args.local_rules:
+            from .generic import BinAdvisor
+
+            advisor = BinAdvisor(Path(args.local_rules), WORKER_DIR / "state/generic-types.json")
+            if not advisor.available:
+                print("note: no TYPESAFE_API_KEY (env or ~/.config/recyclone/jev.env); new item types get no bin suggestion", file=sys.stderr)
         for drop in analysis.events:
             views = pick_views(analysis.tracks, analysis.per_frame, analysis.data, analysis.bins, drop["item_id"], drop["frame"])
-            drop["llm"] = llm.name(read_crops(Path(args.clip), views))
-        print(f"DeepSeek naming: {llm.usage}", file=sys.stderr)
+            crops = read_crops(Path(args.clip), views)
+            drop["llm"] = llm.name(crops)
+            if drop["llm"] and drop["llm"]["catalog_item_id"] is None:  # not in the catalog: propose a generic type
+                from .generic import for_event, generic_type
+
+                drop["llm"]["generic"] = llm.describe(crops)
+                gt = generic_type(drop["llm"])
+                if gt is not None:
+                    drop["llm"]["proposed_type"] = for_event(advisor.suggest(gt) if advisor and advisor.available else gt)
+                    pt = drop["llm"]["proposed_type"]
+                    print(f"new item type {pt['generic_type_id']} ({pt['name']}): suggested {pt['suggested_destination']} "
+                          f"({pt['suggestion_confidence']}) under {pt['rule_source']}", file=sys.stderr)
+        print(f"DeepSeek naming: {llm.usage}" + (f"; Jev: {advisor.usage}" if advisor else ""), file=sys.stderr)
     unknown_bins = {e["bin"] for e in analysis.events} - {r.bin_id for r in site.regions}
     if unknown_bins:
         print(f"WARNING: bins not in {args.camera}'s site config (core will reject them): {sorted(unknown_bins)}", file=sys.stderr)
@@ -321,6 +339,9 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     run.add_argument("--namer", choices=["clip", "deepseek"], default="clip",
                      help="--tracker items: who names each dropped item. deepseek = vision LLM on crops of the item only "
                           "(key: DEEPSEEK_API_KEY or ~/.config/recyclone/deepseek.env; answers cached in state/vlm-cache)")
+    run.add_argument("--local-rules", default=str(WORKER_DIR / "rules/cambridge-ma-2022.md"),
+                     help="--namer deepseek: local rules text used to SUGGEST a bin for item types not in the catalog (Jev); "
+                          "'' to turn off")
     run.add_argument("--item-bins", help="--tracker items: bin boxes per frame (item-tracker config) for a moving camera; "
                                          "default: the camera's fixed bin regions from demo-site.json")
     enroll = sub.add_parser("enroll", help="build reference gallery from an enrollment clip")

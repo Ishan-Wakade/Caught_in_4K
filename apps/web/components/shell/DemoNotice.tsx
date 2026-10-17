@@ -26,7 +26,7 @@ export function DemoNotice() {
   const parts = [
     tools ? "Demo mode" : null,
     mockData
-      ? "Sample data: this site isn't connected to a camera"
+      ? "Sample data · not connected to a camera"
       : labeledInput
         ? "replaying the hand-labeled backup input, not live detection"
         : null,

@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useResource } from "@/hooks/useResource";
 import { api } from "@/lib/api";
 import { BIN_HEX, BIN_LABEL, cap, scoreLabel } from "@/lib/format";
 import type { BinType, Business, CatalogItem, ItemSummary } from "@/lib/types";
-import { BinTag, Empty, LoadError, Mono } from "@/components/ui";
+import { BinTag, Empty, LoadError } from "@/components/ui";
 
 const NEW: CatalogItem = {
   catalog_item_id: "",
@@ -67,7 +67,7 @@ function EditForm({ initial, isNew, businesses, onClose, onSaved }: { initial: C
     <form
       onSubmit={save}
       aria-labelledby="edit-h"
-      className="flex min-w-0 flex-[1_1_420px] flex-col gap-3.5 rounded-3xl bg-card px-[22px] py-5 shadow-[0_2px_4px_rgba(70,60,35,0.04),0_14px_36px_rgba(70,60,35,0.10)]"
+      className="flex min-w-0 max-w-2xl flex-col gap-3.5 rounded-3xl bg-card px-[22px] py-5 shadow-[0_2px_4px_rgba(70,60,35,0.04),0_14px_36px_rgba(70,60,35,0.10)]"
     >
       <div className="flex items-end justify-between gap-3">
         <div className="flex flex-col gap-0.5">
@@ -182,18 +182,28 @@ export default function CatalogPage() {
   if (!catalog.data) return <Empty title="Loading the catalog…" />;
 
   const scores = new Map((items.data?.items ?? []).map((i) => [i.catalog_item_id, i] as [string, ItemSummary]));
-  const groups = [
-    ...catalog.data.businesses.map((b) => ({ key: b.business_id, name: b.name, items: catalog.data!.items.filter((c) => c.business_id === b.business_id) })),
-    { key: "generic", name: "Generic packaging", items: catalog.data.items.filter((c) => !c.business_id) },
-  ].filter((g) => g.items.length);
+  const bizName = new Map(catalog.data.businesses.map((b) => [b.business_id, b.name]));
+  // One flat, sortable sheet — restaurant is a column, not a grouping.
+  const rows = [...catalog.data.items].sort((a, b) => {
+    const an = (a.business_id && bizName.get(a.business_id)) || "￿";
+    const bn = (b.business_id && bizName.get(b.business_id)) || "￿";
+    return an === bn ? a.name.localeCompare(b.name) : an.localeCompare(bn);
+  });
+
+  const closeEdit = () => setEditing(null);
+  const onSaved = () => {
+    setEditing(null);
+    catalog.reload();
+    items.reload();
+  };
 
   return (
-    <div className="mx-auto box-border flex w-full max-w-[1440px] flex-1 flex-col gap-4 px-10 pt-4 pb-[22px]">
+    <div className="mx-auto box-border flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-10 pt-4 pb-[22px]">
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2.5">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1 className="m-0 font-display text-[40px] leading-none font-extrabold">Catalog</h1>
           <span className="text-[15px] text-muted">
-            {catalog.data.items.length} kinds of packaging across {catalog.data.businesses.length} restaurants · pick one to edit
+            {catalog.data.items.length} kinds of packaging across {catalog.data.businesses.length} restaurants
           </span>
         </div>
         <button
@@ -204,73 +214,62 @@ export default function CatalogPage() {
         </button>
       </div>
 
-      <div className="flex flex-1 flex-wrap items-start gap-x-12 gap-y-6">
-        <div className="min-w-0 flex-[999_1_560px] overflow-x-auto">
-          <table className="w-full min-w-[540px] border-collapse text-base">
-            <thead>
-              <tr className="text-left">
-                <th scope="col" className="pr-3 pb-1.5 text-xs font-medium text-muted">Item</th>
-                <th scope="col" className="px-3 pb-1.5 text-xs font-medium text-muted">Belongs in</th>
-                <th scope="col" className="px-3 pb-1.5 text-right text-xs font-medium text-muted">Sorted correctly</th>
-                <th scope="col" className="pb-1.5 pl-3 text-right text-xs font-medium text-muted">Drops</th>
+      <div className="min-w-0 flex-1 overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-base">
+          <thead>
+            <tr className="text-left">
+              <th scope="col" className="border-b border-[#CFC5B1] pr-3 pb-1.5 text-xs font-medium text-muted">Item</th>
+              <th scope="col" className="border-b border-[#CFC5B1] px-3 pb-1.5 text-xs font-medium text-muted">Restaurant</th>
+              <th scope="col" className="border-b border-[#CFC5B1] px-3 pb-1.5 text-xs font-medium text-muted">Belongs in</th>
+              <th scope="col" className="border-b border-[#CFC5B1] px-3 pb-1.5 text-right text-xs font-medium text-muted">Sorted correctly</th>
+              <th scope="col" className="border-b border-[#CFC5B1] pb-1.5 pl-3 text-right text-xs font-medium text-muted">Drops</th>
+            </tr>
+          </thead>
+          <tbody>
+            {editing?.isNew && (
+              <tr>
+                <td colSpan={5} className="py-3">
+                  <EditForm key="new" initial={editing.item} isNew businesses={catalog.data.businesses} onClose={closeEdit} onSaved={onSaved} />
+                </td>
               </tr>
-            </thead>
-            {groups.map((g) => (
-              <tbody key={g.key}>
-                <tr>
-                  <th scope="rowgroup" colSpan={4} className="border-t border-[#CFC5B1] pt-4 pb-1 text-left font-display text-xl font-bold">{g.name}</th>
-                </tr>
-                {g.items.map((c, i) => {
-                  const on = editing && !editing.isNew && editing.item.catalog_item_id === c.catalog_item_id;
-                  const s = scores.get(c.catalog_item_id);
-                  const below = s && s.score.status === "ok" && s.score.percent < s.threshold_percent;
-                  return (
-                    <tr
-                      key={c.catalog_item_id}
-                      aria-selected={on || undefined}
-                      onClick={() => setEditing({ item: structuredClone(c), isNew: false })}
-                      className={`cursor-pointer ${on ? "bg-sage" : "hover:bg-paper-deep"} ${i ? "border-t border-rule-soft" : ""}`}
-                    >
-                      <td className="py-[9px] pr-3 pl-3">
-                        <button type="button" className={`cursor-pointer text-left ${on ? "font-bold text-forest-deep" : "text-ink"}`}>
-                          {g.key === "generic" ? c.name : cap(c.name.replace(`${g.name} `, ""))}
-                        </button>
-                        {on && <span className="text-xs text-forest"> · editing</span>}
-                        {c.condition_rule && <span className="block text-xs text-muted-2">only if: {c.condition_rule}</span>}
+            )}
+            {rows.map((c, i) => {
+              const on = editing !== null && !editing.isNew && editing.item.catalog_item_id === c.catalog_item_id;
+              const s = scores.get(c.catalog_item_id);
+              const below = s && s.score.status === "ok" && s.score.percent < s.threshold_percent;
+              const restaurant = c.business_id ? bizName.get(c.business_id) : undefined;
+              const name = restaurant ? cap(c.name.replace(`${restaurant} `, "")) : c.name;
+              return (
+                <Fragment key={c.catalog_item_id}>
+                  <tr
+                    aria-selected={on || undefined}
+                    onClick={() => setEditing(on ? null : { item: structuredClone(c), isNew: false })}
+                    className={`cursor-pointer ${on ? "bg-sage" : "hover:bg-paper-deep"} ${i || editing?.isNew ? "border-t border-rule-soft" : ""}`}
+                  >
+                    <td className="py-[9px] pr-3 pl-3">
+                      <button type="button" className={`cursor-pointer text-left ${on ? "font-bold text-forest-deep" : "text-ink"}`}>
+                        {name}
+                      </button>
+                      {on && <span className="text-xs text-forest"> · editing</span>}
+                      {c.condition_rule && <span className="block text-xs text-muted-2">only if: {c.condition_rule}</span>}
+                    </td>
+                    <td className="px-3 py-[9px] text-ink-2">{restaurant ?? <span className="text-muted">Generic</span>}</td>
+                    <td className="px-3 py-[9px]"><BinTag type={c.correct_destination} /></td>
+                    <td className={`px-3 py-[9px] text-right font-mono text-sm ${below ? "font-bold text-clay-deep" : ""}`}>{s ? scoreLabel(s.score) : "—"}</td>
+                    <td className="py-[9px] pr-3 pl-3 text-right font-mono text-sm">{s?.assessed_count ?? 0}</td>
+                  </tr>
+                  {on && (
+                    <tr>
+                      <td colSpan={5} className="bg-sage/30 py-3">
+                        <EditForm key={c.catalog_item_id} initial={editing!.item} isNew={false} businesses={catalog.data!.businesses} onClose={closeEdit} onSaved={onSaved} />
                       </td>
-                      <td className="px-3 py-[9px]"><BinTag type={c.correct_destination} /></td>
-                      <td className={`px-3 py-[9px] text-right font-mono text-sm ${below ? "font-bold text-clay-deep" : ""}`}>{s ? scoreLabel(s.score) : "—"}</td>
-                      <td className="py-[9px] pr-3 pl-3 text-right font-mono text-sm">{s?.assessed_count ?? 0}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            ))}
-          </table>
-        </div>
-
-        {editing ? (
-          <EditForm
-            key={editing.isNew ? "new" : editing.item.catalog_item_id}
-            initial={editing.item}
-            isNew={editing.isNew}
-            businesses={catalog.data.businesses}
-            onClose={() => setEditing(null)}
-            onSaved={() => {
-              setEditing(null);
-              catalog.reload();
-              items.reload();
-            }}
-          />
-        ) : (
-          <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-2 rounded-3xl bg-sage px-[22px] py-5">
-            <span className="font-display text-[22px] font-bold text-forest-deep">Pick an item to edit</span>
-            <span className="text-[15px] text-ink-2">
-              Each item records which restaurant it comes from and which bin it belongs in under this site&apos;s rules. Sorting scores are
-              calculated per item. <Mono className="text-xs">not enough data</Mono> means it hasn&apos;t been seen going into a bin yet.
-            </span>
-          </div>
-        )}
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

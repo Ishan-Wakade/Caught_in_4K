@@ -19,6 +19,14 @@ runtime environment variables remain managed in Vercel. Its root directory is
 uploads the exact pushed commit's tracked source and lets Vercel build it using the
 current production configuration. No local `.env` files are uploaded.
 
+The voice guide reads `DEEPSEEK_API_KEY` and `TYPESAFE_API_KEY` on the server.
+Store their values as encrypted Vercel production environment variables. Copies
+are also saved as repository Actions secrets under the same names; Actions secrets
+are not automatically exposed to the deployed application or synchronized to
+Vercel. When rotating either key, update both secret stores and redeploy production.
+Only empty placeholders belong in `.env.example`; neither key is a `NEXT_PUBLIC_`
+variable. The guide separately requires `GUIDE_TOKEN` for request authorization.
+
 Deployments are serialized to keep an older run from overwriting a newer one.
 Vercel's CLI waits for the build; a failed build fails the workflow. A final request
 checks that `/camera` is publicly reachable. The `sourceCommit` deployment metadata

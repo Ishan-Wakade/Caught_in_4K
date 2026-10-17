@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { resolve } from "node:path";
 import type { Messenger, Illustrator, ReplyInterpreter } from "@recyclone/contracts";
 import { createCore, configFromSite, initialState, connectPostgres, MemoryRepository, createEventValidator, createLocalMocks, validateSeed, type Core, type CoreConfig } from "@recyclone/core";
+import { createMessenger, createIllustrator, createReplyInterpreter } from "@recyclone/integrations";
 
 type Adapters = { messenger: Messenger; illustrator: Illustrator; interpreter: ReplyInterpreter };
 const shared = globalThis as typeof globalThis & { recycloneCore?: Promise<Core>; recycloneAdapters?: Adapters };
@@ -34,8 +35,15 @@ async function initialize(): Promise<Core> {
   if (!adapters) {
     const messengerMode = process.env.MESSENGER_MODE ?? "mock";
     const illustratorMode = process.env.ILLUSTRATOR_MODE ?? "mock";
-    if (messengerMode !== "mock" || illustratorMode !== "mock") throw new Error("Live adapters must be registered with configureCoreAdapters by integrations; refusing to silently mock live mode");
-    adapters = createLocalMocks();
+    if (messengerMode === "mock" && illustratorMode === "mock") {
+      adapters = createLocalMocks();
+    } else {
+      // At least one mode is "live": wire the real integrations adapters
+      // (each factory reads its own mode independently, so e.g. a live
+      // messenger with a still-mocked illustrator works correctly here).
+      adapters = { messenger: createMessenger(), illustrator: createIllustrator(), interpreter: createReplyInterpreter() };
+      configureCoreAdapters(adapters);
+    }
   }
   const state = initialState(seed, config);
   const storage = process.env.CORE_STORAGE ?? "postgres";

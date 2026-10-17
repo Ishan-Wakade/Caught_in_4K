@@ -20,6 +20,9 @@
       ],
       "@recyclone/contracts/event-id": [
         "../../contracts/src/event-id.ts"
+      ],
+      "@recyclone/integrations": [
+        "../integrations/src/index.ts"
       ]
     }
   },

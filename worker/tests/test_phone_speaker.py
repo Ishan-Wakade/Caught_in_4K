@@ -104,3 +104,48 @@ def test_say_voice_tells_the_phone_before_playing(tmp_path, monkeypatch):
     v.speak("Trash. chip bag, placed in trash", 0.0)
     v.close()
     assert order == [("phone", "Trash. chip bag, placed in trash", ".aiff"), "mac"]
+
+
+def test_page_draws_a_live_waveform_from_the_played_audio():
+    """Voice-memo look: the sentence's audio goes through an analyser that drives the waveform canvas."""
+    from recyclone_worker.phone_speaker import PAGE
+
+    assert '<canvas id="wave"' in PAGE
+    assert "createAnalyser" in PAGE and "src.connect(analyser)" in PAGE
+
+
+def test_events_stream_is_chunked_http11_so_proxies_and_tunnels_pass_it_through(speaker):
+    """A Cloudflare tunnel held the old HTTP/1.0 length-less stream until it closed: nothing reached the phone."""
+    with socket.create_connection(("127.0.0.1", speaker.port), timeout=5) as s:
+        s.sendall(f"GET /s/{speaker.token}/events HTTP/1.1\r\nHost: x\r\n\r\n".encode())
+        head = b""
+        while b"\r\n\r\n" not in head:
+            head += s.recv(1024)
+    status, *headers = head.split(b"\r\n\r\n")[0].decode().split("\r\n")
+    hs = {k.lower(): v.strip() for k, v in (h.split(":", 1) for h in headers)}
+    assert status.startswith("HTTP/1.1 200")
+    assert hs["transfer-encoding"] == "chunked" and hs["content-type"] == "text/event-stream"
+    assert hs.get("x-accel-buffering") == "no"
+
+
+def poll(sp, after, timeout=5):
+    with urllib.request.urlopen(url(sp, f"poll?after={after}"), timeout=timeout) as r:
+        assert r.headers["Content-Length"] and r.headers["Content-Type"].startswith("application/json")
+        return json.loads(r.read())
+
+
+def test_long_poll_works_where_event_streams_are_held_by_a_tunnel(speaker):
+    speaker.announce("Trash. chip bag, placed in trash", None)
+    first = poll(speaker, "now")  # a new phone starts from now: old sentences are not replayed
+    assert first["messages"] == [] and first["last"] == speaker.last_id()
+    threading.Timer(0.3, lambda: speaker.announce("Recycle. aluminum can, placed in recycling", None)).start()
+    got = poll(speaker, first["last"])  # waits for the next sentence, then answers at once
+    assert [m["text"] for m in got["messages"]] == ["Recycle. aluminum can, placed in recycling"]
+    assert got["messages"][0]["age_s"] < 1 and got["last"] == got["messages"][0]["id"]
+
+
+def test_tunnel_url_is_read_from_cloudflared_output():
+    from recyclone_worker.phone_speaker import tunnel_url
+    assert tunnel_url("2026 INF |  https://agrees-hitachi-alex-preston.trycloudflare.com  |") == \
+        "https://agrees-hitachi-alex-preston.trycloudflare.com"
+    assert tunnel_url("INF Requesting new quick Tunnel on trycloudflare.com...") is None

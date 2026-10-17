@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1",
     "@recyclone/contracts": "workspace:*",
     "@recyclone/core": "workspace:*",
     "@recyclone/integrations": "workspace:*",

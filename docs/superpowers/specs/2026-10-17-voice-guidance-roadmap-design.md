@@ -163,8 +163,9 @@ Goal: from the corner camera's footage, announce the right bin before the person
    source; every catalog item's bin is checked against them, and where the rules do not decide, the catalog note says
    so and a person decides.
 5. **Items that go in none of the three bins** (batteries, electronics, chemicals; the city says never in the trash):
-   *(E's recommendation, a setting until the team confirms)* the message starts "Not these bins" for these hazardous
-   items only, e.g. "Not these bins. Battery, take it to a drop-off." Every other item keeps the three-word rule.
+   the fourth first word is **None**, followed by "<item> is dangerous to place in any of these bins. Place it in
+   <drop-off> instead" (team, 17 Oct), e.g. "None. Battery is dangerous to place in any of these bins. Place it in
+   the Recycle Center instead." The drop-off place comes from the local rules text.
 6. **Voice before the video (new):** the voice must work before the team films, so the demo video shows it speaking.
    *(E's call)* The model therefore runs on a **live camera** too: a webcam, the iPhone as a Mac camera (Continuity
    Camera), or a store's IP camera; recorded files still work for testing.

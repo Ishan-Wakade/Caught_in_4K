@@ -42,6 +42,15 @@ Python, running on a laptop (not Vercel).
 - **Catalog:** item IDs are checked against `GET /api/catalog` (fixture fallback) when enrolling (error) and when running (warning).
 - **Timestamps:** realtime runs use "now" as clip start; faster runs back-date the start by the clip length, because core rejects `occurred_at` more than 5 s in the future.
 
+## Synthetic stress results (16 Oct, `scripts/stress.py`, motion tracker, no registration)
+
+Drawn scene + cut-outs of the real items; NOT real-camera evidence. Held-out videos (14, never tuned on):
+107 drops, **103 counted (96%)**, 4 missed, 4 extra, 0 wrong bin; **bin rule right 85/94**; only 69/107
+events above core's 0.5 item threshold (the rest would show as unassessable). Verified failure types:
+a white receipt missed in a dark noisy scene; one item counted twice when its track split; two items
+thrown into the same bin at the same moment counted once; worst on fast throws with motion blur (bin
+rule 4/7, core-identified 2/8). Fixes must be checked on NEW held-out seeds, not these.
+
 ## Evaluation
 
 - Hand-label the demo clip into `contracts/fixtures/demo-events.jsonl` (item, bin, business where knowable, timestamp).

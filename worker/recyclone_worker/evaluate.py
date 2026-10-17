@@ -14,7 +14,7 @@ def _t(e: dict) -> float:
     return float(e["clip_offset_s"])
 
 
-def evaluate(labels: list[dict], predicted: list[dict], tolerance_s: float = 1.5) -> dict:
+def evaluate(labels: list[dict], predicted: list[dict], tolerance_s: float = 1.5, destinations: dict[str, str] | None = None) -> dict:
     free = sorted(range(len(labels)), key=lambda i: _t(labels[i]))
     pairs, leftovers = [], []
 
@@ -52,6 +52,10 @@ def evaluate(labels: list[dict], predicted: list[dict], tolerance_s: float = 1.5
         "item_labeled": len(item_known),
         "item_correct": sum(l["item"]["catalog_item_id"] == p["item"]["catalog_item_id"] for l, p in item_known),
         "assessable": sum(p["item"]["catalog_item_id"] is not None for p in predicted),
+        # Right bin RULE even if the exact product/brand is wrong (e.g. Shake Shack cup -> plain cup).
+        "rule_correct": sum(destinations is not None and p["item"]["catalog_item_id"] is not None
+                            and destinations.get(l["item"]["catalog_item_id"]) == destinations.get(p["item"]["catalog_item_id"])
+                            for l, p in item_known),
         "tolerance_s": tolerance_s,
     }
 
@@ -65,6 +69,7 @@ def format_report(r: dict) -> str:
         f"  extra:          {r['extra']}",
         f"  wrong bin:      {r['wrong_bin']}",
         f"  item correct:   {r['item_correct']} of {r['item_labeled']} matched with a known item ({pct(r['item_correct'], r['item_labeled'])})",
+        f"  bin rule right: {r['rule_correct']} of {r['item_labeled']} (right kind of item, brand may differ)",
         f"  assessable:     {r['assessable']} of {r['predicted']} events had an identified item ({pct(r['assessable'], r['predicted'])})",
         "Staged footage only: this does not show performance on other cameras.",
     ])

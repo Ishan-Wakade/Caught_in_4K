@@ -75,3 +75,13 @@ def test_products_are_described_without_registration(contracts_dir):
         assert cid in catalog, cid
     assert "item_shakeshack_cup" in PRODUCT_PROMPTS and catalog["item_shakeshack_cup"]["business_id"] == "biz_shakeshack"
     assert set(ITEM_PROMPTS) == set(PRODUCT_PROMPTS) | set(GENERIC_PROMPTS)
+
+
+def test_category_runner_ups_are_kept_as_candidates():
+    """A generic top match with a branded runner-up must keep the runner-up, so business evidence survives."""
+    prompts = {"item_generic_cup": ["a red cup"], "item_branded_cup": ["a red cup with a logo", "red"], "item_blue": ["a blue thing"]}
+    item = identify([solid(RED)], emb, Gallery(), categories=CategoryClassifier(emb, prompts), reference_threshold=0.8)
+    ids = [c["catalog_item_id"] for c in item["candidates"]]
+    assert len(ids) == 3 and ids[0] == item["catalog_item_id"]
+    scores = [c["score"] for c in item["candidates"]]
+    assert scores == sorted(scores, reverse=True)

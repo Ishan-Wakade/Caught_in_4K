@@ -80,8 +80,9 @@ describe("security review (17 Oct)", () => {
 });
 
 describe("rate limit buckets (security review 2)", () => {
-  it("one client hitting its limit does not lock out another", async () => {
+  it("one client hitting its limit does not lock out another (on Vercel, keyed on its edge-set address)", async () => {
     vi.stubEnv("GUIDE_TOKEN", "bucket-token");
+    vi.stubEnv("VERCEL", "1");
     const fake = async () => ({ message: null, source: "nothing_held" as const });
     const call = (ip: string) => handleIdentify(new Request("http://x", { method: "POST", body: JSON.stringify({ crops: ["data:image/jpeg;base64,AA"] }),
       headers: { "x-guide-token": "bucket-token", "x-real-ip": ip } }), fake);

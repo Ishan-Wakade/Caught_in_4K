@@ -29,8 +29,10 @@ function guard(request: Request): Response | null {
   if (a.length !== e.length || !timingSafeEqual(a, e)) return err(401, "invalid guide token");
   const now = Date.now();
   for (const [k, ts] of hits) if (ts.every((t) => now - t >= 60_000)) hits.delete(k);
-  // per client: the address Vercel's edge sets (x-real-ip; client-sent x-forwarded-for is never trusted here)
-  const client = `ip:${request.headers.get("x-real-ip") ?? "unknown"}`;
+  // per client: only an address a trusted edge sets (Vercel: x-real-ip; Cloudflare tunnel: cf-connecting-ip, which
+  // Cloudflare overwrites). Elsewhere every caller shares one bucket; the global ceiling below always applies.
+  const edgeIp = process.env.VERCEL ? request.headers.get("x-real-ip") : request.headers.get("cf-connecting-ip");
+  const client = `ip:${edgeIp ?? "unknown"}`;
   for (const [key, cap] of [[client, RATE_PER_MIN], ["all", RATE_TOTAL_PER_MIN]] as const) {
     if ((hits.get(key) ?? []).filter((t) => now - t < 60_000).length >= cap) return err(429, "too many requests");
   }

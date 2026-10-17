@@ -162,6 +162,16 @@ def cmd_run_items(args, analyze_items=None) -> int:
     print(f"analyzing {args.clip} (cached in {args.items_cache}; a new clip takes ~0.5 s per frame) ...", file=sys.stderr)
     analysis = (analyze_items or analyze)(Path(args.clip), Path(args.items_cache), bins_for)
     print(f"analysis: {len(analysis.events)} drop(s) in {time.monotonic() - t0:.0f} s", file=sys.stderr)
+    if args.namer == "deepseek":
+        from .namer import DeepSeekNamer, pick_views, read_crops
+
+        llm = DeepSeekNamer(WORKER_DIR / "state/vlm-cache")
+        if not llm.available:
+            print("note: --namer deepseek but no DEEPSEEK_API_KEY (env or ~/.config/recyclone/deepseek.env); items named by CLIP", file=sys.stderr)
+        for drop in analysis.events:
+            views = pick_views(analysis.tracks, analysis.per_frame, analysis.data, analysis.bins, drop["item_id"], drop["frame"])
+            drop["llm"] = llm.name(read_crops(Path(args.clip), views))
+        print(f"DeepSeek naming: {llm.usage}", file=sys.stderr)
     unknown_bins = {e["bin"] for e in analysis.events} - {r.bin_id for r in site.regions}
     if unknown_bins:
         print(f"WARNING: bins not in {args.camera}'s site config (core will reject them): {sorted(unknown_bins)}", file=sys.stderr)
@@ -308,6 +318,9 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     run.add_argument("--events-out", help="also write every event to this JSONL file (for `evaluate`)")
     run.add_argument("--no-categories", action="store_true", help="report unregistered items as unknown instead of a generic category")
     run.add_argument("--items-cache", default=str(WORKER_DIR / "state/items-cache"), help="--tracker items: perception cache")
+    run.add_argument("--namer", choices=["clip", "deepseek"], default="clip",
+                     help="--tracker items: who names each dropped item. deepseek = vision LLM on crops of the item only "
+                          "(key: DEEPSEEK_API_KEY or ~/.config/recyclone/deepseek.env; answers cached in state/vlm-cache)")
     run.add_argument("--item-bins", help="--tracker items: bin boxes per frame (item-tracker config) for a moving camera; "
                                          "default: the camera's fixed bin regions from demo-site.json")
     enroll = sub.add_parser("enroll", help="build reference gallery from an enrollment clip")

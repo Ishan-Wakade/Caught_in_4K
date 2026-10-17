@@ -132,6 +132,42 @@ views (the older motion tracker near the bins) is the next step. Categories are 
 came out "wrapper", a bag "paper cup"; out-of-catalog items need catalog entries (contract fixture), not more prompts.
 Bins must be marked once per camera (`demo-site.json` regions, or `--item-bins` keyframes for a moving camera).
 
+## Model v2 (17 Oct, branch e/model-v2)
+
+Splits now: **dev** = 10 clips / 10 drops (5 phone, 2 YouTube from Eymen, 3 street clips IMG_2958-2960 that were
+first scored frozen, then moved to dev); **test** = `state/test/fresh_17oct.json`, 3 new stock clips labeled from
+the frames before any run (overhand toss, airport bottle with the person half out of frame, a walk-by with no
+drop), run once at the end. `scripts/eval_splits.py` scores any set of configs from cached perception, including
+item naming when a truth has `ok_items` / `rule`.
+
+| dev (10 drops) | drops found, false | within ±0.5 s | item named right / bin rule right |
+|---|---|---|---|
+| main (ceb075d) | 8/10, 0 | 7 | 5/8 |
+| + veto at the spot it vanished | **10/10, 0** | 9 | 6/10 |
+| + DeepSeek naming (`--namer deepseek`), thinking on | 10/10, 0 | 9 | 8/10 |
+| + DeepSeek with thinking off (default, `namer.THINKING`) | 10/10, 0 | 9 | **9/10** |
+
+**Test (run once, frozen; 5 drops in 6 clips):** main 1/5, 0 false; v2 1/5, 0 false. v2 does not hurt, but its dev
+gains do not show on the test clips, which fail in other ways: an item thrown overhand through the air (never
+vanishes while carried), a bottle put into an opening behind the bin (no candidate), and two clips with no
+visible forearm (park cup, item dropped from above). Next work targets those; these test clips are now used.
+
+- **Veto fix** (`VETO_NEAR`, `VETO_OVER_BIN`): a drop is cancelled only if the item is back in a hand within 0.3
+  of its own size from where it vanished (over a bin too). Measured on dev: re-held after a fake drop 0.04-0.18
+  box diagonals away, after a real drop >= 0.38 or nothing. The old rule cancelled real drops when the item's group
+  also held something else (paper + the bag in the other hand; napkin + the hand on the hopper handle).
+- **DeepSeek naming** (`recyclone_worker/namer.py`): once per drop, 3 crops of the held item (largest views >= 0.5 s
+  apart, half a box of context), never whole frames; the model picks a catalog id or null; the bin rule comes from
+  the catalog. Model `deepseek-flash` (vision on the main Flash model per api-docs.deepseek.com/guides/vision),
+  temperature 0, JSON mode, thinking disabled (`"thinking": {"type": "disabled"}`, on by default at DeepSeek), one
+  retry with more tokens if an answer is cut off, answers cached by image hash in `state/vlm-cache`. Cost on dev:
+  10 calls, ~$0.004 (thinking off; answers 4x shorter than with thinking on). Key: `DEEPSEEK_API_KEY` or
+  `~/.config/recyclone/deepseek.env` (never in the repo). Remaining misses: the crumpled kraft bag is called a
+  napkin (from the dark fist crop) and the big white bag is "unsure" (null).
+- **Back view** (`BACK_VIEW_DROPS`, off): when the body hides the drop, a carried item last seen on the body counts
+  as dropped if an elbow/wrist reaches a bin opening within 1.5 s. Dev unchanged with it on (10/10, 0 false), but
+  no dev or test clip is really filmed from behind, so it stays off until such footage is labeled.
+
 ## Item tracker in `run` (17 Oct)
 
 `recyclone-worker run --tracker items` uses the item tracker (`recyclone_worker/items.py`, `item_playback.py`).

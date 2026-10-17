@@ -143,6 +143,11 @@ class LiveCameraSource:
             raise FileNotFoundError(f"cannot open camera {source}")
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
 
+    def close(self) -> None:
+        """Stop reading for good: the camera is released and not reopened."""
+        self.closed = True
+        self.cap.release()
+
     def _read_with_reconnect(self):
         """Yields frames until the source is gone for good, reconnecting up to max_reconnects times in a row."""
         import time
@@ -155,7 +160,7 @@ class LiveCameraSource:
                 yield frame
                 continue
             self.cap.release()
-            if tries >= self.max_reconnects:
+            if tries >= self.max_reconnects or getattr(self, "closed", False):
                 return
             tries += 1
             time.sleep(self.retry_s)

@@ -221,3 +221,51 @@ def test_cctv_look_adds_a_camera_label_and_clock(tmp_path):
     g.step(0, 0.0, FRAME)
     plain, cctv = g.annotate(FRAME, 0.0), g.annotate(FRAME, 0.0, cctv="CAM 01")
     assert (cctv[:120, :700] != plain[:120, :700]).any()
+
+
+class PendingWatcher(FakeWatcher):
+    """The LLM is still working until ready_at."""
+
+    def pending(self, track_id):
+        return track_id in self.answers and self.now < self.ready_at.get(track_id, 0.0)
+
+    def answer(self, track_id, now):
+        self.now = now
+        return super().answer(track_id, now)
+
+    now = 0.0
+
+
+def test_an_llm_answer_on_its_way_is_waited_for_instead_of_saying_trash(tmp_path):
+    g = make(lambda t: [(1, 900)], PendingWatcher({1: CAN}, ready_at={1: 2.5}), tmp_path)  # at the bins from the start
+    said = run(g, 5.0)
+    assert len(said) == 1 and said[0]["message"] == CAN and said[0]["source"] != "default"
+
+
+def test_an_llm_that_never_answers_still_ends_in_trash(tmp_path):
+    g = make(lambda t: [(1, 900)], PendingWatcher({1: CAN}, ready_at={1: 99.0}), tmp_path)
+    said = run(g, 8.0)
+    assert len(said) == 1 and said[0]["source"] == "default" and said[0]["waited_s"] <= gd.LLM_WAIT_S + 0.1
+
+
+def test_the_window_shows_the_skeleton_and_hand_boxes(tmp_path):
+    g = make(lambda t: [(1, 500)], FakeWatcher({}), tmp_path)
+    run(g, 0.2)
+    out = g.annotate(np.zeros((720, 1280, 3), np.uint8), 0.2)
+    k = person(500)
+    mid = ((k[5][:2] + k[11][:2]) / 2).astype(int)  # on the shoulder-hip line
+    assert out[mid[1] - 3:mid[1] + 4, mid[0] - 3:mid[0] + 4].any()
+
+
+def test_bin_area_box_must_not_be_empty():
+    """An Enter without dragging gave --area 0,0,0,0: every distance was measured to the top-left corner."""
+    from recyclone_worker.cli import area_from_roi
+    assert area_from_roi((100, 200, 300, 150)) == "100,200,400,350"
+    assert area_from_roi((0, 0, 0, 0)) is None
+    assert area_from_roi((5, 5, 3, 200)) is None  # a click, not a box
+
+
+def test_people_are_tracked_with_bytetrack_not_botsort():
+    """BoT-SORT's camera-motion step printed "not enough matching points" every frame and cost time; the camera is fixed."""
+    import inspect
+    assert 'tracker="bytetrack.yaml"' in inspect.getsource(gd.YoloPoseTracker)

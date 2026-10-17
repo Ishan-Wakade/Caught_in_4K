@@ -1,0 +1,157 @@
+"""Prerecorded demo ("store-tuned"): pass 1 sees the whole clip and identifies each person's item once, with no
+deadline; pass 2 is the normal causal guide with those answers ready, on the same skeletons."""
+
+from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
+
+from recyclone_worker import guide_identify as gi
+from recyclone_worker import guide_message as gm
+from recyclone_worker import prepared as pr
+
+TABLE = gm.load_bin_table(gm.WORKER_RULES / "cambridge-ma-2022.bins.json")
+FRAME = np.zeros((480, 640, 3), np.uint8)
+CAN = {"bin": "recycle", "explanation": "aluminum can, placed in recycling"}
+
+
+def arm_kp():
+    k = np.zeros((17, 3), np.float32)
+    k[7], k[9] = (300, 200, 0.9), (300, 300, 0.9)
+    return k
+
+
+class FakeScorer:
+    def __init__(self, probs):
+        self.cats = ["item_generic_can", "item_napkin", "item_chip_bag"]
+        self.row = np.array([probs.get(c, 0.0) for c in self.cats], np.float32)
+
+    def __call__(self, emb):
+        return np.full(len(emb), 0.9, np.float32), np.tile(self.row, (len(emb), 1))
+
+
+def embed(crops):
+    return np.ones((len(crops), 4), np.float32)
+
+
+class FakeNamer:
+    def __init__(self, catalog_id=None):
+        self.catalog_id, self.calls = catalog_id, 0
+
+    def name(self, crops):
+        self.calls += 1
+        return {"catalog_item_id": self.catalog_id, "what": "a thing", "confidence": 0.9}
+
+    def describe(self, crops):
+        return {"name": "face mask", "material": "textile", "form": "mask", "condition": "clean", "hazardous": False}
+
+
+def watched(probs, namer=None, frames=6):
+    w = gi.ItemWatcher(embed, FakeScorer(probs), TABLE, namer=namer, executor=ThreadPoolExecutor(1))
+    poses = pr.RecordingPose(lambda frame: [(1, arm_kp())])
+    pr.observe_clip([(k, k * 0.6, FRAME) for k in range(frames)], poses, w)
+    return w, poses
+
+
+def test_pass_one_never_calls_the_llm_while_watching():
+    namer = FakeNamer("item_napkin")
+    w, _ = watched({"item_generic_can": 0.4, "item_napkin": 0.35}, namer=namer)
+    assert namer.calls == 0 and w.people[1].crops  # crops kept for the one call afterwards
+
+
+def test_each_person_is_identified_once_from_their_best_crops():
+    namer = FakeNamer("item_napkin")
+    w, _ = watched({"item_generic_can": 0.4, "item_napkin": 0.35}, namer=namer)
+    answers = pr.prepare_answers(w)
+    assert answers == {1: ({"bin": "compost", "explanation": "paper napkin, placed in compost"}, "llm")}
+    assert namer.calls == 1
+
+
+def test_a_confident_catalog_item_needs_no_network():
+    namer = FakeNamer()
+    w, _ = watched({"item_generic_can": 0.9, "item_napkin": 0.1}, namer=namer)
+    assert pr.prepare_answers(w) == {1: (CAN, "catalog")} and namer.calls == 0
+
+
+def test_item_override_skips_identification_entirely():
+    namer = FakeNamer("item_napkin")
+    w, _ = watched({"item_generic_can": 0.4, "item_napkin": 0.35}, namer=namer)
+    assert pr.prepare_answers(w, item="item_generic_can") == {1: (CAN, "store")} and namer.calls == 0
+
+
+def test_replay_gives_pass_two_the_same_skeletons_in_order():
+    script = iter([[(1, arm_kp())], [(2, arm_kp())], []])
+    rec = pr.RecordingPose(lambda frame: next(script))
+    for _ in range(3):
+        rec(FRAME)
+    replay = pr.ReplayPose(rec.frames)
+    assert [[tid for tid, _ in replay(FRAME)] for _ in range(3)] == [[1], [2], []]
+
+
+def test_prepared_watcher_answers_at_once_while_the_person_holds_the_item():
+    w, _ = watched({"item_generic_can": 0.4, "item_napkin": 0.35})
+    pw = pr.PreparedWatcher(w, {1: (CAN, "llm")})
+    assert pw.holding(1, 3.0) and pw.answer(1, 3.0) == (CAN, "llm") and not pw.pending(1) and not pw.failed(1)
+    assert pw.answer(7, 3.0) is None  # nobody prepared: the guide's usual rules apply
+
+
+def test_cli_prepared_render_writes_the_video_and_a_json_for_the_ui(tmp_path):
+    import json
+
+    import cv2
+
+    from recyclone_worker import cli
+
+    clip = tmp_path / "c.mp4"
+    out = cv2.VideoWriter(str(clip), cv2.VideoWriter_fourcc(*"mp4v"), 10, (1280, 720))
+    for _ in range(50):
+        out.write(np.zeros((720, 1280, 3), np.uint8))
+    out.release()
+
+    def walker():
+        n = {"i": 0}
+
+        def pose(frame):
+            i = n["i"] % 50  # the same walk in both passes
+            n["i"] += 1
+            fx, fy, h = 300 + i * 12, 700, 340
+            k = np.zeros((17, 3), np.float32)
+            top = fy - h / 0.87
+            k[0] = (fx, fy - h, 0.9)
+            k[5], k[6] = (fx + 20, top + 60, 0.9), (fx - 20, top + 60, 0.9)
+            k[7], k[9] = (fx + 30, top + 130, 0.9), (fx + 30, top + 200, 0.9)
+            k[11], k[12] = (fx + 15, top + 180, 0.9), (fx - 15, top + 180, 0.9)
+            k[15], k[16] = (fx + 10, fy, 0.9), (fx - 10, fy, 0.9)
+            return [(1, k)]
+        return pose
+
+    def parts(args, area):
+        return walker(), gi.ItemWatcher(embed, FakeScorer({"item_generic_can": 0.4, "item_napkin": 0.35}), TABLE,
+                                        executor=ThreadPoolExecutor(1))
+
+    code = cli.main(["guide", "--source", str(clip), "--area", "800,300,1000,700", "--voice", "silent", "--no-stream",
+                     "--prepared", "--item", "item_generic_can", "--log", str(tmp_path / "g.jsonl"),
+                     "--render", str(tmp_path / "demo.mp4")], make_guide_parts=parts)
+    assert code == 0 and (tmp_path / "demo.mp4").exists()
+    report = json.loads((tmp_path / "demo.json").read_text())
+    assert report["prepared"] is True and report["video"].endswith("demo.mp4")
+    assert [a["source"] for a in report["announcements"]] == ["store"]
+    assert report["announcements"][0]["message"] == CAN
+    assert report["items"] == [{"track_id": 1, "message": CAN, "source": "store"}]
+
+
+def test_a_person_whose_item_cannot_be_identified_is_not_announced_in_the_prepared_demo():
+    """Background passers-by: CLIP thought they held something, DeepSeek could not see any object."""
+
+    class BlurNamer(FakeNamer):
+        def name(self, crops):
+            self.calls += 1
+            return {"catalog_item_id": None, "what": "blurry image, unclear object", "confidence": 0.1}
+
+        def describe(self, crops):
+            return {"name": "unknown object", "identifiable": False, "material": "unknown", "form": "unknown"}
+
+    w, _ = watched({"item_generic_can": 0.4, "item_napkin": 0.35}, namer=BlurNamer())
+    answers = pr.prepare_answers(w)
+    assert answers == {1: (None, "nothing")}
+    pw = pr.PreparedWatcher(w, answers)
+    assert not pw.holding(1, 3.0) and pw.answer(1, 3.0) is None

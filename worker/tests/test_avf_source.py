@@ -64,3 +64,35 @@ def test_ffmpeg_capture_reads_whole_bgr_frames_and_stops_on_a_short_read():
     assert cap.read() == (False, None)
     cap.release()
     assert proc.killed
+
+
+def test_closing_a_live_source_does_not_reopen_the_camera():
+    """The bin-box picker took one frame and left its camera reader running (and reconnecting) for the whole session."""
+    opened = []
+
+    class Cap:
+        def __init__(self):
+            self.open = True
+
+        def isOpened(self):
+            return self.open
+
+        def read(self):
+            return (True, np.zeros((2, 2, 3), np.uint8)) if self.open else (False, None)
+
+        def get(self, prop):
+            return 30.0
+
+        def release(self):
+            self.open = False
+
+    def opener():
+        opened.append(Cap())
+        return opened[-1]
+
+    src = sources.LiveCameraSource(0, opener=opener, retry_s=0.01)
+    next(iter(src))
+    src.close()
+    import time
+    time.sleep(0.2)
+    assert len(opened) == 1 and not opened[0].open

@@ -149,3 +149,8 @@ def test_tunnel_url_is_read_from_cloudflared_output():
     assert tunnel_url("2026 INF |  https://agrees-hitachi-alex-preston.trycloudflare.com  |") == \
         "https://agrees-hitachi-alex-preston.trycloudflare.com"
     assert tunnel_url("INF Requesting new quick Tunnel on trycloudflare.com...") is None
+
+
+def test_tunnel_url_is_not_cloudflares_own_api_host():
+    from recyclone_worker.phone_speaker import tunnel_url
+    assert tunnel_url('ERR failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel"') is None

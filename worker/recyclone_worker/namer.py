@@ -37,13 +37,16 @@ Answer JSON only: {{"catalog_item_id": id or null, "what": "short description of
 # Asked separately (not appended to PROMPT): on 17 Oct, adding these lines to the catalog prompt dropped catalog
 # naming on the dev drops from 9/10 to 6/10, because the model then answered "none fits" more often.
 GENERIC_PROMPT = """These {n} images are crops of ONE object a person is carrying to a waste bin (a hand may be in the crop).
+Solid black rectangles are faces blanked out for privacy: they are not objects and not part of any object.
+If you cannot clearly see an object being carried (blurry, too small, only a hand or clothing), set identifiable to false.
 Describe the object generically, for deciding which waste bin it belongs in:
-- name: short generic name including its use ("disposable face mask", "paper takeout box", "paper coffee cup")
+- identifiable: true only if you can clearly see what the object is
+- name: short generic name including its use ("paper takeout box", "paper coffee cup", "plastic water bottle")
 - material: one of plastic_film, rigid_plastic, paper, cardboard, metal, glass, organic, textile, foam, mixed, unknown
 - form: one word for its shape or use ("cup", "bag", "mask", "wrapper", "box", "napkin", "bottle", "glove", "battery")
 - condition: one of clean, food_residue, liquid, unknown (only what you can see)
 - hazardous: true only for batteries, electronics, chemicals, needles, or items labeled hazardous
-Answer JSON only: {{"name": "...", "material": "...", "form": "...", "condition": "...", "hazardous": false}}"""
+Answer JSON only: {{"identifiable": true, "name": "...", "material": "...", "form": "...", "condition": "...", "hazardous": false}}"""
 
 
 def api_key() -> str | None:

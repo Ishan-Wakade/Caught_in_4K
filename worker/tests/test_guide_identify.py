@@ -241,3 +241,73 @@ def test_low_confidence_points_do_not_size_the_body():
         k[j] = (300, y, 0.1)  # unsure lower-body points must not make a tiny face look "reliably sized"
     (_, reliable) = gi.head_box(k)
     assert not reliable
+
+
+def test_llm_is_asked_on_the_first_unsure_crop_not_after_three_votes():
+    """Live demo: waiting for 3 votes and 2 crops 0.5 s apart made the answer arrive after the person was at the bins."""
+    namer = FakeNamer(catalog_id="item_napkin")
+    w = watch(FakeScorer(0.9, {"item_generic_can": 0.4, "item_napkin": 0.35}), namer=namer, frames=1)
+    assert wait(w) == ({"bin": "compost", "explanation": "paper napkin, placed in compost"}, "llm")
+
+
+def test_a_likely_catalog_item_still_gets_its_votes_before_any_network_call():
+    namer = FakeNamer()
+    w = watch(FakeScorer(0.9, {"item_generic_can": 0.9, "item_napkin": 0.1}), namer=namer, frames=1)
+    assert namer.calls == 0 and not w.pending(1)
+
+
+def test_pending_is_true_while_the_llm_is_working():
+    import threading
+    gate = threading.Event()
+
+    class SlowNamer(FakeNamer):
+        def name(self, crops):
+            gate.wait(2)
+            return super().name(crops)
+
+    w = watch(FakeScorer(0.9, {"item_generic_can": 0.4, "item_napkin": 0.35}), namer=SlowNamer(catalog_id="item_napkin"), frames=1)
+    assert w.pending(1)
+    gate.set()
+    wait(w)
+    assert not w.pending(1)
+
+
+def test_catalog_pick_and_generic_description_run_in_parallel():
+    import time
+
+    class SlowNamer(FakeNamer):
+        def name(self, crops):
+            time.sleep(0.3)
+            return super().name(crops)
+
+        def describe(self, crops):
+            time.sleep(0.3)
+            return {"name": "face mask", "material": "textile", "form": "mask", "condition": "clean", "hazardous": False}
+
+    w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.4, "item_napkin": 0.35}), TABLE,
+                       namer=SlowNamer(), executor=ThreadPoolExecutor(1))
+    t0 = time.perf_counter()
+    assert w._identify([np.zeros((8, 8, 3), np.uint8)]) is not None
+    assert time.perf_counter() - t0 < 0.5  # 0.3 + 0.3 if they ran one after the other
+
+
+def test_an_unclear_crop_is_never_given_a_made_up_item_name():
+    from recyclone_worker.generic import generic_type
+    assert generic_type({"what": "blurry", "generic": {"name": "disposable face mask", "identifiable": False, "form": "mask"}}) is None
+    assert generic_type({"what": "blurry", "generic": {"name": "unknown object", "form": "unknown"}}) is None
+
+    class Blur(FakeNamer):
+        def name(self, crops):
+            return {"catalog_item_id": None, "what": "blurry image, unclear object", "confidence": 0.1}
+
+        def describe(self, crops):
+            return {"name": "unknown object", "identifiable": False}
+
+    w = gi.ItemWatcher(embed, FakeScorer(0.9, {}), TABLE, namer=Blur(), executor=ThreadPoolExecutor(1))
+    assert w._identify([np.zeros((8, 8, 3), np.uint8)]) == gm.default_trash(None)  # "not sure", not "blurry image"
+
+
+def test_the_description_prompt_explains_the_black_face_boxes_and_does_not_lead_with_a_mask():
+    from recyclone_worker.namer import GENERIC_PROMPT
+    assert "black" in GENERIC_PROMPT.lower() and "identifiable" in GENERIC_PROMPT
+    assert "disposable face mask" not in GENERIC_PROMPT

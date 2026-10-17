@@ -21,6 +21,9 @@ BANNER_S = 3.0  # how long a spoken message stays on screen
 SAME_PERSON_S = 4.0   # a new track this soon after an announced person was last seen ...
 SAME_PERSON_BODY = 0.5  # ... and this close (in body heights) is that person re-numbered by the tracker
 ARRIVAL_GRACE_S = 0.6   # at the bins with no answer yet: wait this long for CLIP's votes before saying trash
+LLM_WAIT_S = 4.0        # ... but an LLM answer already on its way is waited for this long after the trigger
+SKELETON = [(5, 7), (7, 9), (6, 8), (8, 10), (5, 6), (5, 11), (6, 12), (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
+            (0, 5), (0, 6)]
 FORGET_AFTER_S = COOLDOWN_S + 2.0  # people unseen this long are dropped (a store camera runs all day)
 
 
@@ -61,7 +64,8 @@ class YoloPoseTracker:
         self.device = "mps" if torch.backends.mps.is_available() else "cpu"
 
     def __call__(self, frame) -> list[tuple[int, np.ndarray]]:
-        r = self.model.track(frame, persist=True, verbose=False, device=self.device, imgsz=self.imgsz, conf=0.3)[0]
+        r = self.model.track(frame, persist=True, verbose=False, device=self.device, imgsz=self.imgsz, conf=0.3,
+                             tracker="bytetrack.yaml")[0]  # fixed camera: no BoT-SORT camera-motion step
         if r.boxes is None or r.boxes.id is None or r.keypoints is None:
             return []
         ids = r.boxes.id.int().cpu().tolist()
@@ -117,7 +121,7 @@ class Guide:
             ans = self.watcher.answer(tid, t)
             if ans is not None:
                 made.append(self._speak(idx, t, tid, *ans))
-            elif t - self.pending[tid] >= LEAD_S:
+            elif t - self.pending[tid] >= (LLM_WAIT_S if self._llm_on_its_way(tid) else LEAD_S):
                 made.append(self._speak(idx, t, tid, gm.default_trash(None), "default"))
         self._forget_gone(t)
         return made
@@ -155,10 +159,16 @@ class Guide:
         if ans is not None:
             return ans
         waited = t - self.pending[tid]
+        if self._llm_on_its_way(tid) and waited < LLM_WAIT_S:
+            return None
         arrived = distance_m(kp, self.area, self.homography) == 0.0 and waited >= ARRIVAL_GRACE_S
         if self.watcher.failed(tid) or arrived or waited >= LEAD_S:
             return gm.default_trash(None), "default"
         return None
+
+    def _llm_on_its_way(self, tid: int) -> bool:
+        pending = getattr(self.watcher, "pending", None)
+        return bool(pending and pending(tid))
 
     def _speak(self, idx: int, t: float, tid: int, message: dict, source: str) -> dict:
         fired = self.pending.pop(tid, t)
@@ -191,13 +201,23 @@ class Guide:
         a = self.area
         cv2.rectangle(out, (int(a.x0), int(a.y0)), (int(a.x1), int(a.y1)), (0, 200, 0), lw)
         cv2.putText(out, "bins", (int(a.x0) + 8, int(a.y0) + int(40 * big)), cv2.FONT_HERSHEY_SIMPLEX, 1.1 * big + 0.3, (120, 255, 120), lw)
+        from .items import hand_box
+
         for tid, kp in self.people:
             d = distance_m(kp, self.area, self.homography)
             vis = kp[:, 2] > 0.3
             if not vis.any():
                 continue
-            x, y = int(kp[vis, 0].min()), int(kp[vis, 1].min())
             hold = self.watcher.holding(tid, t)
+            for a_, b_ in SKELETON:  # YOLO's skeleton
+                if vis[a_] and vis[b_]:
+                    cv2.line(out, (int(kp[a_, 0]), int(kp[a_, 1])), (int(kp[b_, 0]), int(kp[b_, 1])), (230, 240, 225), lw)
+            for side in ("L", "R"):  # where CLIP looks for the item: orange while it sees one
+                hb = hand_box(kp, side, out.shape[1], out.shape[0])
+                if hb is not None:
+                    cv2.rectangle(out, (int(hb[0]), int(hb[1])), (int(hb[2]), int(hb[3])),
+                                  (0, 165, 255) if hold else (160, 160, 160), lw if hold else 1)
+            x, y = int(kp[vis, 0].min()), int(kp[vis, 1].min())
             label = f"#{tid} {'holding' if hold else '-'} {'' if d is None else f'{d:.1f} m'}"
             cv2.putText(out, label, (x, max(30, y - 12)), cv2.FONT_HERSHEY_SIMPLEX, big + 0.3, (0, 165, 255) if hold else (200, 200, 200), lw)
         recent = [s for s in self.said if 0 <= t - s["t"] <= BANNER_S]

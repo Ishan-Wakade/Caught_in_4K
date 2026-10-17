@@ -40,8 +40,10 @@ def generic_type(answer: dict) -> dict | None:
     None if it gave no description. The id comes from material + form only, so the next mask, whatever its color,
     gets the same id. "description" (the free-text look) goes to Jev but not into the event."""
     g = answer.get("generic") or {}
+    if g.get("identifiable") is False:  # the model could not see an object: never invent a name for it
+        return None
     name, form = (g.get("name") or answer.get("what") or "").strip(), _slug(g.get("form") or "")
-    if not name or form == "item":
+    if not name or form in ("item", "unknown") or name.lower() in ("unknown", "unknown object", "unknown item"):
         return None
     material = g.get("material") if g.get("material") in MATERIALS else "unknown"
     condition = g.get("condition") if g.get("condition") in CONDITIONS else "unknown"

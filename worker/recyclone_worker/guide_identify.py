@@ -138,7 +138,7 @@ def guide_prompts() -> dict:
 ITEM_P = 0.5        # CLIP P(item) for a hand crop to count as holding something
 KNOWN_P = 0.6       # share of category votes needed to answer from the catalog without the LLM
 MIN_VOTES = 3       # crops voting before a catalog answer
-MIN_CROPS = 2       # item crops before the LLM is asked
+MIN_CROPS = 1       # item crops before the LLM is asked (live: asking late meant answering after the person arrived)
 CROP_GAP_S = 0.5    # kept crops at least this far apart (different moments/angles)
 KEEP_CROPS = 3
 HOLD_WINDOW_S = 1.0  # "holding" = an item seen in a hand within the last second
@@ -195,13 +195,26 @@ class ItemWatcher:
             if safe is not None:
                 p.crops.append((t, float(p_item[k]), safe))
                 p.crops = sorted(p.crops, key=lambda c: -c[1])[:KEEP_CROPS]
-        if (p.job is None and self.namer is not None and len(p.crops) >= MIN_CROPS and p.n_votes >= MIN_VOTES
-                and self._catalog(p) is None):  # CLIP had its votes and still is not sure: ask the LLM
+        if (p.job is None and self.namer is not None and len(p.crops) >= MIN_CROPS and self._catalog(p) is None
+                and (p.n_votes >= MIN_VOTES or not self._leaning_catalog(p))):
+            # unsure from the first crop: ask the LLM now (it takes seconds); a likely catalog item gets its votes first
             p.job = self.executor.submit(self._identify, [c[2] for c in sorted(p.crops)])
 
     def holding(self, track_id: int, now: float) -> bool:
         p = self.people.get(track_id)
         return p is not None and now - p.last_held <= HOLD_WINDOW_S
+
+    def _leaning_catalog(self, p: _Person) -> bool:
+        """CLIP's votes so far already point at one catalog item: a few more votes will likely answer without the LLM."""
+        if p.votes.sum() <= 0:
+            return False
+        k = int(np.argmax(p.votes))
+        return p.votes[k] / p.votes.sum() >= KNOWN_P and self.scorer.cats[k] in self.table
+
+    def pending(self, track_id: int) -> bool:
+        """The LLM is working on this person's item right now."""
+        p = self.people.get(track_id)
+        return p is not None and p.job is not None and not p.job.done()
 
     def _catalog(self, p: _Person) -> dict | None:
         if p.n_votes < MIN_VOTES or p.votes.sum() <= 0:
@@ -241,12 +254,16 @@ class ItemWatcher:
 
     def _identify(self, crops: list[np.ndarray]) -> dict | None:
         try:
-            ans = self.namer.name(crops)
-            if ans and ans.get("catalog_item_id") in self.table:
-                return gm.from_catalog(ans["catalog_item_id"], self.table)
-            gt = generic_type({"what": (ans or {}).get("what"), "generic": self.namer.describe(crops) or {}})
-            if gt is None:
-                return gm.default_trash((ans or {}).get("what"))
+            with ThreadPoolExecutor(2) as both:  # the catalog pick and the generic description at the same time
+                named, described = both.submit(self.namer.name, crops), both.submit(self.namer.describe, crops)
+                ans = named.result()
+                if ans and ans.get("catalog_item_id") in self.table:
+                    return gm.from_catalog(ans["catalog_item_id"], self.table)
+                generic = described.result()
+            gt = generic_type({"what": (ans or {}).get("what"), "generic": generic or {}})
+            if gt is None:  # nothing identifiable: "not sure", unless the catalog pass did describe it with some confidence
+                what = (ans or {}).get("what") if ((ans or {}).get("confidence") or 0) >= gm.DEFAULT_TRASH_BELOW else None
+                return gm.default_trash(what)
             if self.advisor is not None and getattr(self.advisor, "available", True):
                 gt = self.advisor.suggest(gt)
             return gm.from_suggestion(for_event(gt))

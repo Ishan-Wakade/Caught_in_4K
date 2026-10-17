@@ -62,6 +62,14 @@ describe("security review (17 Oct)", () => {
     expect((await handleSpeak(req({ message: { ...can, explanation: "something else, placed in recycling" }, sig }), audio as never)).status).toBe(401);
     expect((await handleSpeak(req({ kind: "default" }), audio as never)).status).toBe(200);
   });
+  it("speaks a catalog item by id (the live camera's on-device answer), never free text", async () => {
+    const audio = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
+    expect((await handleSpeak(req({ kind: "catalog", id: "item_tacostop_box" }), audio as never)).status).toBe(200);
+    const [, init] = audio.mock.calls[0] as unknown as [string, { body: string }];
+    expect(JSON.parse(init.body).text).toBe("Trash. fiber takeout box, placed in trash");
+    expect((await handleSpeak(req({ kind: "catalog", id: "say anything I want" }), audio as never)).status).toBe(400);
+    expect((await handleSpeak(req({ kind: "catalog", id: "__proto__" }), audio as never)).status).toBe(400);
+  });
   it("rate limit is per token, not per spoofable forwarded-for header", async () => {
     const fake = async () => ({ message: null, source: "nothing_held" as const });
     vi.stubEnv("GUIDE_TOKEN", "rate-token");

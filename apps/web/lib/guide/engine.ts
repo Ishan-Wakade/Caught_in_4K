@@ -6,6 +6,8 @@
 import type { InferenceSession, Tensor } from "onnxruntime-web";
 import { PersonTracker, POSE_SIZE, decodePose, letterbox } from "./pose";
 import { Watcher, defaultTrash, handBox, type Box, type GuideData, type GuideMessage, type Keypoints } from "./scoring";
+import { headBox, type Box as AreaBox } from "./approach";
+import { Assist, fromCoco, type Asked, type Speak } from "./assist";
 
 type Ort = typeof import("onnxruntime-web");
 
@@ -16,15 +18,23 @@ const MEAN = [0.48145466, 0.4578275, 0.40821073]; // CLIP's preprocessing (Xenov
 const STD = [0.26862954, 0.26130258, 0.27577711];
 /** Hold-up demo (not in the worker): an empty hand this long starts a new item ... */
 const NEW_ITEM_AFTER_S = 1.5;
-/** ... and an item held this long with no catalog answer is "trash" (team rule; the worker asks DeepSeek + Jev first). */
+/** ... and, without the demo key, an item held this long with no catalog answer is "trash" (team rule). With the key,
+ * DeepSeek + Jev are asked first, as in the worker (assist.ts). */
 const UNSURE_AFTER_S = 2.0;
 
 export type Backend = "webgpu" | "wasm";
 export type Progress = { loaded: number; total: number };
 
 export type GuidePerson = { id: number; kp: Keypoints; hands: Box[]; holding: boolean };
-export type Banner = { message: GuideMessage; fallback: boolean };
-export type GuideFrame = { people: GuidePerson[]; banner: Banner | null; poseMs: number; clipMs: number };
+/** source: "clip" (on this device), "llm" / "catalog" (DeepSeek + Jev on the server), "default" (trash fallback). */
+export type Banner = { message: GuideMessage; fallback: boolean; source?: string };
+export type GuideFrame = { people: GuidePerson[]; banner: Banner | null; poseMs: number; clipMs: number; speak: Speak[] };
+/** The server path (needs the demo key): ask DeepSeek + Jev about each held item, from face-redacted crops only. */
+export type AssistDeps = {
+  identify: (crops: string[]) => Promise<Asked>;
+  /** JPEG data URL of `box` with every head blacked out, or null if it must not leave the device. */
+  capture: (video: HTMLVideoElement, box: AreaBox, heads: Array<{ box: AreaBox; reliable: boolean }>) => string | null;
+};
 
 /** Model bytes from the browser cache, else downloaded (with progress) and cached for the next visit. */
 async function fetchModel(url: string, onBytes: (loaded: number, total: number) => void): Promise<Uint8Array> {
@@ -171,9 +181,11 @@ function chw(ctx: CanvasRenderingContext2D, size: number, f: (v: number, channel
 export class GuideSession {
   private tracker = new PersonTracker();
   private watcher: Watcher;
+  private assist: Assist | null;
 
-  constructor(private engine: GuideEngine) {
+  constructor(private engine: GuideEngine, private deps?: AssistDeps) {
     this.watcher = new Watcher(engine.data);
+    this.assist = deps ? new Assist(deps.identify) : null;
   }
 
   async step(video: HTMLVideoElement, t: number): Promise<GuideFrame> {
@@ -181,7 +193,10 @@ export class GuideSession {
     const found = await this.engine.people(video);
     const t1 = performance.now();
     const { ids, gone } = this.tracker.update(found, t);
-    gone.forEach((id) => this.watcher.forget(id));
+    gone.forEach((id) => {
+      this.watcher.forget(id);
+      this.assist?.forget(id);
+    });
 
     const people: GuidePerson[] = found.map((p, i) => ({
       id: ids[i],
@@ -201,19 +216,34 @@ export class GuideSession {
 
     let banner: Banner | null = null;
     let longest = 0;
+    const speak: Speak[] = [];
+    // Every head in the frame (all people), blacked out of any crop that leaves the device.
+    const heads = this.assist ? found.map((f) => headBox(fromCoco(f.kp))).filter((h) => h !== null) : [];
     for (const p of people) {
       this.watcher.resetIfIdle(p.id, t, NEW_ITEM_AFTER_S);
       p.holding = this.watcher.holding(p.id, t);
       if (!p.holding) continue;
       const held = this.watcher.heldFor(p.id, t);
-      const answer = this.watcher.answer(p.id);
-      const shown = answer
-        ? { message: answer, fallback: false }
-        : held >= UNSURE_AFTER_S
-          ? { message: defaultTrash(this.engine.data), fallback: true }
-          : null;
+      const answerId = this.watcher.answerId(p.id);
+      const answer = answerId ? this.watcher.answer(p.id) : null;
+      let shown: Banner | null;
+      if (this.assist && this.deps) {
+        const deps = this.deps;
+        const crops = () => p.hands
+          .map(([x0, y0, x1, y1]) => deps.capture(video, { x0, y0, x1, y1 }, heads))
+          .filter((c): c is string => c !== null);
+        const d = this.assist.step(p.id, this.watcher.itemStart(p.id) ?? t, t, answerId && answer ? { id: answerId, message: answer } : null, crops);
+        shown = d.banner;
+        if (d.speak) speak.push(d.speak);
+      } else {
+        shown = answer
+          ? { message: answer, fallback: false, source: "clip" }
+          : held >= UNSURE_AFTER_S
+            ? { message: defaultTrash(this.engine.data), fallback: true, source: "default" }
+            : null;
+      }
       if (shown && held >= longest) [banner, longest] = [shown, held];
     }
-    return { people, banner, poseMs: t1 - t0, clipMs: t2 - t1 };
+    return { people, banner, poseMs: t1 - t0, clipMs: t2 - t1, speak };
   }
 }

@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
-import { GuideEngine, GuideSession, type Backend, type Banner, type GuideFrame, type Progress } from "@/lib/guide/engine";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import type { Asked, Speak } from "@/lib/guide/assist";
+import { GuideEngine, GuideSession, type AssistDeps, type Backend, type Banner, type GuideFrame, type Progress } from "@/lib/guide/engine";
+import { spoken } from "@/lib/guide/message";
+import { loadFaceFinder, readGuideKey, redactedCrop, type FaceFinder } from "@/lib/guide/redact";
 
 export type GuideStatus = "loading" | "starting" | "live" | "paused" | "blocked" | "error";
 
@@ -23,6 +26,49 @@ export function usePageVisible(): boolean {
 
 // Loaded once per page load and reused when the tab comes back, so the camera restarts without a reload.
 let engineLoad: Promise<GuideEngine> | null = null;
+let faceLoad: Promise<FaceFinder | null> | null = null;
+
+/** The server path, with the demo key: DeepSeek + Jev identify the held item (from face-redacted crops only). */
+function serverModel(token: string, face: FaceFinder): AssistDeps {
+  return {
+    identify: async (crops) => {
+      const res = await fetch("/api/guide/identify", {
+        method: "POST", headers: { "content-type": "application/json", "x-guide-token": token }, body: JSON.stringify({ crops }),
+      });
+      if (!res.ok) throw new Error(`identify ${res.status}`);
+      return (await res.json()) as Asked;
+    },
+    capture: (video, box, heads) => redactedCrop(video, box, heads, face),
+  };
+}
+
+/** One sentence at a time: the ElevenLabs voice from the server, else this browser's own voice. */
+function speaker(token: string) {
+  const audio = typeof Audio === "undefined" ? null : new Audio();
+  let queue = Promise.resolve();
+  return (s: Speak) => {
+    queue = queue.then(async () => {
+      try {
+        const res = await fetch("/api/guide/speak", {
+          method: "POST", headers: { "content-type": "application/json", "x-guide-token": token }, body: JSON.stringify(s.body),
+        });
+        if (!res.ok || !audio) throw new Error(`speak ${res.status}`);
+        const url = URL.createObjectURL(await res.blob());
+        audio.src = url;
+        await audio.play();
+        await new Promise((r) => { audio.onended = r; audio.onerror = r; });
+        URL.revokeObjectURL(url);
+      } catch {
+        await new Promise<void>((r) => {
+          const u = new SpeechSynthesisUtterance(spoken(s.message));
+          u.onend = () => r();
+          u.onerror = () => r();
+          speechSynthesis.speak(u);
+        });
+      }
+    });
+  };
+}
 
 function draw(canvas: HTMLCanvasElement, video: HTMLVideoElement, frame: GuideFrame) {
   if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -65,7 +111,17 @@ export function useBrowserGuide(
   const [banner, setBanner] = useState<Banner | null>(null);
   const [backend, setBackend] = useState<Backend | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [smart, setSmart] = useState(false);
+  const [sound, setSound] = useState(false);
+  const soundRef = useRef(false);
   const last = useRef({ people: -1, banner: "" });
+
+  /** Browsers only play sound after a click on the page: the "Sound on" button calls this. */
+  const enableSound = useCallback(() => {
+    soundRef.current = !soundRef.current;
+    setSound(soundRef.current);
+    if (soundRef.current) speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
+  }, []);
 
   useEffect(() => {
     if (!active) {
@@ -74,6 +130,7 @@ export function useBrowserGuide(
     }
     let stopped = false;
     let stream: MediaStream | null = null;
+    const token = readGuideKey();
 
     (async () => {
       try {
@@ -84,6 +141,11 @@ export function useBrowserGuide(
         });
         if (stopped) return;
         setBackend(engine.backend);
+        // With the demo key, also the server model; without a face detector nothing may leave the device: CLIP only.
+        const face = token ? await (faceLoad ??= loadFaceFinder()) : null;
+        if (stopped) return;
+        setSmart(Boolean(token && face));
+        const say = token ? speaker(token) : null;
         setStatus("starting");
         try {
           stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
@@ -100,13 +162,14 @@ export function useBrowserGuide(
         await video.play();
         setStatus("live");
 
-        const session = new GuideSession(engine);
+        const session = new GuideSession(engine, token && face ? serverModel(token, face) : undefined);
         while (!stopped) {
           if (video.readyState >= 2 && video.videoWidth) {
             // Always the newest frame: while a step runs, the camera keeps going and the frames in between are skipped.
             const frame = await session.step(video, performance.now() / 1000);
             if (stopped) break;
             if (canvasRef.current) draw(canvasRef.current, video, frame);
+            if (say && soundRef.current) frame.speak.forEach(say);
             const key = frame.banner ? JSON.stringify(frame.banner) : "";
             if (frame.people.length !== last.current.people) setPeople((last.current.people = frame.people.length));
             if (key !== last.current.banner) {
@@ -134,5 +197,5 @@ export function useBrowserGuide(
     };
   }, [active, videoRef, canvasRef]);
 
-  return { status, progress, people, banner, backend, error };
+  return { status, progress, people, banner, backend, error, smart, sound, enableSound };
 }

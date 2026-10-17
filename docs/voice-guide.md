@@ -29,6 +29,15 @@ chemicals): "None. <item> is dangerous to place in any of these bins. Place it i
 below 50% confidence or no answer by arrival. Catalog bins: `worker/rules/cambridge-ma-2022.bins.json` (each row
 cites the city's guide).
 
+## Live camera page (/camera, hold-up demo)
+
+Jolie's page runs YOLO11n-pose + CLIP in the browser. Opened with the demo key (`/camera#key=<GUIDE_TOKEN>`) it also
+uses the full model: every held item's hand crops (every head blacked out, then any face MediaPipe still finds; no face
+detector = nothing is sent) go to `/api/guide/identify` (DeepSeek + Jev). CLIP's catalog answer shows at once; the
+server's answer replaces it (~1.2 s) and is what gets spoken; tap "Sound on" once for the ElevenLabs voice (the
+browser's own voice if ElevenLabs fails). No server answer within 4 s -> CLIP's answer, else trash. Without the key the
+page is unchanged (CLIP only). The label under the banner says who answered.
+
 ## Privacy
 
 Only item crops leave the machine (DeepSeek), and only after every person's head region and every face found by the

@@ -106,3 +106,16 @@ def test_empty_hand_is_not_holding():
     assert not w.holding(1, 3.0) and w.answer(1, 3.0) is None
     w2 = watch(FakeScorer(0.9, {"item_napkin": 1.0}))
     assert w2.holding(1, 2.0) and not w2.holding(1, 5.0)  # last seen at 1.8 s; 1 s window
+
+
+def test_clip_runs_at_most_every_observe_interval():
+    calls = []
+    sc = FakeScorer(0.9, {"item_generic_can": 1.0})
+
+    def counting_embed(crops):
+        calls.append(len(crops))
+        return np.ones((len(crops), 4), np.float32)
+    w = gi.ItemWatcher(counting_embed, sc, TABLE, executor=ThreadPoolExecutor(1))
+    for k in range(30):  # one second at 30 fps
+        w.observe(1, k / 30, FRAME, arm_kp())
+    assert len(calls) <= 1 / gi.OBSERVE_EVERY_S + 1

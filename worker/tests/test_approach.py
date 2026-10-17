@@ -82,3 +82,10 @@ def test_live_source_reads_any_opencv_source_with_wall_clock_times(tmp_path):
     assert [f[0] for f in frames] == [0, 1, 2, 3, 4] and all(b[1] >= a[1] for a, b in zip(frames, frames[1:]))
     with pytest.raises(FileNotFoundError):
         LiveCameraSource("rtsp://127.0.0.1:1/nothing", open_timeout_s=1)
+
+
+def test_without_feet_a_hand_inside_the_bin_area_counts_as_arrived():
+    k = person(900, 650)
+    k[15, 2] = k[16, 2] = 0.0             # feet out of the picture (close-up)
+    k[7], k[9] = (880, 400, 0.9), (900, 500, 0.9)  # elbow, wrist; wrist inside the area
+    assert ap.distance_m(k, AREA) == 0.0

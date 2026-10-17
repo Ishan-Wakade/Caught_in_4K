@@ -126,3 +126,9 @@ def test_cli_guide_dry_run_on_a_file(tmp_path, capsys):
     lines = [json.loads(line) for line in (tmp_path / "g.jsonl").read_text().splitlines()]
     assert len(lines) == 1 and lines[0]["message"] == CAN
     assert (tmp_path / "out.mp4").exists() and "fps" in capsys.readouterr().err
+
+
+def test_same_person_with_a_new_track_id_is_not_announced_again(tmp_path):
+    # the tracker re-numbers the person (turning around) while standing at the bins: one announcement, not two
+    g = make(lambda t: [(1 if t < 1.0 else 7, 900)], FakeWatcher({1: CAN, 7: CAN}), tmp_path)
+    assert len(run(g, 3.0)) == 1

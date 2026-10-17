@@ -18,6 +18,17 @@ from . import guide_message as gm
 from .approach import Approach, BinArea, LEAD_S, distance_m
 
 BANNER_S = 3.0  # how long a spoken message stays on screen
+SAME_PERSON_S = 4.0   # a new track this soon after an announced person was last seen ...
+SAME_PERSON_BODY = 0.5  # ... and this close (in body heights) is that person re-numbered by the tracker
+
+
+def _where(kp):
+    """(x, y, body size in px) of a skeleton: centre and height of its visible keypoints, or None."""
+    vis = kp[:, 2] > 0.3
+    if vis.sum() < 3:
+        return None
+    xs, ys = kp[vis, 0], kp[vis, 1]
+    return float(xs.mean()), float(ys.mean()), float(max(ys.max() - ys.min(), xs.max() - xs.min(), 1.0))
 
 
 class YoloPoseTracker:
@@ -45,6 +56,7 @@ class Guide:
         self.pose, self.watcher, self.approach, self.voice = pose_tracker, watcher, approach, voice
         self.log_path, self.area, self.homography = (Path(log_path) if log_path else None), area or approach.area, homography
         self.pending: dict[int, float] = {}       # track_id -> time the trigger fired, answer not ready yet
+        self.announced_at: dict[int, tuple] = {}  # track_id -> (last seen, (x, y, body px)) of announced people
         self.said: list[dict] = []
         self.people: list[tuple[int, np.ndarray]] = []
         self.fps = 0.0
@@ -58,8 +70,12 @@ class Guide:
         for tid, kp in self.people:
             self.watcher.observe(tid, t, frame, kp)
         for tid, kp in self.people:
+            if tid in self.announced_at:
+                self.announced_at[tid] = (t, _where(kp))
+        for tid, kp in self.people:
             if tid not in self.pending and self.watcher.holding(tid, t) and self.approach.update(tid, t, kp):
-                self.pending[tid] = t
+                if not self._already_told(tid, t, kp):
+                    self.pending[tid] = t
             if tid in self.pending:
                 a = self._decide(tid, t, kp)
                 if a is not None:
@@ -68,6 +84,19 @@ class Guide:
             if t - self.pending[tid] >= LEAD_S:
                 made.append(self._speak(idx, t, tid, gm.default_trash(None), "default"))
         return made
+
+    def _already_told(self, tid: int, t: float, kp) -> bool:
+        """The tracker gave an announced person a new id (turned around, briefly hidden): do not repeat."""
+        here = _where(kp)
+        if here is None:
+            return False
+        visible = {i for i, _ in self.people}
+        for other, (seen, there) in self.announced_at.items():  # only people no longer visible: a re-numbered id
+            if other != tid and other not in visible and there is not None and t - seen <= SAME_PERSON_S:
+                if np.hypot(here[0] - there[0], here[1] - there[1]) <= SAME_PERSON_BODY * max(here[2], there[2]):
+                    self.announced_at[tid] = (t, here)
+                    return True
+        return False
 
     def _decide(self, tid: int, t: float, kp) -> tuple[dict, str] | None:
         ans = self.watcher.answer(tid, t)
@@ -80,6 +109,8 @@ class Guide:
 
     def _speak(self, idx: int, t: float, tid: int, message: dict, source: str) -> dict:
         fired = self.pending.pop(tid, t)
+        kp = next((k for i, k in self.people if i == tid), None)
+        self.announced_at[tid] = (t, _where(kp) if kp is not None else None)
         text = gm.spoken(message)
         self.voice.speak(text, t)
         a = {"t": round(t, 3), "frame": idx, "track_id": int(tid), "message": message, "spoken": text, "source": source,

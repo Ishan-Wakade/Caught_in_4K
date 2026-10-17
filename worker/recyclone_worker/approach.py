@@ -59,10 +59,12 @@ def _box_gap(pt, x0, y0, x1, y1) -> float:
 
 
 def distance_m(kp, area: BinArea, homography=None) -> float | None:
-    """Meters from the person's feet to the bin area (0 inside it); None without visible ankles."""
+    """Meters from the person's feet to the bin area (0 inside it). Without visible ankles: 0 if a hand is inside the
+    area, else None."""
     feet = _feet(kp)
-    if feet is None:
-        return None
+    if feet is None:  # feet out of the picture (close-up): a hand inside the bin area means the person is there
+        wrists = [p for p in (_pt(kp, 9), _pt(kp, 10)) if p]
+        return 0.0 if any(_box_gap(w, area.x0, area.y0, area.x1, area.y1) == 0.0 for w in wrists) else None
     if homography is not None:
         h = np.asarray(homography, np.float64)
 

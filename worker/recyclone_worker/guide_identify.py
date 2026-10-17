@@ -25,6 +25,7 @@ MIN_CROPS = 2       # item crops before the LLM is asked
 CROP_GAP_S = 0.5    # kept crops at least this far apart (different moments/angles)
 KEEP_CROPS = 3
 HOLD_WINDOW_S = 1.0  # "holding" = an item seen in a hand within the last second
+OBSERVE_EVERY_S = 0.1  # CLIP on a person's hands at most 10 times a second (speed; the hand moves little in 0.1 s)
 
 
 class _Person:
@@ -43,11 +44,15 @@ class ItemWatcher:
         self.namer, self.advisor = namer, advisor
         self.executor = executor or ThreadPoolExecutor(max_workers=2)
         self.people: dict[int, _Person] = {}
+        self.last_observed: dict[int, float] = {}
 
     def _person(self, track_id: int) -> _Person:
         return self.people.setdefault(track_id, _Person(len(self.scorer.cats)))
 
     def observe(self, track_id: int, t: float, frame: np.ndarray, kp) -> None:
+        if t - self.last_observed.get(track_id, -1e9) < OBSERVE_EVERY_S:
+            return
+        self.last_observed[track_id] = t
         h, w = frame.shape[:2]
         crops = []
         for side in ("L", "R"):

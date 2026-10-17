@@ -144,3 +144,36 @@ def test_forget_drops_a_person():
     w = watch(FakeScorer(0.9, {"item_napkin": 1.0}))
     w.forget(1)
     assert 1 not in w.people and w.answer(1, 3.0) is None
+
+
+# ---- security review (17 Oct): face blanking must fail closed
+def test_another_persons_head_in_the_crop_is_blanked():
+    frame = np.full((480, 640, 3), 255, np.uint8)
+    w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
+    other = np.zeros((17, 3), np.float32)
+    other[0], other[5], other[6] = (310, 340, 0.9), (290, 380, 0.9), (330, 380, 0.9)  # someone's face behind the hand
+    w.set_heads([gi.head_box(other)])
+    w.observe(1, 0.0, frame, arm_kp())
+    crop = w.people[1].crops[0][2]
+    from recyclone_worker.items import hand_box
+    x0, y0, _, _ = (int(v) for v in hand_box(arm_kp(), "L", 640, 480))
+    assert crop[340 - y0, 310 - x0].sum() == 0
+
+
+def test_low_confidence_face_points_are_still_blanked():
+    frame = np.full((480, 640, 3), 255, np.uint8)
+    k = arm_kp()
+    k[0] = (300, 330, 0.1)  # the model is unsure about the nose, but it is a face: blank anyway
+    w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
+    w.observe(1, 0.0, frame, k)
+    from recyclone_worker.items import hand_box
+    x0, y0, _, _ = (int(v) for v in hand_box(k, "L", 640, 480))
+    assert w.people[1].crops[0][2][330 - y0, 300 - x0].sum() == 0
+
+
+def test_faces_found_by_the_face_detector_are_blanked(monkeypatch):
+    frame = np.full((480, 640, 3), 255, np.uint8)
+    monkeypatch.setattr(gi, "detect_faces", lambda crop: [(2, 2, 10, 10)])  # x, y, w, h inside the crop
+    w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
+    w.observe(1, 0.0, frame, arm_kp())
+    assert w.people[1].crops[0][2][6, 6].sum() == 0

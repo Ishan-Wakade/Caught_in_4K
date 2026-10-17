@@ -72,6 +72,10 @@ class Guide:
         """Announcements made at this frame."""
         self.people = self.pose(frame)
         made = []
+        if hasattr(self.watcher, "set_heads"):  # every person's head is blanked in crops that leave the device
+            from .guide_identify import head_box
+
+            self.watcher.set_heads([head_box(kp) for _, kp in self.people])
         for tid, kp in self.people:
             self.first_seen.setdefault(tid, t)
             self.last_seen[tid] = t

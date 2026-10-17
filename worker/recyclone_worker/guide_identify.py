@@ -10,6 +10,7 @@ item, >= 0.5 s apart, are kept for the LLM.
 """
 
 import sys
+from pathlib import Path
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 
 import cv2
@@ -27,7 +28,60 @@ HAZARD_PROMPTS = {
     "hazard:electronics": ["a phone", "a charging cable", "a small electronic device", "an e-cigarette vape"],
     "hazard:chemical": ["a can of paint", "a bottle of chemicals", "a propane canister", "an aerosol spray can"],
 }
-FACE_KPS = (0, 1, 2, 3, 4)  # nose, eyes, ears: blanked in every kept crop (faces never leave the device)
+FACE_KPS = (0, 1, 2, 3, 4)  # nose, eyes, ears
+FACE_KP_MIN = 0.05          # fail closed: blank even face points the pose model is unsure about
+
+
+def head_box(kp) -> tuple[float, float, float, float] | None:
+    """A person's head region in the frame: around any face keypoint (even low confidence), else the square above the
+    shoulders. Used to blank EVERY tracked person's head in crops that leave the device."""
+    face = [kp[j][:2] for j in FACE_KPS if kp[j][2] > FACE_KP_MIN]
+    sh = [kp[j][:2] for j in (5, 6) if kp[j][2] > FACE_KP_MIN]
+    width = float(abs(sh[0][0] - sh[1][0])) if len(sh) == 2 else None
+    if face:
+        xs, ys = [float(p[0]) for p in face], [float(p[1]) for p in face]
+        r = max(25.0, 0.6 * (width or 0.0), 1.2 * (max(xs) - min(xs)))
+        cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+        return cx - r, cy - r, cx + r, cy + r
+    if width:
+        cx, top = float(sh[0][0] + sh[1][0]) / 2, float(min(sh[0][1], sh[1][1]))
+        return cx - 0.6 * width, top - 1.2 * width, cx + 0.6 * width, top
+    return None
+
+
+FACE_MODEL_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+FACE_MODEL = Path(__file__).resolve().parents[1] / "weights" / "face_detection_yunet_2023mar.onnx"
+_DETECTOR: dict = {}
+
+
+def ensure_face_detector() -> bool:
+    """Download OpenCV's YuNet face detector (~230 KB, opencv_zoo) once; the guide calls this at start."""
+    if not FACE_MODEL.exists():
+        try:
+            import urllib.request
+
+            FACE_MODEL.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(FACE_MODEL_URL, FACE_MODEL)
+        except Exception as e:  # noqa: BLE001 - head boxes from the skeleton still blank faces
+            print(f"note: face detector not available ({type(e).__name__}); blanking heads from the skeleton only", file=sys.stderr)
+            return False
+    return True
+
+
+def detect_faces(crop: np.ndarray) -> list[tuple[int, int, int, int]]:
+    """Faces in a crop (OpenCV YuNet), a second blanking layer that does not depend on the skeleton.
+    Without the model file (not downloaded): no detections; the head boxes still apply."""
+    if not FACE_MODEL.exists():
+        return []
+    h, w = crop.shape[:2]
+    det = _DETECTOR.get("yunet")
+    if det is None:
+        det = _DETECTOR["yunet"] = cv2.FaceDetectorYN.create(str(FACE_MODEL), "", (w, h), 0.6, 0.3, 50)
+    det.setInputSize((w, h))
+    _, faces = det.detect(crop)
+    if faces is None:
+        return []
+    return [(int(f[0]), int(f[1]), int(f[2]), int(f[3])) for f in faces]
 
 
 def guide_prompts() -> dict:
@@ -35,13 +89,15 @@ def guide_prompts() -> dict:
     return {**ITEM_PROMPTS, **HAZARD_PROMPTS}
 
 
-def _blank_face(crop: np.ndarray, kp, x0: int, y0: int) -> np.ndarray:
-    eyes = [kp[j][:2] for j in (1, 2) if kp[j][2] > 0.3]
-    r = int(max(12, 1.5 * float(np.hypot(*(eyes[0] - eyes[1]))) if len(eyes) == 2 else 0.12 * max(crop.shape[:2])))
-    for j in FACE_KPS:
-        if kp[j][2] > 0.3:
-            cv2.circle(crop, (int(kp[j][0]) - x0, int(kp[j][1]) - y0), r, (0, 0, 0), -1)
+def _blank_faces(crop: np.ndarray, x0: int, y0: int, heads: list) -> np.ndarray:
+    """Fail closed: black out every head region (all tracked people) and every face the detector finds."""
+    for h in heads:
+        if h is not None:
+            cv2.rectangle(crop, (int(h[0]) - x0, int(h[1]) - y0), (int(h[2]) - x0, int(h[3]) - y0), (0, 0, 0), -1)
+    for fx, fy, fw, fh in detect_faces(crop):
+        cv2.rectangle(crop, (fx, fy), (fx + fw, fy + fh), (0, 0, 0), -1)
     return crop
+
 
 ITEM_P = 0.5        # CLIP P(item) for a hand crop to count as holding something
 KNOWN_P = 0.6       # share of category votes needed to answer from the catalog without the LLM
@@ -70,6 +126,7 @@ class ItemWatcher:
         self.executor = executor or ThreadPoolExecutor(max_workers=2)
         self.people: dict[int, _Person] = {}
         self.last_observed: dict[int, float] = {}
+        self.heads: list = []
 
     def _person(self, track_id: int) -> _Person:
         return self.people.setdefault(track_id, _Person(len(self.scorer.cats)))
@@ -85,7 +142,7 @@ class ItemWatcher:
             if b is not None:
                 x0, y0, x1, y1 = (int(v) for v in b)
                 if x1 > x0 + 4 and y1 > y0 + 4:
-                    crops.append(_blank_face(frame[y0:y1, x0:x1].copy(), kp, x0, y0))
+                    crops.append(_blank_faces(frame[y0:y1, x0:x1].copy(), x0, y0, [head_box(kp), *self.heads]))
         if not crops:
             return
         p_item, p_cat = self.scorer(self.embed(crops))
@@ -127,6 +184,10 @@ class ItemWatcher:
         if p.job is not None and p.job.done() and p.job.exception() is None and p.job.result() is not None:
             return p.job.result(), "llm"
         return None
+
+    def set_heads(self, heads: list) -> None:
+        """Head regions of everyone in the current frame (the guide sets this each frame)."""
+        self.heads = [h for h in heads if h is not None]
 
     def forget(self, track_id: int) -> None:
         """The person is gone: drop their crops and votes, and cancel an LLM job that has not started."""

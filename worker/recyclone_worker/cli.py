@@ -337,7 +337,9 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             advisor = BinAdvisor(Path(args.local_rules), WORKER_DIR / "state/generic-types.json")
             if not namer.available:
                 print("note: no DEEPSEEK_API_KEY; items not recognized by CLIP will be announced as trash", file=sys.stderr)
-        from .guide_identify import guide_prompts
+        from .guide_identify import ensure_face_detector, guide_prompts
+
+        ensure_face_detector()
 
         pose = YoloPoseTracker(weight("yolo11n-pose.pt"))
         watcher = ItemWatcher(clip.images, Scorer(clip, guide_prompts()), table, namer=namer, advisor=advisor)

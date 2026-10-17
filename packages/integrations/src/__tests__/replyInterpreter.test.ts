@@ -22,6 +22,22 @@ describe("RuleBasedReplyInterpreter", () => {
     expect(result).toEqual({ alertId: "alert_1", intent: "action_confirmed" });
   });
 
+  it("treats a bare 'done' as a confirmation", async () => {
+    const result = await interpreter.interpret(reply("done"), oneRecommendation);
+    expect(result).toEqual({ alertId: "alert_1", intent: "action_confirmed" });
+  });
+
+  it("treats 'put a sign up by the register' alone as a confirmation", async () => {
+    const result = await interpreter.interpret(reply("put a sign up by the register"), oneRecommendation);
+    expect(result).toEqual({ alertId: "alert_1", intent: "action_confirmed" });
+  });
+
+  it("treats 'emptied the trash' as a bin-emptied reply, not a confirmation", async () => {
+    const result = await interpreter.interpret(reply("emptied the trash"), oneEmptying);
+    expect(result.intent).toBe("bin_emptied");
+    expect(result.alertId).toBe("alert_2");
+  });
+
   it("treats a bare acknowledgement as acknowledged, not confirmed", async () => {
     const result = await interpreter.interpret(reply("ok thanks"), oneRecommendation);
     expect(result.intent).toBe("acknowledged");
@@ -46,6 +62,11 @@ describe("RuleBasedReplyInterpreter", () => {
       { alertId: "alert_3", kind: "recommendation", itemName: "fork", binName: "compost", sentAt: "2026-10-16T01:00:00.000Z" },
     ];
     const result = await interpreter.interpret(reply("done, fixed it"), twoRecommendations);
+    expect(result).toEqual({ alertId: null, intent: "unclear" });
+  });
+
+  it("returns unclear when an ambiguous acknowledgement arrives with a recommendation and an emptying alert both open", async () => {
+    const result = await interpreter.interpret(reply("ok"), [...oneRecommendation, ...oneEmptying]);
     expect(result).toEqual({ alertId: null, intent: "unclear" });
   });
 

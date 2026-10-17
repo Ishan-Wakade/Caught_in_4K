@@ -170,6 +170,12 @@ Goal: from the corner camera's footage, announce the right bin before the person
    *(E's call)* The model therefore runs on a **live camera** too: a webcam, the iPhone as a Mac camera (Continuity
    Camera), or a store's IP camera; recorded files still work for testing.
 
+7. **Demo video setup (team, 17 Oct):** one phone acts as the surveillance camera and the laptop runs the model
+   and acts as the speaker, all locally. *(E's call)* The iPhone feeds the Mac live through Continuity Camera
+   (or an RTSP camera app as a fallback); `recyclone-worker guide --source <index> --area pick --show --cctv
+   --render demo.mp4` speaks through the laptop (or a Bluetooth speaker placed on the bins) and records the
+   annotated video with the voice.
+
 ## 7. Settled after the review pass *(E's calls)*
 - **Speed, honestly:** the announcement path (skeleton, hand-crop CLIP, floor distance, trigger) is built causal —
   it only uses past frames, as on a live camera — and must run at or above the camera's frame rate on the demo

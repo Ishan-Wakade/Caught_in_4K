@@ -98,15 +98,78 @@ def keyframe_boxes(spec: dict, n: int) -> list:
     return out
 
 
+FORE_PER_SHOULDERS = 0.7  # no elbow: forearm length ~0.7 shoulder widths ...
+FORE_PER_EARS = 1.7       # ... or ~1.7 ear-to-ear widths (head-and-shoulders webcam view, 17 Oct)
+FORE_MIN_SHARE = 0.6      # a forearm pointing at the camera looks short: never size the box below 0.6 of that estimate
+
+
+def _forearm_from_body(kp) -> float | None:
+    """A forearm length in px from confident shoulders or ears, for when the elbow itself is not seen."""
+    for (a, b), k in (((5, 6), FORE_PER_SHOULDERS), ((3, 4), FORE_PER_EARS)):
+        if kp[a][2] >= 0.5 and kp[b][2] >= 0.5:
+            return k * float(np.hypot(kp[a][0] - kp[b][0], kp[a][1] - kp[b][1]))
+    return None
+
+
 def hand_box(kp, side: str, w: int, h: int):
+    """The square just past a wrist, along the forearm, where a held item is.
+
+    Close to a camera (a webcam, a hold-up demo) the elbow is often out of frame: then the box is around the wrist,
+    reaching further up than down (an elbow out of view is below the frame), sized from the shoulders or ears."""
     e, wr = (7, 9) if side == "L" else (8, 10)
-    if kp[wr][2] < 0.3 or kp[e][2] < 0.2:
+    if kp[wr][2] < 0.3:
         return None
-    ex, ey, wx, wy = kp[e][0], kp[e][1], kp[wr][0], kp[wr][1]
-    fore = max(60.0, float(np.hypot(wx - ex, wy - ey)))
-    cx, cy, s = wx + 0.35 * (wx - ex), wy + 0.35 * (wy - ey), 0.6 * fore
+    wx, wy = kp[wr][0], kp[wr][1]
+    if kp[e][2] >= 0.2:
+        ex, ey = kp[e][0], kp[e][1]
+        body = _forearm_from_body(kp)
+        fore = max(60.0, float(np.hypot(wx - ex, wy - ey)), FORE_MIN_SHARE * body if body else 0.0)
+        cx, cy, s = wx + 0.35 * (wx - ex), wy + 0.35 * (wy - ey), 0.6 * fore
+    else:
+        fore = _forearm_from_body(kp)
+        if fore is None:
+            return None
+        fore = max(60.0, fore)
+        cx, cy, s = wx, wy - 0.2 * fore, 0.85 * fore
     b = (max(0, cx - s), max(0, cy - s), min(w, cx + s), min(h, cy + s))
     return b if b[2] - b[0] > 20 and b[3] - b[1] > 20 else None
+
+
+SCAN_GROW = 1.6     # the hand box, grown: a big item reaches well past the hand
+RAISED_BELOW = 0.5  # a wrist above the shoulder line + this many shoulder widths is raised (held up to the camera)
+TO_FACE = 0.75      # wrist-to-face box: half-size, in wrist-to-face distances
+SCAN_SHOULDER_MIN = 0.3  # shoulders this sure place the shoulder line (a held-up item lowers their confidence)
+
+
+def _square(cx, cy, s, w, h):
+    b = (max(0, cx - s), max(0, cy - s), min(w, cx + s), min(h, cy + s))
+    return b if b[2] - b[0] > 20 and b[3] - b[1] > 20 else None
+
+
+def hand_scan(kp, w: int, h: int) -> list:
+    """Boxes to look for a held item in, best first: each hand box, the same grown, and for a raised hand the box between
+    the wrist and the face, where an item held up to a camera is (17 Oct, a chip bag held in front of the face: hand
+    boxes 7% and 41% P(item), wrist-to-face 99%). The guide keeps the crop CLIP is surest holds an item."""
+    out = []
+    for side in ("L", "R"):
+        b = hand_box(kp, side, w, h)
+        if b is not None:
+            out.append(b)
+            grown = _square((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, SCAN_GROW * max(b[2] - b[0], b[3] - b[1]) / 2, w, h)
+            if grown is not None:
+                out.append(grown)
+    if kp[5][2] < SCAN_SHOULDER_MIN or kp[6][2] < SCAN_SHOULDER_MIN:
+        return out
+    width = float(abs(kp[5][0] - kp[6][0]))
+    line = float(min(kp[5][1], kp[6][1]))
+    face = (float(kp[0][0]), float(kp[0][1])) if kp[0][2] >= 0.3 else ((kp[5][0] + kp[6][0]) / 2, line - 0.5 * width)
+    for wr in (9, 10):
+        if kp[wr][2] >= 0.3 and kp[wr][1] < line + RAISED_BELOW * width:
+            d = float(np.hypot(kp[wr][0] - face[0], kp[wr][1] - face[1]))
+            b = _square((kp[wr][0] + face[0]) / 2, (kp[wr][1] + face[1]) / 2, max(80.0, TO_FACE * d), w, h)
+            if b is not None:
+                out.append(b)
+    return out
 
 
 class Clip:

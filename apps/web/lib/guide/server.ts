@@ -5,6 +5,8 @@
  * route only voices a validated bin message, so the ElevenLabs credit cannot be used to say arbitrary text.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { identify as realIdentify, type Keys, type Result } from "./identify";
 import { defaultTrash, fromCatalog, spoken, validateMessage, type GuideMessage } from "./message";
 import { recordSighting, slugify } from "../dashboard/db";
@@ -82,7 +84,26 @@ function validSignature(m: GuideMessage, sig: unknown): boolean {
   return a.length === e.length && timingSafeEqual(a, e);
 }
 
-export async function handleIdentify(request: Request, identify: Identify = realIdentify): Promise<Response> {
+/**
+ * Local debugging only (never in production): with GUIDE_DEBUG_DIR set, each request's crops (already face-redacted by
+ * the browser) and the providers' answers are saved there, to see why an item was not recognized.
+ */
+function debugIdentify(dir: string): Identify {
+  return async (crops, keys) => {
+    const trail: object[] = [];
+    const r = await realIdentify(crops, keys, undefined, (step) => trail.push(step));
+    const stem = path.join(dir, new Date().toISOString().replace(/[:.]/g, "-"));
+    await mkdir(dir, { recursive: true });
+    await Promise.all(crops.map((c, i) => writeFile(`${stem}-crop${i}.jpg`, Buffer.from(c.split(",")[1], "base64"))));
+    await writeFile(`${stem}.json`, JSON.stringify({ result: r, providers: trail }, null, 2));
+    console.info(`[guide] ${r.source}: ${r.message ? spoken(r.message) : "(nothing)"} -> ${stem}.json`);
+    return r;
+  };
+}
+
+const DEBUG_DIR = process.env.NODE_ENV !== "production" ? process.env.GUIDE_DEBUG_DIR : undefined;
+
+export async function handleIdentify(request: Request, identify: Identify = DEBUG_DIR ? debugIdentify(DEBUG_DIR) : realIdentify): Promise<Response> {
   const denied = guard(request);
   if (denied) return denied;
   let body: { crops?: unknown };

@@ -120,7 +120,49 @@ def test_empty_hand_is_not_holding():
     w = watch(FakeScorer(0.1, {"item_napkin": 1.0}))
     assert not w.holding(1, 3.0) and w.answer(1, 3.0) is None
     w2 = watch(FakeScorer(0.9, {"item_napkin": 1.0}))
-    assert w2.holding(1, 2.0) and not w2.holding(1, 5.0)  # last seen at 1.8 s; 1 s window
+    assert w2.holding(1, 2.0) and not w2.holding(1, 5.0)  # last seen at 1.8 s; 1.5 s window
+
+
+class SeqScorer(FakeScorer):
+    """p_item from a list, one value per look (then the last one repeats)."""
+
+    def __init__(self, seq, probs):
+        super().__init__(seq[0], probs)
+        self.seq = list(seq)
+
+    def __call__(self, emb):
+        self.p_item = self.seq.pop(0) if len(self.seq) > 1 else self.seq[0]
+        return super().__call__(emb)
+
+
+def looks(w, n, t0=0.0):
+    for i in range(n):
+        w.observe(1, t0 + 0.1 * i, FRAME, arm_kp())
+
+
+def test_one_odd_frame_does_not_start_holding():
+    w = gi.ItemWatcher(embed, SeqScorer([0.9, 0.1, 0.1, 0.9, 0.1], {"item_napkin": 1.0}), TABLE, executor=ThreadPoolExecutor(1))
+    looks(w, 5)
+    assert not w.holding(1, 0.5)
+
+
+def test_holding_starts_after_a_few_looks_and_one_miss_does_not_end_it():
+    w = gi.ItemWatcher(embed, SeqScorer([0.9, 0.9, 0.1, 0.9, 0.1, 0.9], {"item_napkin": 1.0}), TABLE, executor=ThreadPoolExecutor(1))
+    looks(w, 3)
+    assert not w.holding(1, 0.25)  # two looks saw it: not yet
+    looks(w, 3, t0=0.3)
+    assert w.holding(1, 0.55)
+
+
+def test_the_first_answer_is_kept():
+    sc = FakeScorer(0.9, {"item_generic_can": 1.0})
+    w = gi.ItemWatcher(embed, sc, TABLE, executor=ThreadPoolExecutor(1))
+    looks(w, 3)
+    first = w.answer(1, 0.3)
+    assert first is not None and first[0]["bin"] == "recycle"
+    sc.row = np.array([0.0, 1.0, 0.0], np.float32)  # CLIP now leans to the napkin
+    looks(w, 20, t0=0.4)
+    assert w.answer(1, 2.5) == first
 
 
 def test_clip_runs_at_most_every_observe_interval():
@@ -213,7 +255,8 @@ def test_a_head_whose_size_cannot_be_estimated_drops_the_crop(monkeypatch):
     k[0] = (300, 330, 0.9)  # a lone nose point inside the crop: no eyes, no shoulders, nothing to size the head by
     k[7, 2] = 0.25           # elbow barely visible: the body extent is unknown too
     w = gi.ItemWatcher(embed, FakeScorer(0.9, {"item_generic_can": 0.1}), TABLE, executor=ThreadPoolExecutor(1))
-    w.observe(1, 0.0, frame, k)
+    for t in (0.0, 0.1, 0.2):  # holding is confirmed after HOLD_CONFIRM looks
+        w.observe(1, t, frame, k)
     assert w.holding(1, 0.5) and w.people[1].crops == []
 
 
@@ -241,3 +284,79 @@ def test_low_confidence_points_do_not_size_the_body():
         k[j] = (300, y, 0.1)  # unsure lower-body points must not make a tiny face look "reliably sized"
     (_, reliable) = gi.head_box(k)
     assert not reliable
+
+
+# ---- hold-up at a webcam (17 Oct): only the upper body is in view, so the elbow is not seen
+def webcam_kp(shoulders=True, ears=False):
+    k = np.zeros((17, 3), np.float32)
+    k[9] = (420, 250, 0.9)   # left wrist, raised; the left elbow (k[7]) is below the frame: confidence 0
+    if shoulders:
+        k[5], k[6] = (400, 300, 0.9), (800, 300, 0.9)
+    if ears:
+        k[3], k[4] = (560, 200, 0.9), (720, 200, 0.9)
+    return k
+
+
+def test_hand_box_without_elbow_is_sized_from_the_shoulders():
+    from recyclone_worker.items import hand_box
+    # forearm ~0.7 shoulder widths = 280 px; box around the wrist, reaching further up than down
+    assert hand_box(webcam_kp(), "L", 1280, 720) == pytest.approx((182, 0, 658, 432))
+
+
+def test_hand_box_without_elbow_or_shoulders_is_sized_from_the_ears():
+    from recyclone_worker.items import hand_box
+    assert hand_box(webcam_kp(shoulders=False, ears=True), "L", 1280, 720) == pytest.approx((188.8, 0, 651.2, 426.8), abs=0.01)
+
+
+def test_hand_box_without_elbow_or_body_size_is_none():
+    from recyclone_worker.items import hand_box
+    assert hand_box(webcam_kp(shoulders=False), "L", 1280, 720) is None
+
+
+def test_hand_box_with_elbow_is_unchanged():
+    from recyclone_worker.items import hand_box
+    assert hand_box(arm_kp(), "L", 640, 480) == pytest.approx((240, 275, 360, 395))
+
+
+# ---- the hold-up screenshot (17 Oct): a chip bag held in front of the face, keypoints from YOLO11n-pose on it
+def holdup_kp():
+    k = np.zeros((17, 3), np.float32)
+    k[0] = (998, 421, 0.93)                       # "nose": on the bag, which covers the face
+    k[5], k[6] = (1356, 773, 0.79), (612, 796, 0.67)
+    k[7], k[9] = (1569, 1035, 0.36), (1426, 840, 0.65)
+    k[8], k[10] = (429, 1089, 0.12), (500, 971, 0.32)
+    return k
+
+
+def test_scan_of_a_raised_hand_reaches_the_item_held_in_front_of_the_face():
+    from recyclone_worker.items import hand_box, hand_scan
+    bag = (1000, 650)
+    boxes = hand_scan(holdup_kp(), 2000, 1089)
+    inside = lambda b: b[0] <= bag[0] <= b[2] and b[1] <= bag[1] <= b[3]
+    assert not inside(hand_box(holdup_kp(), "L", 2000, 1089))  # the hand box alone misses the bag
+    assert boxes[0] == hand_box(holdup_kp(), "L", 2000, 1089) and any(inside(b) for b in boxes)
+
+
+def test_scan_of_hands_down_has_no_wrist_to_face_box():
+    from recyclone_worker.items import hand_scan
+    k = holdup_kp()
+    k[9], k[10] = (1400, 1900, 0.9), (600, 1900, 0.9)  # wrists at the hips
+    k[7], k[8] = (1420, 1400, 0.9), (580, 1400, 0.9)
+    assert len(hand_scan(k, 2000, 2400)) == 4         # two hand boxes and their grown copies only
+
+
+# ---- brands CLIP cannot tell apart (17 Oct: a Pizza Kraker bag, "goldfish bag" and "wrapper" by turns)
+def test_votes_split_between_a_product_and_its_generic_kind_answer_the_generic_kind():
+    sc = FakeScorer(0.9, {})
+    sc.cats = ["item_goldfish_bag", "item_generic_wrapper", "item_generic_can"]
+    sc.row = np.array([0.5, 0.45, 0.05], np.float32)
+    w = gi.ItemWatcher(embed, sc, TABLE, executor=ThreadPoolExecutor(1))
+    looks(w, 4)
+    ans = w.answer(1, 0.4)
+    assert ans is not None and ans[0] == gm.from_catalog("item_generic_wrapper", TABLE)
+
+
+def test_each_product_parent_has_the_same_bin():
+    from recyclone_worker.categories import PRODUCT_PARENT
+    for product, kind in PRODUCT_PARENT.items():
+        assert TABLE[product]["bin"] == TABLE[kind]["bin"], (product, kind)

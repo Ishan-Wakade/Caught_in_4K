@@ -21,7 +21,8 @@ import numpy as np
 
 from recyclone_worker import guide_identify as gi
 from recyclone_worker import guide_message as gm
-from recyclone_worker.items import BACKGROUND, Clip, Scorer, hand_box, weight
+from recyclone_worker.categories import PRODUCT_PARENT
+from recyclone_worker.items import BACKGROUND, Clip, Scorer, hand_box, hand_scan, weight
 
 WEB = Path(__file__).resolve().parents[1]
 CLIP_REPO, CLIP_REVISION = "Xenova/clip-vit-base-patch32", "d15189d7028b43f1d3e65039190477f6af591c2a"
@@ -68,7 +69,8 @@ def hand_crops(clips: list[Path], pose_weights: Path, every: int = 6, limit: int
 def watcher_case(scorer: Scorer, table: dict, embs: np.ndarray) -> dict:
     """The worker's ItemWatcher on a fixed sequence of hand embeddings (one hand, 10 observations a second)."""
     stream = iter(embs)
-    watcher = gi.ItemWatcher(lambda crops: np.stack([next(stream) for _ in crops]), scorer, table, namer=None)
+    # one embedding per look, for every box the scan gives (the TypeScript test feeds one per observation)
+    watcher = gi.ItemWatcher(lambda crops: np.repeat(next(stream)[None], len(crops), 0), scorer, table, namer=None)
     kp = np.zeros((17, 3), np.float32)
     kp[7], kp[9] = (300, 300, 0.9), (300, 400, 0.9)  # left elbow above left wrist: one hand crop per observation
     frame = np.zeros((720, 1280, 3), np.uint8)
@@ -100,13 +102,15 @@ def main() -> None:
         "clip": {"repo": CLIP_REPO, "revision": CLIP_REVISION, "webgpu": "onnx/vision_model_fp16.onnx",
                  "wasm": "onnx/vision_model_quantized.onnx"},
         "cats": scorer.cats,
+        "parent": [PRODUCT_PARENT.get(c, c) for c in scorer.cats],
         "prompt_owner": scorer.item_owner.tolist(),
         "item_text": rounded(scorer.item_text),
         "bg_text": rounded(scorer.bg_text),
         "background": BACKGROUND,
         "table": {k: {"bin": v["bin"], "name": v["name"]} for k, v in table.items()},
         "constants": {"item_p": gi.ITEM_P, "known_p": gi.KNOWN_P, "min_votes": gi.MIN_VOTES,
-                      "hold_window_s": gi.HOLD_WINDOW_S, "observe_every_s": gi.OBSERVE_EVERY_S,
+                      "hold_window_s": gi.HOLD_WINDOW_S, "hold_recent": gi.HOLD_RECENT, "hold_confirm": gi.HOLD_CONFIRM,
+                      "observe_every_s": gi.OBSERVE_EVERY_S,
                       "max_words": gm.MAX_WORDS, "logit_scale": 100},
     }
     (models / "guide.json").write_text(json.dumps(data, separators=(",", ":")))
@@ -122,6 +126,8 @@ def main() -> None:
                   for e, pi, pc in zip(embs[:12], p_item[:12], p_cat[:12])],
         "hand_box": [{"kp": rounded(kp, 3), "size": list(size), "side": side, "box": rounded(np.array(b), 3)}
                      for _, kp, size, side, b in crops[:12]],
+        "hand_scan": [{"kp": rounded(kp, 3), "size": list(size), "boxes": [rounded(np.array(b), 3) for b in hand_scan(kp, *size)]}
+                      for _, kp, size, _, _ in crops[:24:2]],
         # mixed: the dev clips in order (votes split, so no catalog answer); steady: the crop CLIP is surest about,
         # seen 8 times (answered from the table after MIN_VOTES).
         "watcher": {"mixed": watcher_case(scorer, table, embs),

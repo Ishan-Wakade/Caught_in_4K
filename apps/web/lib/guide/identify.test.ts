@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { identify } from "./identify";
+import { catalogKind, disagree, identify } from "./identify";
 
 type Call = { url: string; body: any };
 
@@ -41,6 +41,55 @@ describe("identify (DeepSeek, then Jev for items not in the catalog)", () => {
     const jev = calls.find((c) => c.url.includes("typesafe"))!.body;
     expect(Object.keys(jev.questions.bin.criteria)).toEqual(["recycling", "compost", "trash", "special"]);
     expect(JSON.parse(jev.state).local_rules).toContain("City of Cambridge");
+  });
+
+  it("a dangerous item is none without asking Jev (it would not change the answer)", async () => {
+    const calls: Call[] = [];
+    const r = await identify([CROP], KEYS, fakeFetch({ catalog: { catalog_item_id: null, what: "a smartphone" },
+      generic: { holding: true, name: "smartphone", material: "mixed", form: "phone", condition: "clean", hazardous: true },
+      jev: { type: "choice", choice: "special", confidence: 1 } }, calls) as never);
+    expect(r).toMatchObject({ message: { bin: "none" }, source: "llm" });
+    expect(calls.some((c) => c.url.includes("typesafe"))).toBe(false);
+  });
+
+  it("a description that matches a catalog kind answers from the bin table, without Jev", async () => {
+    const calls: Call[] = [];
+    const r = await identify([CROP], KEYS, fakeFetch({ catalog: { catalog_item_id: null, what: "an orange snack bag" },
+      generic: { holding: true, name: "snack wrapper", material: "plastic_film", form: "wrapper", condition: "unknown", hazardous: false },
+      jev: { type: "choice", choice: "special", confidence: 0.57 } }, calls) as never);
+    expect(r).toEqual({ message: { bin: "trash", explanation: "snack wrapper, placed in trash" }, source: "catalog" });
+    expect(calls.some((c) => c.url.includes("typesafe"))).toBe(false);
+  });
+
+  it("an object DeepSeek cannot make out is unclear, not a guess, and Jev is not asked", async () => {
+    const calls: Call[] = [];
+    const r = await identify([CROP], KEYS, fakeFetch({ catalog: { catalog_item_id: null, what: "blurry, unclear" },
+      generic: { holding: true, name: "unknown", material: "unknown", form: "other", condition: "unknown", hazardous: false },
+      jev: { type: "choice", choice: "trash", confidence: 0.9 } }, calls) as never);
+    expect(r.source).toBe("unclear");
+    expect(calls.some((c) => c.url.includes("typesafe"))).toBe(false);
+  });
+
+  it("the two DeepSeek answers disagreeing at low confidence is unclear (17 Oct crops)", () => {
+    expect(disagree({ name: "product packaging box", form: "box" }, { what: "white paper wrapper or packet", confidence: 0.3 })).toBe(true);
+    expect(disagree({ name: "phone", form: "phone" }, { what: "light object with a dark oval hole, possibly a cup lid", confidence: 0.2 })).toBe(true);
+    expect(disagree({ name: "snack wrapper", form: "wrapper" }, { what: "Orange snack bag held in hand", confidence: 0.3 })).toBe(false);
+    expect(disagree({ name: "phone", form: "phone" }, { what: "a dark rectangular object, possibly a phone", confidence: 0.4 })).toBe(false);
+    expect(disagree({ name: "glove", form: "glove" }, { what: "a blue cloth", confidence: 0.9 })).toBe(false); // sure: trusted
+  });
+
+  it("catalogKind needs the material where the bin depends on it, and never maps a hazard", () => {
+    expect(catalogKind({ form: "bottle", material: "glass" })).toBe("item_generic_glass");
+    expect(catalogKind({ form: "bottle", material: "metal" })).toBeNull();
+    expect(catalogKind({ form: "bag", material: "plastic_film" })).toBeNull();
+    expect(catalogKind({ form: "wrapper", hazardous: true })).toBeNull();
+  });
+
+  it("Jev under 50% is the trash fallback, marked default (so the demo can stay silent)", async () => {
+    const r = await identify([CROP], KEYS, fakeFetch({ catalog: { catalog_item_id: null, what: "a glove" },
+      generic: { holding: true, name: "disposable glove", material: "plastic_film", form: "glove", condition: "clean", hazardous: false },
+      jev: { type: "choice", choice: "compost", confidence: 0.3 } }, []) as never);
+    expect(r).toEqual({ message: { bin: "trash", explanation: "disposable glove, placed in trash" }, source: "default" });
   });
 
   it("nothing in the hand: no message", async () => {

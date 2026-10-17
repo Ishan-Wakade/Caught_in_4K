@@ -39,6 +39,17 @@ PRODUCT_PROMPTS: dict[str, list[str]] = {
     "item_sauce_cup": ["a small plastic sauce cup with a lid", "a condiment portion cup"],
 }
 
+# Each product's generic category with the SAME bin (tests check this). CLIP cannot tell snack-bag brands apart (17 Oct:
+# a Pizza Kraker bag scored "Goldfish bag" and "snack wrapper" by turns), so when the votes split between a product and
+# its generic kind, the generic kind answers. The sauce cup has none: its bin differs from a plastic container's.
+PRODUCT_PARENT: dict[str, str] = {
+    "item_shakeshack_cup": "item_generic_cup",
+    "item_shakeshack_box": "item_generic_box",
+    "item_biscoff_wrapper": "item_generic_wrapper",
+    "item_goldfish_bag": "item_generic_wrapper",
+    "item_granola_wrapper": "item_generic_wrapper",
+}
+
 ITEM_PROMPTS: dict[str, list[str]] = {**PRODUCT_PROMPTS, **GENERIC_PROMPTS}
 
 

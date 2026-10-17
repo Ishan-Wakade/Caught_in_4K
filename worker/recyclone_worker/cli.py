@@ -321,7 +321,23 @@ def cmd_guide(args, make_guide_parts=None) -> int:
     homography = np.array(json.loads(Path(args.homography).read_text())) if args.homography else None
     live = args.source.isdigit() or "://" in args.source
     table = gm.load_bin_table(Path(args.bins))
-    voice = SilentVoice() if args.voice == "silent" else SayVoice(WORKER_DIR / "state/voice-cache", play=live or args.realtime)
+    speaker = None
+    if args.speaker != "mac":  # a second phone plays the voice (recyclone_worker/phone_speaker.py)
+        from .phone_speaker import PhoneSpeaker, lan_urls
+
+        speaker = PhoneSpeaker(args.speaker_port)
+        speaker.start()
+        print("phone speaker: open on the speaker phone (same Wi-Fi), tap once:", file=sys.stderr)
+        for url in lan_urls(speaker.port, speaker.token):
+            print(f"  {url}", file=sys.stderr)
+        if not (live or args.realtime):
+            print("note: a file without --realtime is not spoken, so the phone stays silent", file=sys.stderr)
+    if args.voice == "silent":
+        voice = SilentVoice()
+    else:
+        player = (lambda f: None) if args.speaker == "phone" else None  # None = afplay on the Mac
+        voice = SayVoice(WORKER_DIR / "state/voice-cache", play=live or args.realtime, player=player,
+                         on_say=speaker.announce if speaker else None)
     voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])  # before the camera
     source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
     if args.area == "pick":  # draw the box around the bins on the first frame with the mouse
@@ -391,6 +407,8 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             writer.stdin.close()
             writer.wait()
         voice.close()
+        if speaker:
+            speaker.stop()
     said = guide.said
     if args.render and tmp is not None:
         mix_audio(tmp, Path(args.render), voice.spoken)
@@ -532,6 +550,9 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     gd.add_argument("--bins", default=str(WORKER_DIR / "rules/cambridge-ma-2022.bins.json"), help="standard bin per catalog item")
     gd.add_argument("--voice", choices=["say", "silent"], default="say")
     gd.add_argument("--realtime", action="store_true", help="for a file: play at clip speed and speak aloud")
+    gd.add_argument("--speaker", choices=["mac", "phone", "both"], default="mac",
+                    help="where the voice plays: this Mac, a second phone that opens the printed URL, or both")
+    gd.add_argument("--speaker-port", type=int, default=int(os.environ.get("SPEAKER_PORT", "8766")))
     gd.add_argument("--render", help="write the annotated video with the voice mixed in to this .mp4")
     gd.add_argument("--no-stream", action="store_true")
     gd.add_argument("--evidence-dir", default=str(WORKER_DIR / "evidence"))

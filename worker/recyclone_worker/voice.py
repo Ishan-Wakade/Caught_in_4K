@@ -56,9 +56,10 @@ class SayVoice:
     """macOS `say`, rendered to .aiff once per sentence. Rendering (~2.7 s for a new sentence) and playback run on one
     background thread, so the frame loop never waits; sentences play one after another; failures are logged."""
 
-    def __init__(self, cache_dir: Path, voice: str | None = None, play: bool = True, player=None):
+    def __init__(self, cache_dir: Path, voice: str | None = None, play: bool = True, player=None, on_say=None):
         self.cache_dir, self.voice, self.play = Path(cache_dir), voice, play
         self.player = player or _afplay
+        self.on_say = on_say  # (text, file) -> None, called as each sentence starts (e.g. the phone speaker)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.spoken: list[tuple[float, str, Path | None]] = []
         self.errors: list[str] = []
@@ -106,6 +107,11 @@ class SayVoice:
                     if time.monotonic() - queued > STALE_S:
                         self.errors.append(f"dropped stale sentence: {text}")
                     else:
+                        if self.on_say is not None:
+                            try:
+                                self.on_say(text, f)
+                            except Exception as e:  # noqa: BLE001
+                                self.errors.append(f"on_say failed ({type(e).__name__}): {text}")
                         try:
                             self.player(f)
                         except Exception as e:  # noqa: BLE001

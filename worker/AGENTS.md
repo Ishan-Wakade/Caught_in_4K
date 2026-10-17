@@ -22,6 +22,7 @@ Python, running on a laptop (not Vercel).
 
 - Count an item once, not once per frame. Replaying a clip must produce the same `event_id`s.
 - Overlapping camera views: the prototype assigns one authoritative camera per bin and documents that limitation.
+  Optional (17 Oct): `run-station` merges drops across several cameras and reports each from the camera the person faces (see "Multi-camera stations").
 - Report occlusion, mixed handfuls, and uncertain destinations as low confidence or `null`, never as fabricated precision.
 - Focus on items and bin openings. Do not identify people.
 - Never send correctness; core applies the sorting rules.
@@ -155,6 +156,27 @@ sauce cup recycling 0.69 vs trash (depends on rinsing); two paper bags DeepSeek 
 -> special 0.93); a paper card trash 0.39. The face mask (not in the catalog): special 0.96 ("textiles banned from
 trash"), debatable. Most wrong suggestions trace to DeepSeek's description or rules that do not decide the case;
 human approval is required by design. Not tuned further on these items.
+## Multi-camera stations (17 Oct, optional: `run-station`)
+
+For stores with several surveillance cameras on the same bins. `run` (one camera) is unchanged; `run-station`
+(`recyclone_worker/multicam.py`) runs the same item tracker on every camera, unchanged, then:
+- **Facing:** per camera and moment, does the person face it or show it their back? From the skeleton: seen from
+  the front, the person's left shoulder is on the image's right; from behind it flips. `(left x - right x) / torso`
+  below -0.2 = back, median over +-0.25 s. Checked on 23 hand-labeled frames it was not tuned on: 22/23 right (the
+  miss was mid-turn).
+- **One drop across cameras:** the same `bin_id` within 1.5 s from different cameras is one physical drop, reported
+  once, by the camera the person faced (then the longest-held item). A drop only a back-view camera saw is still
+  reported. The event's `camera_id` is that camera (no contract change).
+- **Active camera:** over time, the camera the person faces; it switches only after another view has been better
+  for 0.5 s. Shown with a yellow border in the combined view (`--render out.mp4`, and the MJPEG stream).
+- Config: `{"station_id", "cameras": [{"camera_id", "video", "offset_s", "bins"}]}`; same `bin_id` for the same
+  physical bin in every camera; `offset_s` puts cameras on one clock (station time = offset_s + frame / fps); without
+  `bins` a camera uses its regions in `demo-site.json`.
+
+**Not measured yet:** merging and switching on a real synchronized recording, because none exists. The real-footage
+run so far (`state/station_demo_pair.json`) shows two SEPARATE recordings side by side: it checks facing labels and
+switching, not merging. To test: two phones recording the same bins at once (one in front, one behind or to the
+side), a clap at the start (its frame gives `offset_s`), several drops with the back to one phone.
 
 ## Model v2 (17 Oct, branch e/model-v2)
 

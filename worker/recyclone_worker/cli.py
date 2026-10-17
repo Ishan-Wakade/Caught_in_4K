@@ -14,7 +14,7 @@ from .client import BackgroundSink, HttpSink, MemorySink, flush_outbox
 from .events import dumps_event, validate_event
 from .identify import Gallery
 from .pipeline import Pipeline
-from .site import load_catalog, load_catalog_ids, load_site
+from .site import load_catalog, load_catalog_ids, load_profile, load_site
 from .sources import RecordedClipSource
 
 WORKER_DIR = Path(__file__).resolve().parents[1]
@@ -107,13 +107,20 @@ def cmd_run(args, make_tracker, make_embedder) -> int:
     if args.events_out:
         sink = FileSink(sink, Path(args.events_out))
     tracker, embedder = make_tracker(), make_embedder()  # load models before taking the clock
+    categories = None
+    if not args.no_categories and hasattr(embedder, "embed_text"):
+        from .categories import CategoryClassifier
+
+        categories = CategoryClassifier(embedder)
+    profile = os.environ.get("CONFIG_PROFILE", "demo")
+    reference_threshold = load_profile(profile)["item_confidence_threshold"]
     # Core rejects occurred_at more than 5 s in the future. Realtime: the clip "starts" now.
     # Faster than realtime: back-date the start by the clip length so every event is in the past.
     started_at = datetime.now(UTC) if args.realtime else datetime.now(UTC) - timedelta(seconds=source.duration_s)
     pipeline = Pipeline(
         load_site(args.camera), tracker, embedder, gallery, sink,
         clip_id=args.clip_id, started_at=started_at, evidence_dir=Path(args.evidence_dir), on_frame=on_frame,
-        catalog_business=catalog,
+        catalog_business=catalog, categories=categories, reference_threshold=reference_threshold,
     )
     try:
         events = pipeline.run(_realtime(source, source.fps) if args.realtime else source)
@@ -239,6 +246,7 @@ def main(argv=None, *, make_tracker=None, make_embedder=None) -> int:
     run.add_argument("--no-stream", action="store_true")
     run.add_argument("--no-background", action="store_true", help="send events inline (debugging)")
     run.add_argument("--events-out", help="also write every event to this JSONL file (for `evaluate`)")
+    run.add_argument("--no-categories", action="store_true", help="report unregistered items as unknown instead of a generic category")
     enroll = sub.add_parser("enroll", help="build reference gallery from an enrollment clip")
     enroll.add_argument("--clip", required=True)
     enroll.add_argument("--segments", required=True, help='JSON: [{"catalog_item_id", "start_s", "end_s"}]')
@@ -269,8 +277,9 @@ def main(argv=None, *, make_tracker=None, make_embedder=None) -> int:
     lab.add_argument("--camera", default="cam_patio_1")
     lab.add_argument("--out", default=str(WORKER_DIR.parent / "contracts/fixtures/demo-events.jsonl"))
     for p in (run, enroll):
-        p.add_argument("--tracker", choices=["yolo", "motion"], default="yolo",
-                       help="motion = background subtraction near the bins; catches wrappers YOLO cannot name")
+        p.add_argument("--tracker", choices=["yolo", "world", "motion"], default="yolo",
+                       help="world = YOLO-World with packaging prompts; motion = background subtraction near the bins")
+        p.add_argument("--world-weights", default=str(WORKER_DIR / "weights/yolov8s-worldv2.pt"))
         p.add_argument("--yolo", default=str(DEFAULT_YOLO))
         p.add_argument("--clip-weights", default=str(DEFAULT_CLIP))
     args = ap.parse_args(argv)
@@ -279,6 +288,10 @@ def main(argv=None, *, make_tracker=None, make_embedder=None) -> int:
         from .identify import ClipEmbedder
         from .tracking import YoloTracker
 
+        if make_tracker is None and args.tracker == "world":
+            from .tracking import WorldTracker
+
+            make_tracker = lambda: WorldTracker(Path(args.world_weights))
         if make_tracker is None and args.tracker == "motion":
             from .motion import MotionTracker
 

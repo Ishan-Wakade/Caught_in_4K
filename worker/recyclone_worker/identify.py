@@ -34,6 +34,14 @@ class ClipEmbedder:
         v = v.cpu().numpy()
         return v / np.linalg.norm(v)
 
+    def embed_text(self, texts: list[str]) -> np.ndarray:
+        import clip
+
+        with self._torch.no_grad():
+            t = self.model.encode_text(clip.tokenize(texts).to(self.device)).float()
+        t = t.cpu().numpy()
+        return t / np.linalg.norm(t, axis=1, keepdims=True)
+
 
 class Gallery:
     """Reference vectors per catalog item; an item may have many (angles, crumpled, in hand)."""
@@ -61,8 +69,25 @@ class Gallery:
 UNKNOWN = {"catalog_item_id": None, "label": None, "confidence": None, "candidates": []}
 
 
-def identify(crops: list[np.ndarray], embedder: Embedder, gallery: Gallery, top_k: int = 3) -> dict:
-    """The contract `item` object for a track, from its best crops."""
+def identify(crops: list[np.ndarray], embedder: Embedder, gallery: Gallery, top_k: int = 3,
+             categories=None, reference_threshold: float | None = None) -> dict:
+    """The contract `item` object for a track, from its best crops.
+
+    Registered products first. With `categories`, a generic category is reported instead when no
+    registered product matched, or the best match is below `reference_threshold` (core's calibrated
+    item threshold). The weak reference candidates stay in `candidates` as evidence.
+    """
+    ref = _reference(crops, embedder, gallery, top_k)
+    weak = ref["catalog_item_id"] is None or (reference_threshold is not None and ref["confidence"] < reference_threshold)
+    if categories is None or not crops or not weak:
+        return ref
+    cid, prob, prompt = categories.classify(crops)
+    score = round(min(max(prob, 0.0), 1.0), 4)
+    return {"catalog_item_id": cid, "label": prompt, "confidence": score,
+            "candidates": [{"catalog_item_id": cid, "score": score}] + [c for c in ref["candidates"] if c["catalog_item_id"] != cid]}
+
+
+def _reference(crops: list[np.ndarray], embedder: Embedder, gallery: Gallery, top_k: int) -> dict:
     if not crops or not gallery.ids:
         return dict(UNKNOWN, candidates=[])
     query = np.mean([embedder.embed(c) for c in crops], axis=0)

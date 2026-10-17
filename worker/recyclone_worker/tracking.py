@@ -11,7 +11,7 @@ import numpy as np
 # make bins, chairs, or a passer-by's backpack "disappear into" a bin region. A denylist rather than
 # an allowlist, because wrappers and bags have no COCO class and show up under odd names.
 NOT_ITEMS = frozenset({
-    "person", "backpack", "handbag", "tie", "suitcase", "umbrella",
+    "person", "hand", "backpack", "handbag", "tie", "suitcase", "umbrella",
     "chair", "couch", "bench", "bed", "dining table", "toilet", "potted plant", "tv", "laptop",
     "refrigerator", "oven", "sink", "microwave", "car", "bicycle", "motorcycle", "dog", "cat",
 })
@@ -58,3 +58,35 @@ class YoloTracker:
             if is_item_class(name):
                 out.append(Track(int(tid), tuple(box), name))
         return out
+
+
+def _world_prompts() -> list[str]:
+    from .categories import GENERIC_PROMPTS
+
+    item_prompts = [p for prompts in GENERIC_PROMPTS.values() for p in prompts]
+    # People and hands are prompted too, so the detector labels them (and they get dropped) instead of
+    # calling a hand "a crumpled wrapper".
+    return item_prompts + ["a box", "a bag", "a cup", "person", "hand"]
+
+
+WORLD_PROMPTS = _world_prompts()
+
+
+class WorldTracker(YoloTracker):
+    """YOLO-World: open-vocabulary detection from text prompts, so wrappers, bags and boxes have a
+    class (COCO YOLO calls them "book" or misses them). Labels are only used to drop people/hands;
+    identification still comes from the reference gallery and the category classifier."""
+
+    def __init__(self, weights: Path, prompts: list[str] = WORLD_PROMPTS, imgsz: int = 960, device: str | None = None,
+                 conf: float = 0.05):
+        super().__init__(weights, imgsz=imgsz, device=device)
+        self.model.set_classes(prompts)
+        self.conf = conf
+
+    def update(self, frame: np.ndarray) -> list[Track]:
+        result = self.model.track(frame, persist=True, imgsz=self.imgsz, device=self.device, conf=self.conf, verbose=False)[0]
+        if result.boxes.id is None:
+            return []
+        return [Track(int(t), tuple(b), self.model.names[c])
+                for b, t, c in zip(result.boxes.xyxy.tolist(), result.boxes.id.int().tolist(), result.boxes.cls.int().tolist())
+                if is_item_class(self.model.names[c])]

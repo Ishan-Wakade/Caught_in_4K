@@ -5,4 +5,4 @@ packages:
   - tools/*
 allowBuilds:
   esbuild: true
-  protobufjs: true
+  protobufjs: false

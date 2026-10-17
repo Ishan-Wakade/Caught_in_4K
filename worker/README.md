@@ -29,6 +29,8 @@ Environment (see the root `.env.example`): `API_BASE_URL`, `WORKER_INGEST_TOKEN`
 | `... run ... --events-out state/run.jsonl` then `uv run recyclone-worker evaluate --labels ../contracts/fixtures/demo-events.jsonl --predicted state/run.jsonl` | Counting, wrong-bin, item and assessable rates vs the hand labels |
 | `uv run recyclone-worker suggest-thresholds --gallery state/gallery.npz` | Calibrate core's confidence thresholds for CLIP (TACO litter as not-in-catalog examples) |
 | `... run ... --tracker motion` | Background-subtraction tracker near the bins, for items YOLO can't name (wrappers, bags) |
+| `... run ... --tracker world` | YOLO-World with packaging prompts (slower; compare on real footage) |
+| `... run ... --no-categories` | Report unregistered items as unknown instead of a generic category (on by default) |
 
 Filming plan and the full after-filming sequence: `docs/demo/shot-list.md`. Local end-to-end rehearsal against the real core: `pnpm --filter @recyclone/rehearsal start` (see `tools/rehearsal/server.ts`).
 

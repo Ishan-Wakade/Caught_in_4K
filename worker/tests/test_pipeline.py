@@ -146,3 +146,13 @@ def test_business_evidence_reaches_the_event(tmp_path):
     assert e["item"]["catalog_item_id"] == "item_generic_cup"
     assert e["business"]["business_id"] == "biz_beanco" and e["business"]["basis"] == ["reference_match"]
     validate_event(e)
+
+
+def test_unregistered_item_gets_generic_category(tmp_path):
+    from recyclone_worker.categories import CategoryClassifier
+    cats = CategoryClassifier(FakeEmbedder(), {"item_generic_wrapper": ["a red wrapper"], "item_generic_can": ["a blue can"]})
+    p = Pipeline(SITE, ScriptedTracker(script_for(walk_into(TRASH_CENTER))), FakeEmbedder(), Gallery(), MemorySink(),
+                 clip_id="clip_t", started_at=STARTED, evidence_dir=tmp_path, categories=cats, reference_threshold=0.8)
+    e = p.run(frames(40))[0]  # frames are solid red
+    assert e["item"]["catalog_item_id"] == "item_generic_wrapper" and e["item"]["label"] == "a red wrapper"
+    validate_event(e)

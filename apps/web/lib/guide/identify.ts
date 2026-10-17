@@ -9,8 +9,17 @@ import { CATALOG_IDS, defaultTrash, fromCatalog, fromSuggestion, unsureSuggestio
 import { LOCAL_RULES, RULES_SOURCE } from "./rules";
 
 export type Keys = { deepseek: string; jev: string };
-/** source "unclear": DeepSeek could not see what it is (blurry, or covered by the face blackout): worth another look. */
-export type Result = { message: GuideMessage | null; source: "catalog" | "llm" | "default" | "unclear" | "nothing_held" };
+/**
+ * source "unclear": DeepSeek could not see what it is (blurry, or covered by the face blackout): worth another look.
+ * `name`/`confidence` are only set for source "llm" — what it was, and how sure Jev's destination suggestion was; the
+ * dashboard logs it as a new-item sighting.
+ */
+export type Result = {
+  message: GuideMessage | null;
+  source: "catalog" | "llm" | "default" | "unclear" | "nothing_held";
+  name?: string;
+  confidence?: number | null;
+};
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Response>;
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -141,8 +150,10 @@ export async function identify(crops: string[], keys: Keys, fetchFn: Fetch = fet
     }
     const proposed = { name: item.name, form: item.form, hazardous: item.hazardous,
       suggested_destination: suggestion.choice ?? null, suggestion_confidence: suggestion.confidence ?? null };
-    // Jev unsure (< 50%) or silent: the trash fallback, marked "default" so the camera page can treat it as unsure.
-    return { message: fromSuggestion(proposed), source: unsureSuggestion(proposed) ? "default" : "llm" };
+    // Jev unsure (< 50%) or silent: the trash fallback, marked "default" so the camera page can treat it as unsure (and
+    // not logged as a sighting: its "trash" is the fallback, not Jev's suggestion).
+    if (unsureSuggestion(proposed)) return { message: fromSuggestion(proposed), source: "default" };
+    return { message: fromSuggestion(proposed), source: "llm", name: item.name, confidence: suggestion.confidence ?? null };
   } catch (e) {
     trace({ error: String(e) });
     return { message: defaultTrash(null), source: "default" };

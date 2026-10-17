@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleIdentify, handleSpeak, signMessage } from "./server";
+
+const recordSighting = vi.fn(async () => {});
+vi.mock("../dashboard/db", () => ({ recordSighting, slugify: (s: string) => s.toLowerCase().replace(/\s+/g, "_") }));
+
+const { handleIdentify, handleSpeak, signMessage } = await import("./server");
 
 const signed = (message: { bin: string; explanation: string }) => ({ message, sig: signMessage(message as never) });
 
@@ -7,7 +11,7 @@ const ENV = { GUIDE_TOKEN: "demo-token", DEEPSEEK_API_KEY: "ds", TYPESAFE_API_KE
 const req = (body: unknown, token = "demo-token") =>
   new Request("http://x/api/guide", { method: "POST", headers: { "x-guide-token": token, "content-type": "application/json" }, body: JSON.stringify(body) });
 
-beforeEach(() => { for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v); });
+beforeEach(() => { for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v); recordSighting.mockClear(); });
 afterEach(() => vi.unstubAllEnvs());
 
 describe("guide API", () => {
@@ -28,6 +32,16 @@ describe("guide API", () => {
     expect(await res.json()).toEqual({ message: { bin: "compost", explanation: "paper napkin, placed in compost" }, source: "catalog",
       spoken: "Compost. paper napkin, placed in compost", sig: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(fake.mock.calls[0][1]).toEqual({ deepseek: "ds", jev: "jv" });
+  });
+  it("logs a new/unrecognized item as a sighting for manager review, but not a catalog match", async () => {
+    const llm = vi.fn(async () => ({ message: { bin: "trash" as const, explanation: "sauce packet, placed in trash" }, source: "llm" as const, name: "sauce packet", confidence: 0.81 }));
+    await handleIdentify(req({ crops: ["data:image/jpeg;base64,AAAA"] }), llm);
+    expect(recordSighting).toHaveBeenCalledWith({ id: "sauce_packet", name: "sauce packet", destination: "trash", basis: "sauce packet, placed in trash", confidence: 0.81 });
+
+    recordSighting.mockClear();
+    const catalog = vi.fn(async () => ({ message: { bin: "compost" as const, explanation: "paper napkin, placed in compost" }, source: "catalog" as const }));
+    await handleIdentify(req({ crops: ["data:image/jpeg;base64,AAAA"] }), catalog);
+    expect(recordSighting).not.toHaveBeenCalled();
   });
   it("speaks only a valid bin message, through ElevenLabs", async () => {
     expect((await handleSpeak(req({ message: { bin: "trash", explanation: "say something else entirely please now ok" + " x".repeat(10) } }))).status).toBe(400);

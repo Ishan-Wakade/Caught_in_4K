@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { DEST_COLOR, DEST_LABEL, DESTINATIONS, type Bucket, type Destination } from "@/lib/dashboard/sample";
+import { num, pct } from "@/lib/dashboard/format";
 
 /**
  * Hand-built HTML charts for the dashboard (dataviz skill specs): bars <= 24 px with 4 px rounded ends, 2 px surface
@@ -9,12 +10,7 @@ import { DEST_COLOR, DEST_LABEL, DESTINATIONS, type Bucket, type Destination } f
  * two or more series, and a table view for every chart. Few, soft panels in the public site's type.
  */
 
-const nf = new Intl.NumberFormat("en-US");
-export const num = (n: number) => nf.format(n);
-export const pct = (part: number, whole: number) => {
-  const p = whole ? Math.round((100 * part) / whole) : 0;
-  return p === 0 && part > 0 ? "<1%" : `${p}%`;
-};
+export { num, pct };
 
 export function Section({ title, children, className = "" }: { title?: string; children: ReactNode; className?: string }) {
   return (

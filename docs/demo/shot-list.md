@@ -43,7 +43,7 @@ Leave 5+ seconds between throws. Numbers below use the demo profile in `demo-sit
 | 3 | Shake Shack cup → **recycling** | correct |
 | 4 | Shake Shack cup → **trash** | incorrect; cup is 1 of 3 correct = 33% < 60% → **recommendation** (to Shake Shack's manager if the logo was recognized, otherwise to the area manager; brand is optional) |
 | 5 | Hold the sauce cup over the **compost** opening for 3 s, then walk away with it | **nothing** (held near ≠ thrown) |
-| 6 | Shake Shack burger box → **trash** | incorrect (box is compost); trash ~96.2 L = 80% → **emptying request** |
+| 6 | Paper napkin → **trash** | incorrect (napkins are compost under Cambridge rules; a burger box in trash is now correct, see worker/rules/cambridge-ma-2022.bins.json); trash ~96.2 L = 80% → **emptying request** |
 | 7 | Plain clear cup → **recycling** | correct (plain cup); optional: may reach the review queue if the Shake Shack cup is a close runner-up |
 | 8 | Not-in-catalog item → **compost** | **unassessable** (should score below the calibrated threshold) |
 | 9 | Goldfish bag → **trash**, then Quaker wrapper → **trash** | correct, correct |

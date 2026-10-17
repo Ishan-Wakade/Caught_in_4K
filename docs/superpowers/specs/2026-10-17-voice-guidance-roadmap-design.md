@@ -161,7 +161,8 @@ Goal: from the corner camera's footage, announce the right bin before the person
 4. **One standard for the right bin:** E picks the most sensible source and standardizes it. *(E's call:)* the site's
    official local rules (for the demo, Cambridge's own guide in `worker/rules/cambridge-ma-2022.md`) are the single
    source; every catalog item's bin is checked against them, and where the rules do not decide, the catalog note says
-   so and a person decides.
+   so and a person decides. **Aligned (team, 17 Oct: "align them"):** the shared catalog (contracts fixture) now
+   matches the voice guide's table: fiber/kraft takeout boxes and bowls are trash (PR #24).
 5. **Items that go in none of the three bins** (batteries, electronics, chemicals; the city says never in the trash):
    the fourth first word is **None**, followed by "<item> is dangerous to place in any of these bins. Place it in
    <drop-off> instead" (team, 17 Oct), e.g. "None. Battery is dangerous to place in any of these bins. Place it in

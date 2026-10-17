@@ -39,6 +39,9 @@ ITEM_P = 0.5                        # P(item) from CLIP needed to keep a region 
 MATCH_IOU, MATCH_SIM = 0.25, 0.85   # association: same look AND (overlap or near the camera-corrected spot)
 MAX_GROWTH = 2.0                    # association: a box that more than doubles (or halves) in area from one frame
                                     #   to the next is another region, not the same object (17 Oct, IMG_9097)
+# Durations below are in frames AT 30 FPS (REF_FPS) and are scaled to each clip's frame rate with at_fps(); the 5 dev
+# clips are 30 fps, the YouTube held-out clips 24 fps, and surveillance cameras often record at 10-15 fps.
+REF_FPS = 30.0
 LOST_AFTER = 8                      # frames unseen before a track counts as gone
 WINDOW = 10                         # frames over which an item's own motion is measured
 OWN_MOTION = 0.6                    # an item that moves less than half this on its own is at rest ("left in bin")
@@ -54,9 +57,15 @@ VETO_FRAMES = 45                    # the item back in a hand, outside every bin
 MERGE_FRAMES = 45                   # drops into one bin within 1.5 s are one drop (fragments of one item, or the hand)
 BIN_MARGIN = 0.10
 MIN_VOTES = 1e-3                    # category vote mass below this: item unknown
+REQUIRE_SEEN_OUTSIDE = True         # a drop needs an item that was seen as an item outside every bin
 
 
 # ---------------------------------------------------------------- stage 1: perception (cached)
+
+def at_fps(n: float, fps: float) -> int:
+    """A duration given in frames at 30 fps, in frames at this clip's fps."""
+    return max(1, round(n * float(fps) / REF_FPS))
+
 
 def weight(rel: str) -> Path:
     """Model weights live in worker/weights/ (not in git); any that are missing are downloaded on first run."""
@@ -266,6 +275,7 @@ def warp_box(b, motion, f0, f1):
 def track(data: dict, bins: dict, scorer: Scorer, motion: np.ndarray) -> tuple[list[dict], list[list]]:
     """Frame-to-frame association of item regions into tracks; the previous box is first moved by the camera motion."""
     n = len(data["kps"])
+    fps = float(data["fps"])
     p_item, p_cat = scorer(data["emb"]) if len(data["emb"]) else (np.zeros(0), np.zeros((0, 1)))
     by_frame = [[] for _ in range(n)]
     for k, row in enumerate(data["boxes"]):
@@ -320,7 +330,7 @@ def track(data: dict, bins: dict, scorer: Scorer, motion: np.ndarray) -> tuple[l
             tracks.append(t)
             live.append(t)
             per_frame[i].append((t["id"], b, float(p_item[k])))
-        live = [t for t in live if i - t["last"] <= LOST_AFTER]
+        live = [t for t in live if i - t["last"] <= at_fps(LOST_AFTER, fps)]
     for t in tracks:
         # no confident look outside every bin -> no category (argmax of all-equal votes would name cats[0])
         t["category"] = scorer.cats[int(np.argmax(t["cat"]))] if t["cat"].sum() >= MIN_VOTES else None
@@ -330,13 +340,13 @@ def track(data: dict, bins: dict, scorer: Scorer, motion: np.ndarray) -> tuple[l
     return tracks, per_frame
 
 
-def own_motion(t: dict, motion: np.ndarray) -> list[float]:
+def own_motion(t: dict, motion: np.ndarray, fps: float = REF_FPS) -> list[float]:
     """Per observation: how far (in box diagonals) the item moved on its own over the last ~WINDOW frames,
     i.e. after removing the camera motion. ~0 for scenery and for an item lying in a bin."""
     out = []
     for k, (f, b) in enumerate(zip(t["frames"], t["boxes"])):
         j = k
-        while j > 0 and f - t["frames"][j - 1] <= WINDOW:
+        while j > 0 and f - t["frames"][j - 1] <= at_fps(WINDOW, fps):
             j -= 1
         if j == k:
             out.append(0.0)
@@ -440,7 +450,7 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
             if best is not None:
                 held[best] = held.get(best, 0) + 1
                 links[i].append((side, best, wrist))
-    direct = {tid for tid, k in held.items() if k >= ATTACH_MIN}
+    direct = {tid for tid, k in held.items() if k >= at_fps(ATTACH_MIN, fps)}
 
     def first_in_bin(t):
         where = [any(in_box(center(b), boxes[f]) for boxes in bins.values()) for f, b in zip(t["frames"], t["boxes"])]
@@ -463,7 +473,7 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
     def follows(prev, nxt) -> bool:  # nxt starts where prev was last seen (camera-corrected), shortly after
         p, q = by_id[prev], by_id[nxt]
         gap = q["frames"][0] - p["frames"][-1]
-        if not 0 < gap <= REID_GAP:
+        if not 0 < gap <= at_fps(REID_GAP, fps):
             return False
         pb, qb = p["boxes"][-1], q["boxes"][0]
         px, py = carry(center(pb), motion, p["frames"][-1], q["frames"][0])
@@ -506,7 +516,7 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
     top = max((len(v) for v in held_frames.values()), default=0)
     # "singular (few)": an object counts as brought by a person only if a hand held it for a real share of the
     # time the main object was held; a sleeve or finger that wins a hand for a few frames does not
-    items = {r for r, v in held_frames.items() if len(v) >= max(ATTACH_MIN, MAIN_SHARE * top)}
+    items = {r for r, v in held_frames.items() if len(v) >= max(at_fps(ATTACH_MIN, fps), MAIN_SHARE * top)}
     identity = {tid: root(tid) for tid in direct if root(tid) in items and float(proto[root(tid)] @ by_id[tid]["appearance"]) >= REID_SIM}
     roles = {tid: "carried" for tid in identity}
     for t in sorted(tracks, key=lambda t: t["frames"][0]):  # time order, so a chain of fragments is followed
@@ -524,9 +534,19 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
                 break
     for t in tracks:
         roles.setdefault(t["id"], "ignored")
+    # An item must have been SEEN AS AN ITEM OUTSIDE every bin (confident CLIP item look, the category votes) to be
+    # thrown in: a lid, hinge or lock on top of a bin that a hand passes over never is. 17 Oct: all 4 false drops on
+    # the 3-bin street clip were such bin parts (no category); every true drop on the dev clips had one.
+    seen_outside = {}
+    for t in tracks:
+        if t["id"] in identity:
+            seen_outside[identity[t["id"]]] = seen_outside.get(identity[t["id"]], 0.0) + float(np.sum(t["cat"]))
+    data["_brought"] = {iid for iid, v in seen_outside.items() if v >= MIN_VOTES or not REQUIRE_SEEN_OUTSIDE}
     cand = []
     for t in tracks:
         if roles[t["id"]] not in ("carried", "re-found"):
+            continue
+        if REQUIRE_SEEN_OUTSIDE and seen_outside.get(identity[t["id"]], 0.0) < MIN_VOTES:
             continue
         fr, bx = t["frames"], t["boxes"]
         where = []
@@ -535,24 +555,25 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
             where.append(hit[0] if hit else None)
         if where[-1] is None:
             continue
-        mv = own_motion(t, motion)
+        mv = own_motion(t, motion, fps)
         bid = where[-1]
         k0 = len(where) - 1
         while k0 > 0 and where[k0 - 1] == bid:
             k0 -= 1
         f_last = fr[-1]
-        bin_after = any(bins[bid][g] is not None for g in range(f_last + 1, min(n, f_last + LOST_AFTER + 1)))
-        if f_last < n - LOST_AFTER and bin_after:
+        lost = at_fps(LOST_AFTER, fps)
+        bin_after = any(bins[bid][g] is not None for g in range(f_last + 1, min(n, f_last + lost + 1)))
+        if f_last < n - lost and bin_after:
             cand.append({"frame": int(f_last), "how": "vanished in bin", "bin": bid, "track": t})
         else:
             still = [k for k in range(k0, len(fr)) if mv[k] < OWN_MOTION / 2]
-            if len(still) >= STILL_MIN:
+            if len(still) >= at_fps(STILL_MIN, fps):
                 cand.append({"frame": int(fr[still[0]]), "how": "left in bin", "bin": bid, "track": t})
     # veto: shortly after, a hand holds the same item again (outside every bin) -> it was never let go
     kept = []
     for c in cand:
         cid = identity[c["track"]["id"]]
-        back = [f for f in range(c["frame"] + 1, min(n, c["frame"] + VETO_FRAMES + 1)) for _, tid, _ in links[f]
+        back = [f for f in range(c["frame"] + 1, min(n, c["frame"] + at_fps(VETO_FRAMES, fps) + 1)) for _, tid, _ in links[f]
                 if identity.get(tid) == cid and not any(in_box(center(boxes_at[tid][f]), bx[f]) for bx in bins.values())]
         if not back:
             kept.append(c)
@@ -560,7 +581,7 @@ def decide(tracks: list[dict], data: dict, bins: dict, fps: float, motion: np.nd
     kept.sort(key=lambda c: c["frame"])
     groups = []
     for c in kept:
-        if groups and groups[-1][-1]["bin"] == c["bin"] and c["frame"] - groups[-1][-1]["frame"] <= MERGE_FRAMES:
+        if groups and groups[-1][-1]["bin"] == c["bin"] and c["frame"] - groups[-1][-1]["frame"] <= at_fps(MERGE_FRAMES, fps):
             groups[-1].append(c)
         else:
             groups.append([c])
@@ -596,6 +617,13 @@ class Analysis:
     @property
     def identity(self) -> dict:
         return self.data["_identity"]
+
+    @property
+    def boxes(self) -> list[dict]:
+        """Per frame, one box per item (item_boxes), computed once."""
+        if "_item_boxes" not in self.data:
+            self.data["_item_boxes"] = item_boxes(self.tracks, self.per_frame, self.identity, self.data.get("_brought"))
+        return self.data["_item_boxes"]
 
 
 def site_bin_boxes(regions, size: tuple[int, int], n: int) -> dict:
@@ -666,8 +694,29 @@ def destination_confidence(analysis: Analysis, drop: dict) -> float:
 
 
 def item_box_at(analysis: Analysis, drop: dict) -> tuple[int, list] | None:
-    """The item's last sighting at or before the drop frame: (frame, box), for the evidence crop."""
-    iid = drop["item_id"]
-    seen = [(f, b) for t in analysis.tracks if analysis.identity.get(t["id"]) == iid
-            for f, b in zip(t["frames"], t["boxes"]) if f <= drop["frame"]]
-    return max(seen, key=lambda s: s[0]) if seen else None
+    """The item's own box (item_boxes) at its last sighting at or before the drop frame: (frame, box), for the
+    evidence crop. Before 17 Oct this was any fragment's box (IMG_9100: only the cup's rim)."""
+    boxes = analysis.boxes
+    for f in range(min(drop["frame"], len(boxes) - 1), -1, -1):
+        if drop["item_id"] in boxes[f]:
+            return f, boxes[f][drop["item_id"]][1]
+    return None
+
+
+def item_boxes(tracks: list[dict], per_frame: list, identity: dict, keep: set | None = None) -> list[dict]:
+    """One box per item per frame: {item_id: (track_id, box)}. Among the item's regions in the frame, the one CLIP is
+    most sure is an item (not background), real segmented regions before synthetic hand crops. No thresholds.
+    Measured 17 Oct on 39 hand-checked dev frames: matches the true box (IoU >= 0.5) in 28, vs 13 for the held box."""
+    src_at = {(t["id"], f): s for t in tracks for f, s in zip(t["frames"], t["src"])}
+    out = []
+    for i, regions in enumerate(per_frame):
+        best: dict = {}
+        for tid, b, p in regions:
+            iid = identity.get(tid)
+            if iid is None or (keep is not None and iid not in keep):  # keep: items seen as items outside a bin
+                continue
+            key = (src_at.get((tid, i), 0) == 0, p)
+            if iid not in best or key > best[iid][0]:
+                best[iid] = (key, tid, b)
+        out.append({iid: (tid, b) for iid, (_, tid, b) in best.items()})
+    return out

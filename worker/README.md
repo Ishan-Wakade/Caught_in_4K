@@ -48,8 +48,8 @@ uv run python scripts/item_tracker.py ~/Downloads/tracker-out state/my.json
 ```
 
 Format of the config: `examples/item_tracker.example.json` (keep your own copy under `state/`, which is git-ignored).
-Output: `<name>_items.mp4` per clip (yellow arms, magenta line from a wrist to the object it holds, DROP
-banner), `item_summary.md` (found / false drops at ±0.5 s and ±1.5 s), `item_results.json`.
+Output: `<name>_items.mp4` per clip (one box per item, the arms, a magenta line from a wrist to the item it
+holds, DROP banner; `--debug` draws every fragment and bin contents too), `item_summary.md` (found / false drops at ±0.5 s and ±1.5 s), `item_results.json`.
 
 Improving it:
 - Perception is cached in `OUT/cache/`, so after the first run a rule change re-scores in seconds
@@ -57,7 +57,7 @@ Improving it:
 - The knobs are the constants at the top of `recyclone_worker/items.py`, each with a one-line reason.
 - Box accuracy: add `"gt_boxes": {"120": [x0, y0, x1, y1], ...}` (the carried item, full-frame pixels) to a clip's
   config and the summary reports IoU of the held box and of the item's best box (IoU >= 0.5 counts as a match).
-- Keep a **dev** set you tune on and a **test** set you only score at the end; numbers from clips you tuned
+- `--test` marks a config as the test split in the summary. Keep a **dev** set you tune on and a **test** set you only score at the end; numbers from clips you tuned
   on are not accuracy. Never commit videos or `state/` configs (people are in them).
 
 Filming plan and the full after-filming sequence: `docs/demo/shot-list.md`. Local end-to-end rehearsal against the real core: `pnpm --filter @recyclone/rehearsal start` (see `tools/rehearsal/server.ts`).

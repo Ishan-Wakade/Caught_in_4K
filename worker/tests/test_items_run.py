@@ -209,3 +209,30 @@ def test_tracks_do_not_jump_to_a_region_twice_the_size():
     same = it.track(_two_frame_data((100, 100, 160, 160), (104, 102, 166, 162)), {}, _ItemScorer(), still)[0]
     jump = it.track(_two_frame_data((100, 100, 160, 160), (90, 100, 200, 200)), {}, _ItemScorer(), still)[0]  # overlaps, 3.4x area
     assert len(same) == 1 and len(jump) == 2
+
+
+def _carried_into_bin(votes):
+    """A hand carries one object down into a bin box, where it vanishes (frames 0-19), bin visible to frame 39."""
+    n = 40
+    kps = np.zeros((n, 17, 3), np.float32)
+    boxes, frames = [], list(range(20))
+    for i in frames:
+        y = 100 + 6 * i
+        kps[i, 7] = (100, y, 1.0)        # left elbow
+        kps[i, 9] = (100, y + 60, 1.0)   # left wrist: the hand region is just below it
+        boxes.append([80, y + 62, 120, y + 102])
+    app = np.zeros(512, np.float32)
+    app[0] = 1
+    track = {"id": 0, "frames": frames, "boxes": boxes, "src": [0] * 20, "appearance": app,
+             "cat": np.array(votes, np.float32), "category": "item_generic_cup" if sum(votes) else None, "cats": ["item_generic_cup"]}
+    per_frame = [[(0, b, 0.95)] for b in boxes] + [[] for _ in range(n - 20)]
+    data = {"kps": kps, "size": np.array([640, 480]), "fps": np.float32(30)}
+    bins = {"bin_t": [(40, 180, 200, 460)] * n}
+    still = np.tile(np.array([[1, 0, 0], [0, 1, 0]], np.float32), (n, 1, 1))
+    return it.decide([track], data, bins, 30.0, still, per_frame)[0]
+
+
+def test_a_drop_needs_an_item_seen_as_an_item_outside_the_bin():
+    # a bin lid/hinge a hand passes over never looks like an item outside the bin (no category votes): no drop
+    assert len(_carried_into_bin([2.0])) == 1
+    assert _carried_into_bin([0.0]) == []

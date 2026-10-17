@@ -20,11 +20,11 @@ from .items import Analysis, destination_confidence, item_box_at, item_from_vote
 from .pipeline import clamp_crop, pad_box
 
 KEEP_FRAMES = 90  # recent frames kept for evidence crops (the item's last sighting can precede the drop by ~1 s)
-ROLE_COLORS = {"carried": (0, 165, 255), "re-found": (0, 165, 255), "already in bin": (170, 170, 170)}
+ITEM_COLOR = (0, 165, 255)
 
 
 def annotate_items(frame: np.ndarray, idx: int, analysis: Analysis, sent: int) -> np.ndarray:
-    """Bin boxes, the items people brought (orange) and existing bin contents (grey). No skeleton: items, not people."""
+    """Bin boxes and ONE box per item a person brought (orange). No skeleton: items, not people."""
     out = frame.copy()
     h = out.shape[0]
     for bid, boxes in analysis.bins.items():
@@ -33,16 +33,12 @@ def annotate_items(frame: np.ndarray, idx: int, analysis: Analysis, sent: int) -
             cv2.rectangle(out, (x0, y0), (x1, y1), (0, 200, 0), 3)
             cv2.putText(out, bid.replace("bin_", ""), (x0 + 6, y0 + 28), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (120, 255, 120), 2)
     by_id = {t["id"]: t for t in analysis.tracks}
-    for tid, b, _ in (analysis.per_frame[idx] if idx < len(analysis.per_frame) else []):
-        role = analysis.roles.get(tid)
-        if role not in ROLE_COLORS:
-            continue
+    for iid, (_, b) in (analysis.boxes[idx] if idx < len(analysis.boxes) else {}).items():  # one box per item
         x0, y0, x1, y1 = map(int, b)
-        cv2.rectangle(out, (x0, y0), (x1, y1), ROLE_COLORS[role], 3 if role != "already in bin" else 1)
-        if role != "already in bin":
-            cat = by_id[analysis.identity[tid]]["category"] or "unknown item"
-            cv2.putText(out, cat.replace("item_generic_", "").replace("item_", ""), (x0, max(24, y0 - 8)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, ROLE_COLORS[role], 2)
+        cv2.rectangle(out, (x0, y0), (x1, y1), ITEM_COLOR, 3)
+        cat = by_id[iid]["category"] or "unknown item"
+        cv2.putText(out, cat.replace("item_generic_", "").replace("item_", ""), (x0, max(24, y0 - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, ITEM_COLOR, 2)
     fps = float(analysis.data["fps"])
     for e in analysis.events:
         if e["frame"] <= idx < e["frame"] + int(1.5 * fps):

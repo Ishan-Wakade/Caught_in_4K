@@ -1,6 +1,6 @@
 """Dev-clip evaluation and annotated videos for the item tracker (logic: recyclone_worker/items.py).
 
-    uv run python scripts/item_tracker.py OUT_DIR CONFIG.json [--recompute] [--no-video]
+    uv run python scripts/item_tracker.py OUT_DIR CONFIG.json [--recompute] [--no-video] [--debug] [--test]
 
 Scores detected drops against the config's true drop frames (strict ±0.5 s, loose ±1.5 s) and writes
 OUT_DIR/item_summary.md, item_results.json and, unless --no-video, OUT_DIR/<name>_items.mp4.
@@ -14,7 +14,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from recyclone_worker.items import (MIN_AREA, SKELETON, Clip, Scorer, center, decide, ego_motion, iou,
+from recyclone_worker.items import (MIN_AREA, at_fps, SKELETON, Clip, Scorer, decide, ego_motion, iou, item_boxes,
                                     keyframe_boxes, perceive, track, weight)
 
 TOLERANCE = 15                      # strict: within 0.5 s of the true release
@@ -22,18 +22,21 @@ LOOSE = 45                          # loose: within 1.5 s (the right drop into t
 IOU_HIT = 0.5                       # a box matches the true item box at IoU >= 0.5 (the usual detection rule)
 
 
-def box_iou_scores(gt_boxes: dict, data: dict, per_frame: list) -> list[tuple[float, float]]:
-    """Per hand-checked frame: (IoU of the box a hand holds, best IoU of any box the tracker gave the item).
+def box_iou_scores(gt_boxes: dict, data: dict, per_frame: list, tracks: list) -> list[tuple[float, float, float]]:
+    """Per hand-checked frame: IoU with the true item box of (the box a hand holds, the best of the item's boxes,
+    the ONE box shown for the item). Scored against the item that matches the true box best in that frame.
 
     gt_boxes: {"frame": [x0, y0, x1, y1]} of the item a person carries (SAM from a hand-placed point, checked by eye).
     "Held" is what the drop decision follows; "best" shows whether the right box was among the item's boxes at all."""
     identity, links = data["_identity"], data["_links"]
+    shown = item_boxes(tracks, per_frame, identity)
     out = []
     for f, gt in sorted(gt_boxes.items(), key=lambda kv: int(kv[0])):
         i = int(f)
         boxes = {tid: b for tid, b, _ in per_frame[i] if tid in identity}
         held = [boxes[tid] for _, tid, _ in links[i] if tid in boxes]
-        out.append((max((iou(gt, b) for b in held), default=0.0), max((iou(gt, b) for b in boxes.values()), default=0.0)))
+        out.append((max((iou(gt, b) for b in held), default=0.0), max((iou(gt, b) for b in boxes.values()), default=0.0),
+                    max((iou(gt, b) for _, b in shown[i].values()), default=0.0)))
     return out
 
 
@@ -46,7 +49,9 @@ COLORS = {"carried": (0, 165, 255), "re-found": (0, 165, 255), "already in bin":
 ARMS = [(5, 7), (7, 9), (6, 8), (8, 10)]
 
 
-def render(video: Path, out: Path, data, bins, tracks, per_frame, roles, events):
+def render(video: Path, out: Path, data, bins, tracks, per_frame, roles, events, debug: bool = False):
+    """Annotated video. Default: bin boxes, ONE box per item a person brought, the arms, and a line from a wrist to
+    the item it holds. --debug also draws every fragment track, existing bin contents and the full skeleton."""
     title = out.stem.removesuffix("_items")
     cap = cv2.VideoCapture(str(video))
     w, h = (int(v) for v in data["size"])
@@ -58,47 +63,41 @@ def render(video: Path, out: Path, data, bins, tracks, per_frame, roles, events)
     by_id = {t["id"]: t for t in tracks}
     identity = data["_identity"]
     names = {iid: chr(ord("A") + k) for k, iid in enumerate(sorted(set(identity.values())))}
+    boxes = item_boxes(tracks, per_frame, identity, data.get("_brought"))  # only items seen as items outside a bin
     i = 0
     while True:
         ok, f = cap.read()
         if not ok:
             break
         for bid, bx in bins.items():
-            if bx[i] is not None:
+            if i < len(bx) and bx[i] is not None:
                 x0, y0, x1, y1 = map(int, bx[i])
                 cv2.rectangle(f, (x0, y0), (x1, y1), (0, 200, 0), lw)
                 text(f, bid.replace("bin_", ""), (x0 + 8, y0 + int(40 * big)), (120, 255, 120), 1.1 * ts)
         kp = data["kps"][i]
-        for a, b in SKELETON:
+        for a, b in (SKELETON if debug else ARMS):
             if kp[a][2] > 0.3 and kp[b][2] > 0.3:
-                arm = (a, b) in ARMS
-                cv2.line(f, (int(kp[a][0]), int(kp[a][1])), (int(kp[b][0]), int(kp[b][1])), (0, 255, 255) if arm else (255, 200, 0),
-                         lw * 2 if arm else lw)
-        holding = {tid for _, tid, _ in data["_links"][i]}
-        for side, tid, (wx, wy) in data["_links"][i]:  # arm -> the one object that hand holds
-            if roles.get(tid) in ("carried", "re-found"):
-                cx, cy = center(next(b for t2, b, _ in per_frame[i] if t2 == tid))
-                cv2.line(f, (int(wx), int(wy)), (int(cx), int(cy)), (255, 0, 255), lw)
-        for tid, b, p in per_frame[i]:
-            role = roles.get(tid)
-            if role not in COLORS:
-                continue  # not brought by a person: not drawn
+                cv2.line(f, (int(kp[a][0]), int(kp[a][1])), (int(kp[b][0]), int(kp[b][1])),
+                         (0, 255, 255) if (a, b) in ARMS else (255, 200, 0), lw)
+        if debug:
+            for tid, b, p in per_frame[i]:
+                if roles.get(tid) in COLORS:
+                    x0, y0, x1, y1 = map(int, b)
+                    cv2.rectangle(f, (x0, y0), (x1, y1), COLORS[roles[tid]], 1)
+        held_items = {identity[tid]: (wx, wy) for _, tid, (wx, wy) in data["_links"][i] if tid in identity}
+        for iid, (_, b) in boxes[i].items():
             x0, y0, x1, y1 = map(int, b)
-            cv2.rectangle(f, (x0, y0), (x1, y1), COLORS[role], lw if role != "already in bin" else max(1, lw // 2))
-            if role == "already in bin":
-                text(f, "already in bin", (x0, max(30, y0 - 8)), COLORS[role], 0.7 * ts)
-                continue
-            iid = identity[tid]
-            state = "in hand" if tid in holding else ("re-found" if role == "re-found" else "carried")
+            cv2.rectangle(f, (x0, y0), (x1, y1), COLORS["carried"], lw)
             cat = (by_id[iid]["category"] or "unknown").replace("item_generic_", "").replace("item_", "")
-            text(f, f"item {names[iid]}: {cat} ({state})", (x0, max(30, y0 - 10)), COLORS[role], 0.85 * ts)
+            text(f, f"item {names[iid]}: {cat}" + (" (in hand)" if iid in held_items else ""), (x0, max(30, y0 - 10)), COLORS["carried"], 0.85 * ts)
+            if iid in held_items:
+                wx, wy = held_items[iid]
+                cv2.line(f, (int(wx), int(wy)), (int((x0 + x1) / 2), int((y0 + y1) / 2)), (255, 0, 255), lw)
         for e in events:
             if e["frame"] <= i < e["frame"] + int(1.5 * fps):
-                text(f, f"DROP item {names[e['item_id']]} -> {e['bin']}: {e['item']} (rule {e['item_bin_rule']}, {e['how']})",
+                text(f, f"DROP item {names[e['item_id']]} -> {e['bin']}: {e['item']} (rule {e['item_bin_rule']})",
                      (int(30 * big), h - int(60 * big)), (80, 255, 80), ts)
-        seen = sorted({names[identity[t]] for t2 in range(i + 1) for _, t, _ in data["_links"][t2] if t in identity})
-        text(f, f"{title}  frame {i}  brought by a person: {', '.join(seen) or '-'}  drops {sum(e['frame'] <= i for e in events)}",
-             (int(30 * big), int(60 * big)), (255, 255, 255), ts)
+        text(f, f"{title}  frame {i}  drops {sum(e['frame'] <= i for e in events)}", (int(30 * big), int(60 * big)), (255, 255, 255), ts)
         ff.stdin.write(f.tobytes())
         i += 1
     ff.stdin.close()
@@ -132,7 +131,7 @@ def main():
         tracks, per_frame = track(data, bins, scorer, motion)
         events, roles = decide(tracks, data, bins, float(data["fps"]), motion, per_frame)
         if "--no-video" not in sys.argv:
-            render(video, out_dir / f"{name}_items.mp4", data, bins, tracks, per_frame, roles, events)
+            render(video, out_dir / f"{name}_items.mp4", data, bins, tracks, per_frame, roles, events, debug="--debug" in sys.argv)
         count = {r: sum(v == r for v in roles.values()) for r in ("carried", "re-found", "already in bin")}
         count["items brought"] = len(set(data["_identity"].values()))
         results[name] = {"events": events, "roles": count,
@@ -141,16 +140,16 @@ def main():
                                      for t in tracks if roles[t["id"]] in ("carried", "re-found")]}
         print(name, json.dumps(results[name]["events"]), count, flush=True)
         if spec.get("gt_boxes"):
-            ious = box_iou_scores(spec["gt_boxes"], data, per_frame)
+            ious = box_iou_scores(spec["gt_boxes"], data, per_frame, tracks)
             iou_all.extend(ious)
-            results[name]["box_iou"] = [[round(float(h), 3), round(float(b), 3)] for h, b in ious]
-            print(f"  box IoU held {np.mean([h for h, _ in ious]):.2f} (hit {sum(h >= IOU_HIT for h, _ in ious)}/{len(ious)}), "
-                  f"best {np.mean([b for _, b in ious]):.2f} (hit {sum(b >= IOU_HIT for _, b in ious)}/{len(ious)})", flush=True)
+            results[name]["box_iou"] = [[round(float(v), 3) for v in r] for r in ious]
+            print("  box IoU " + ", ".join(f"{k} {np.mean([r[j] for r in ious]):.2f} (hit {sum(r[j] >= IOU_HIT for r in ious)}/{len(ious)})"
+                                           for j, k in enumerate(("held", "best", "shown"))), flush=True)
         truths = spec.get("truths") or ([spec["truth"]] if spec.get("truth") else [])
         if not truths and "truths" not in spec:
             continue
         cells = []
-        for key, tol in (("strict", TOLERANCE), ("loose", LOOSE)):
+        for key, tol in (("strict", at_fps(TOLERANCE, data["fps"])), ("loose", at_fps(LOOSE, data["fps"]))):
             free, matched = list(events), []
             for gt in truths:  # each true drop takes the closest unused detection into the same bin
                 hit = sorted((e for e in free if abs(e["frame"] - gt["frame"]) <= tol and e["bin"] == gt["bin"]),
@@ -174,11 +173,13 @@ def main():
         tp, fn, fp = score[key]
         lines.append(f"{key}: drops found {tp}/{tp + fn}, false drops {fp}.")
     if iou_all:
-        h, b = [x for x, _ in iou_all], [y for _, y in iou_all]
-        lines.append(f"item box vs hand-checked box ({len(iou_all)} frames): held box mean IoU {np.mean(h):.2f}, "
-                     f"{sum(x >= IOU_HIT for x in h)}/{len(h)} at IoU>={IOU_HIT}; best item box mean IoU {np.mean(b):.2f}, "
-                     f"{sum(x >= IOU_HIT for x in b)}/{len(b)} at IoU>={IOU_HIT}.")
-    lines.append(f"DEV videos: the rules were tuned while looking at these {len(config)} clips, so this is not a held-out accuracy.")
+        lines.append(f"item box vs hand-checked box ({len(iou_all)} frames, IoU>={IOU_HIT} = match): " + "; ".join(
+            f"{k} box mean IoU {np.mean([r[j] for r in iou_all]):.2f}, {sum(r[j] >= IOU_HIT for r in iou_all)}/{len(iou_all)}"
+            for j, k in enumerate(("held", "best", "shown"))) + ".")
+    if "--test" in sys.argv:
+        lines.append(f"TEST clips ({len(config)}): the rules were frozen before these were first run; never tune on them.")
+    else:
+        lines.append(f"DEV clips ({len(config)}): the rules were tuned while looking at these, so this is not a held-out accuracy.")
     (out_dir / "item_results.json").write_text(json.dumps(results, indent=1))
     (out_dir / "item_summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

@@ -98,6 +98,40 @@ After: held box **16/39** (mean 0.49); drops within ±0.5 s **4/5** (was 3/5), w
 IMG_9097 +22 → +2 frames. IMG_9100 is still 27 frames early: the cup is hidden in the fist until the release,
 which no box can see. These are DEV numbers (tuned while looking at these clips); a held-out clip is still needed.
 
+## Generalization check: other places, other bins (17 Oct)
+
+Eymen asked for other places and bins, and no overfitting. Protocol: 3 splits, kept in local configs (git-ignored,
+videos not committed; YouTube clips are third-party, for evaluation only):
+- **dev**: Eymen's 5 phone clips (`state/real/bins.json`).
+- **dev-2**: the 2 YouTube clips Eymen sent (`state/heldout/youtube.json`): street with 3 recycling bins (the person
+  stands behind the bins; no item is ever visible, so the correct output is NO drop) and a beach bin (face mask into
+  the slot, f405; a wrapper in the other hand is not thrown). They were run FROZEN first, then studied, so they are dev now.
+- **test**: 3 more stock clips (`state/test/youtube_test.json`): park cup, container slot close-up (arms only), two
+  bins with no person in view. Truth was labeled by looking at the frames only; the model was run once, at the end,
+  after every rule was frozen. A 4th (airport) was dropped because its truth could not be told from the frames.
+
+| model | dev (5) | dev-2 (2) | test (3) |
+|---|---|---|---|
+| before IoU (b7463eb) | 5/5, 0 false | 0/1, 6 false | 0/3, 0 false |
+| IoU rules (5b0a01f) + time in seconds | 5/5, 0 false | 1/1, 4 false | 1/3, 0 false |
+| **final** (+ item seen outside a bin) | **5/5, 0 false** | **1/1, 0 false** | **1/3, 0 false** |
+
+Changes that generalize (none tuned to a number on a clip):
+- Durations are seconds, not frames (`at_fps`, constants given at 30 fps): the YouTube clips are 24 fps, cameras often 10-15.
+- `REQUIRE_SEEN_OUTSIDE`: a drop needs an item that was seen AS AN ITEM outside every bin. All 4 dev-2 false drops
+  were locks/hinges on bin tops that a hand passed over while the camera panned.
+- `item_boxes`: one box per item per frame (the region CLIP is surest is an item, segmented before hand crop),
+  used by the videos, the stream and the evidence crop: the shown box matches the true box in 31/39 dev frames.
+  Only items seen as items outside a bin are drawn (`data["_brought"]`), the same rule the drop decision uses.
+Tried and reverted: a wider "is it an item" vocabulary (TACO litter classes). Words like "a plastic lid" and "scrap
+metal" also describe bin hardware, so bin parts became items again (dev-2 back to 4 false drops, a dev drop lost).
+
+Limits shown by the test set: 2 of 3 misses are views with no visible arm (a person cut off by the frame, or an item
+dropped from above): the tracker only counts objects a person is seen carrying, by design. A fallback for armless
+views (the older motion tracker near the bins) is the next step. Categories are only the demo catalog's: a face mask
+came out "wrapper", a bag "paper cup"; out-of-catalog items need catalog entries (contract fixture), not more prompts.
+Bins must be marked once per camera (`demo-site.json` regions, or `--item-bins` keyframes for a moving camera).
+
 ## Item tracker in `run` (17 Oct)
 
 `recyclone-worker run --tracker items` uses the item tracker (`recyclone_worker/items.py`, `item_playback.py`).

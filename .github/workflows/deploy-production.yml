@@ -1,0 +1,60 @@
+name: Deploy production to Vercel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_ORG_ID: team_WaAlQx3VFYLFdWg5mCxN8pGD
+      VERCEL_PROJECT_ID: prj_YGyfbc4nGLRhbUlKlxkLnRQVjkyT
+      VERCEL_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
+    steps:
+      - name: Check out the pushed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Check deployment credential
+        shell: bash
+        run: |
+          if [[ -z "$VERCEL_TOKEN" ]]; then
+            echo '::error::Set the VERCEL_DEPLOY_TOKEN repository secret before deploying.'
+            exit 1
+          fi
+
+      - name: Deploy the pushed source with current production settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Export only this commit's tracked files, without developer credentials
+          # or Git author metadata. The CI token authenticates the deployment.
+          deploy_root="$RUNNER_TEMP/caught-in-4k-production"
+          mkdir -p "$deploy_root"
+          git archive --format=tar "$GITHUB_SHA" | tar -xf - -C "$deploy_root"
+          cd "$deploy_root"
+          npx --yes vercel@64.5.0 deploy --prod --yes \
+            --token "$VERCEL_TOKEN" \
+            --meta "sourceCommit=$GITHUB_SHA" \
+            --meta deploymentSource=github-actions
+
+      - name: Check public production access
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --output /dev/null \
+            --retry 3 --retry-delay 5 --max-time 30 \
+            https://caught-in-4k-app.vercel.app/camera

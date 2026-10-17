@@ -68,7 +68,8 @@ def mix_audio(video_in: Path, video_out: Path, spoken: list[tuple[float, str, Pa
     for _, f in clips:
         cmd += ["-i", str(f)]
     parts = [f"[{k + 1}:a]adelay={round(t * 1000)}|{round(t * 1000)}[a{k}]" for k, (t, _) in enumerate(clips)]
-    mix = "".join(f"[a{k}]" for k in range(len(clips))) + f"amix=inputs={len(clips)}:normalize=0[aout]"
+    # apad: silence after the last clip, so -shortest ends at the VIDEO's end (without it the video was cut short)
+    mix = "".join(f"[a{k}]" for k in range(len(clips))) + f"amix=inputs={len(clips)}:normalize=0,apad[aout]"
     cmd += ["-filter_complex", ";".join(parts + [mix]), "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
             "-shortest", str(video_out)]
     subprocess.run(cmd, check=True)

@@ -104,3 +104,11 @@ def test_say_voice_tells_the_phone_before_playing(tmp_path, monkeypatch):
     v.speak("Trash. chip bag, placed in trash", 0.0)
     v.close()
     assert order == [("phone", "Trash. chip bag, placed in trash", ".aiff"), "mac"]
+
+
+def test_page_draws_a_live_waveform_from_the_played_audio():
+    """Voice-memo look: the sentence's audio goes through an analyser that drives the waveform canvas."""
+    from recyclone_worker.phone_speaker import PAGE
+
+    assert '<canvas id="wave"' in PAGE
+    assert "createAnalyser" in PAGE and "src.connect(analyser)" in PAGE

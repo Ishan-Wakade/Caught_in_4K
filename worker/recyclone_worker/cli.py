@@ -316,7 +316,7 @@ def cmd_guide(args, make_guide_parts=None) -> int:
     from .approach import Approach, BinArea
     from .guide import Guide, YoloPoseTracker
     from .sources import LiveCameraSource
-    from .voice import SayVoice, SilentVoice, mix_audio
+    from .voice import ElevenLabsVoice, SayVoice, SilentVoice, elevenlabs_config, mix_audio
 
     homography = np.array(json.loads(Path(args.homography).read_text())) if args.homography else None
     live = args.source.isdigit() or "://" in args.source
@@ -336,8 +336,17 @@ def cmd_guide(args, make_guide_parts=None) -> int:
         voice = SilentVoice()
     else:
         player = (lambda f: None) if args.speaker == "phone" else None  # None = afplay on the Mac
-        voice = SayVoice(WORKER_DIR / "state/voice-cache", play=live or args.realtime, player=player,
-                         on_say=speaker.announce if speaker else None)
+        common = dict(play=live or args.realtime, player=player, on_say=speaker.announce if speaker else None)
+        el_key, el_voice = elevenlabs_config()
+        if args.voice in ("auto", "elevenlabs") and el_key and el_voice:
+            voice = ElevenLabsVoice(WORKER_DIR / "state/voice-cache", key=el_key, voice_id=el_voice, **common)
+            print("voice: ElevenLabs (macOS say if it fails)", file=sys.stderr)
+        else:
+            if args.voice == "elevenlabs":
+                print("note: no ElevenLabs key (ELEVENLABS_API_KEY + voice id, or ~/.config/recyclone/elevenlabs.env); "
+                      "using macOS say", file=sys.stderr)
+            voice = SayVoice(WORKER_DIR / "state/voice-cache", **common)
+            print("voice: macOS say", file=sys.stderr)
     voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])  # before the camera
     source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
     if args.area == "pick":  # draw the box around the bins on the first frame with the mouse
@@ -548,7 +557,8 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     gd.add_argument("--namer", choices=["clip", "deepseek"], default="deepseek")
     gd.add_argument("--local-rules", default=str(WORKER_DIR / "rules/cambridge-ma-2022.md"))
     gd.add_argument("--bins", default=str(WORKER_DIR / "rules/cambridge-ma-2022.bins.json"), help="standard bin per catalog item")
-    gd.add_argument("--voice", choices=["say", "silent"], default="say")
+    gd.add_argument("--voice", choices=["auto", "elevenlabs", "say", "silent"], default="auto",
+                    help="auto = ElevenLabs when its key is set (~/.config/recyclone/elevenlabs.env), else macOS say")
     gd.add_argument("--realtime", action="store_true", help="for a file: play at clip speed and speak aloud")
     gd.add_argument("--speaker", choices=["mac", "phone", "both"], default="mac",
                     help="where the voice plays: this Mac, a second phone that opens the printed URL, or both")

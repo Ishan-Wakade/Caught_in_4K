@@ -30,7 +30,13 @@ The model stays on the Mac. Phone A is the camera, phone B plays the voice.
 2. Camera: phone A through Continuity Camera (`cameras` shows its index), or an IP camera app (`--source http://...`).
 3. `uv run recyclone-worker guide --source 1 --area pick --show --speaker phone` (`both` = Mac and phone).
 4. On phone B, open the printed `http://<mac-ip>:8766/s/<token>/` URL and tap once (iOS only allows sound after a
-   tap). Keep the page open with the screen on. Each sentence plays there and is shown big, colored by bin.
+   tap). Keep the page open with the screen on. Each sentence plays there with a live waveform (voice-memo style),
+   the bin shown big and colored by bin.
+
+Voice: `--voice auto` (default) uses ElevenLabs when `~/.config/recyclone/elevenlabs.env` has `ELEVENLABS_API_KEY`
+and `VOICE_ID_EN` (or the env vars `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`), else macOS `say`. Catalog sentences
+are synthesized once at startup and cached as mp3 (23 in ~2 s); a new sentence takes ~0.4 s; any ElevenLabs failure
+falls back to `say` for that sentence. Only the sentence's text goes to ElevenLabs. `--voice say` forces the offline voice.
 
 Only text and synthetic speech go to the phone: no camera frames, no crops. The token changes on every run;
 `SPEAKER_PORT` changes the port.

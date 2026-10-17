@@ -6,6 +6,7 @@ import { configFor, configFromSite, type CoreConfig } from "./config.js";
 import { binInventory, classify, itemMetric } from "./metrics.js";
 import { type Repository, MemoryRepository } from "./repository.js";
 import { contact, recommendationContact, projectBin, projectItem, projectItemDetail, projectReview, projectAlert } from "./projections.js";
+import { resolveReplyContact, type ReplyContactOptions } from "./contact-routing.js";
 import { createEventValidator, invariant, instant, validId, validateCatalog, validateSeed } from "./validation.js";
 
 export type CoreOptions = {
@@ -16,6 +17,10 @@ export type CoreOptions = {
   clock?: () => Date;
 };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24);
+function mentions(body: string, value: string): boolean {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-zA-Z0-9_])${escaped}($|[^a-zA-Z0-9_])`, "i").test(body);
+}
 const active = (a: AlertRecord) => a.state === "open" || a.state === "acknowledged";
 function nextId(s: CoreState, prefix: string) { return `${prefix}_${s.epoch}_${++s.sequence}`; }
 function feed(s: CoreState, at: string, type: FeedRecord["type"], ref: FeedRecord["ref"], summary: string, mocked?: boolean) {
@@ -179,7 +184,7 @@ export function createCore(options: CoreOptions) {
   }
 
   async function handleReply(reply: InboundReply): Promise<{ status: "applied" | "duplicate" | "needs_clarification" }> {
-    invariant(typeof reply.providerMessageId === "string" && reply.providerMessageId.length > 0 && reply.providerMessageId.length <= 500 && validId(reply.from.contactId) && typeof reply.body === "string" && reply.body.length > 0 && reply.body.length <= 10_000, "Invalid reply");
+    invariant(typeof reply.providerMessageId === "string" && reply.providerMessageId.length > 0 && reply.providerMessageId.length <= 500 && validId(reply.from.contactId) && typeof reply.body === "string" && reply.body.length <= 10_000, "Invalid reply");
     invariant(instant(reply.receivedAt) <= instant(now()) + 5000, "Reply timestamp is too far in the future");
     const replyKey = Buffer.from(reply.providerMessageId).toString("base64url");
     const reserved = await repository.transaction(s => {
@@ -187,7 +192,13 @@ export function createCore(options: CoreOptions) {
       invariant(contact(s, reply.from.contactId), "Unknown manager contact", 403);
       s.replies[replyKey] = { reply, status: "processing" };
       s.messages.push({ message_id: nextId(s, "reply"), alert_id: null, contact_id: reply.from.contactId, body: reply.body, direction: "inbound", kind: "reply", mocked: options.inboundRepliesMocked ?? false, at: reply.receivedAt, provider_message_id: reply.providerMessageId });
-      const alerts = openSummaries(s, reply.from);
+      let alerts = openSummaries(s, reply.from);
+      const named = s.alerts.filter(a => mentions(reply.body, a.alert_id));
+      if (named.length) alerts = alerts.filter(a => named.some(n => n.alert_id === a.alertId));
+      else {
+        const bins = s.seed.bins.filter(b => mentions(reply.body, b.bin_id) || mentions(reply.body, b.name));
+        if (bins.length) alerts = alerts.filter(a => s.alerts.some(record => record.alert_id === a.alertId && bins.some(b => b.bin_id === record.bin_id)));
+      }
       feed(s, now(), "reply_received", {}, "Manager reply received");
       return { epoch: s.epoch, alerts, feedCursor: s.feed.at(-1)!.cursor };
     });
@@ -196,6 +207,12 @@ export function createCore(options: CoreOptions) {
     try { interpreted = await options.interpreter.interpret(reply, reserved.alerts); }
     catch {
       interpreted = { alertId: null, intent: "unclear" };
+    }
+    // Interpreters propose intent; explicit negation or a future promise cannot
+    // be used as evidence that the real-world action is complete.
+    if ((interpreted.intent === "action_confirmed" || interpreted.intent === "bin_emptied") &&
+      /\b(?:not|never|emptying it|working on|in progress|about to|haven['’]t|hasn['’]t|didn['’]t|isn['’]t|wasn['’]t|won['’]t|will|going to|plan to|need to)\b/i.test(reply.body)) {
+      interpreted = { alertId: interpreted.alertId, intent: "unclear" };
     }
     const status = await repository.transaction(s => {
       invariant(s.epoch === reserved.epoch, "Demo state changed while processing reply", 409);
@@ -249,6 +266,10 @@ export function createCore(options: CoreOptions) {
 
   return {
     ingest, handleReply, tick,
+    async handleProviderReply(reply: InboundReply, options: ReplyContactOptions = {}) {
+      const from = await repository.transaction(s => resolveReplyContact(s.seed.contacts, reply.from, options));
+      return handleReply({ ...reply, from });
+    },
     async close() { await repository.close?.(); },
     async getFeed(after = ""): Promise<FeedResponse> {
       invariant(after === "" || /^\d{1,20}$/.test(after), "Invalid feed cursor");

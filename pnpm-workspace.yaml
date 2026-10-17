@@ -5,4 +5,5 @@ packages:
   - tools/*
 allowBuilds:
   esbuild: true
+  # Optional dependency-version warning only; no generated code is needed.
   protobufjs: false

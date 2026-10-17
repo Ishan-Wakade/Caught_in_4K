@@ -61,3 +61,14 @@ Status as of this scaffold, so nobody mistakes a stub for a working integration:
 2. **Grok Imagine API reference** — endpoint, auth, request/response shape — needed to replace the `GrokIllustrator` stub.
 3. **Contact routing** — how `ContactRef.phone`/`handle` maps to a real recipient (phone number for iMessage/WhatsApp) for each restaurant/property manager; produced by the area manager's data entry (root `AGENTS.md`), not by S, but S's adapter needs the mapping confirmed.
 4. **If `PHOTON_CHANNEL=whatsapp_business`**: `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` credentials — only needed if that channel is chosen over `imessage`.
+
+### Core wiring integration
+
+The user authorized the required cross-area integration fixes. `_shared.ts` and
+`_replySink.ts` delegate to core without pre-marking deliveries seen, so failed
+contact lookups remain retryable. The mock route validates input and requires
+`ENABLE_MOCK_REPLY=true` plus a manager token. Provider sender IDs resolve through
+configured phone/handle values or `PHOTON_CONTACT_MAP` after SDK verification.
+J's Next app and workspace dependencies are now present; live Photon delivery and
+the webhook request lifecycle still need end-to-end verification. Grok remains a
+live-mode stub. The optional protobufjs advisory postinstall is explicitly disabled.

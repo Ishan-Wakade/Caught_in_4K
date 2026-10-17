@@ -31,12 +31,14 @@ Environment (see the root `.env.example`): `API_BASE_URL`, `WORKER_INGEST_TOKEN`
 | `... run ... --tracker motion` | Background-subtraction tracker near the bins, for items YOLO can't name (wrappers, bags) |
 | `... run ... --tracker world` | YOLO-World with packaging prompts (slower; compare on real footage) |
 | `... run ... --no-categories` | Report unregistered items as unknown instead of a generic category (on by default) |
+| `uv run recyclone-worker run --tracker items --clip demo.mp4 --clip-id clip_demo_v1 --realtime` | **Best on real footage.** Item tracker: analyzes the whole clip first (~0.4 s per frame, cached in `state/items-cache/`, so run it once before the demo), then plays it at clip speed, sending each drop's event when the video reaches it. Bins come from `demo-site.json`; `--item-bins state/my.json` gives per-frame boxes for a moving camera. `--gallery` is ignored (items are named from text). |
 
 ## Item tracker on real footage (anyone on the team can run and improve it)
 
 `scripts/item_tracker.py` is the current best detector on real, even hand-held, footage. It counts only objects a
-person brings in (the skeleton's arm decides), remembers what was already in a bin, and decides drops. It is
-not yet wired into `run`. Results and limits: `AGENTS.md`, "Real-footage experiments".
+person brings in (the skeleton's arm decides), remembers what was already in a bin, and decides drops. The logic
+lives in `recyclone_worker/items.py` and is what `run --tracker items` uses; this script scores it against true
+drop frames and renders debug videos. Results and limits: `AGENTS.md`, "Real-footage experiments".
 
 ```bash
 cd worker && uv sync                     # weights (FastSAM, YOLO11n-pose, CLIP) download on first run
@@ -52,7 +54,7 @@ banner), `item_summary.md` (found / false drops at ±0.5 s and ±1.5 s), `item_r
 Improving it:
 - Perception is cached in `OUT/cache/`, so after the first run a rule change re-scores in seconds
   (`--no-video` skips rendering). `--recompute` re-runs the models.
-- The knobs are the constants at the top of `item_tracker.py`, each with a one-line reason.
+- The knobs are the constants at the top of `recyclone_worker/items.py`, each with a one-line reason.
 - Keep a **dev** set you tune on and a **test** set you only score at the end; numbers from clips you tuned
   on are not accuracy. Never commit videos or `state/` configs (people are in them).
 

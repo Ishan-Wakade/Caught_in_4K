@@ -51,7 +51,7 @@ a white receipt missed in a dark noisy scene; one item counted twice when its tr
 thrown into the same bin at the same moment counted once; worst on fast throws with motion blur (bin
 rule 4/7, core-identified 2/8). Fixes must be checked on NEW held-out seeds, not these.
 
-## Real-footage experiments (16 Oct, Eymen's 5 handheld phone clips, not yet wired into `cli.py`)
+## Real-footage experiments (16 Oct, Eymen's 5 handheld phone clips)
 
 Clips IMG_9096/9097 (wall slot) and IMG_9100/9101/9102 (recycling bin), one drop each; bin boxes and true
 drop frames are hand-given in a local, git-ignored config (`worker/state/real/bins.json`). These 5 clips are
@@ -72,6 +72,28 @@ drop frames are hand-given in a local, git-ignored config (`worker/state/real/bi
   ±0.5 s (the drop is decided when the item vanishes, up to 0.8 s off the release); category right 4/5 (the
   crumpled paper bag came out "wrapper"). FastSAM weights download to `worker/weights/` on first run.
   Needs: a visible arm at some point while the item is held, and bin boxes per camera.
+
+## Item tracker in `run` (17 Oct)
+
+`recyclone-worker run --tracker items` uses the item tracker (`recyclone_worker/items.py`, `item_playback.py`).
+Perception runs at ~2–3 fps on this Mac (measured 17 Oct on IMG_9100: FastSAM 200 ms, pose 26 ms, CLIP on ~50
+regions 233 ms per frame; a fresh 437-frame clip took 150 s), against a 30 fps camera, and the drop decision
+needs the whole clip (the veto looks 1.5 s ahead). **Eymen's decision (17 Oct): pre-process, play live.** The
+clip is analyzed first (cached per file in `state/items-cache/`), then played at clip speed; the annotated
+stream and each event go out when the video reaches the drop. Drops still come from the model, not hand
+labels; say "analyzed beforehand, played back" if asked, never "real-time detection".
+
+- `track_id` = the item's id (its first held track), so replays give the same `event_id`s (checked: a fresh and a
+  cached run of IMG_9100 gave the same id).
+- `item`: the item's CLIP category votes, normalized (raw scores, no threshold). No confident look outside a bin
+  → unknown (before 17 Oct, all-zero votes silently became the first category, "Shake Shack cup").
+- `destination_confidence`: share of the item's last 10 sightings (up to the drop) inside the chosen bin box. A
+  plain heuristic, not a calibrated probability; it was 1.0 on all 5 dev clips, so it does not yet separate
+  easy from hard drops.
+- Evidence crop: the item's last box before the drop, often a fragment of it (IMG_9100: the cup's rim).
+- The stream draws bin boxes, carried items and existing bin contents, never the skeleton.
+- Through the CLI, the 5 dev clips give the same drops as the script (277/220/361/230/198). The sauce cup's
+  category confidence is 0.35, below core's 0.5 item threshold, so core would mark it unassessable.
 
 ## Evaluation
 

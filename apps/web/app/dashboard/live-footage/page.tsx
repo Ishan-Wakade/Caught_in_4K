@@ -2,13 +2,23 @@
 
 import { useEffect, useState } from "react";
 
-/** Drop processed clips in apps/web/public/footage/ and list them here — a CCTV-style wall */
+/** Drop processed clips in apps/web/public/footage/ and list them here — a CCTV-style wall. `test` tags a clip as not-yet-reviewed. */
 const CAMERAS = [
   { file: "IMG_9117_demo.mp4", label: "CAM 01" },
   { file: "IMG_9118_demo.mp4", label: "CAM 02" },
   { file: "IMG_9119_demo.mp4", label: "CAM 03" },
   { file: "IMG_9120_demo.mp4", label: "CAM 04" },
   { file: "IMG_9121_demo.mp4", label: "CAM 05" },
+  { file: "IMG_7986_demo.mp4", label: "CAM 06" },
+  { file: "IMG_7987_demo.mp4", label: "CAM 07" },
+  { file: "IMG_2958_demo.mp4", label: "CAM 08", test: true },
+  { file: "IMG_2959_demo.mp4", label: "CAM 09", test: true },
+  { file: "IMG_2960_demo.mp4", label: "CAM 10", test: true },
+  { file: "IMG_9096_demo.mp4", label: "CAM 11", test: true },
+  { file: "IMG_9097_demo.mp4", label: "CAM 12", test: true },
+  { file: "IMG_9100_demo.mp4", label: "CAM 13", test: true },
+  { file: "IMG_9101_demo.mp4", label: "CAM 14", test: true },
+  { file: "IMG_9102_demo.mp4", label: "CAM 15", test: true },
 ];
 
 function Clock() {
@@ -22,7 +32,12 @@ function Clock() {
   return <span className="font-mono text-xs tabular-nums text-[#D9DCD0]">{now ? now.toLocaleTimeString("en-US", { hour12: false }) : ""}</span>;
 }
 
-function CameraTile({ file, label, onExpand }: { file: string; label: string; onExpand: () => void }) {
+/** Tiny high-contrast flag for not-yet-reviewed clips — black text, since the rest of the overlay is light-on-dark. */
+function TestTag() {
+  return <span className="rounded-sm bg-[#D9DCD0] px-1 py-px text-[9px] leading-none font-bold text-black">test</span>;
+}
+
+function CameraTile({ file, label, test, onExpand }: { file: string; label: string; test?: boolean; onExpand: () => void }) {
   return (
     <button
       type="button"
@@ -44,6 +59,7 @@ function CameraTile({ file, label, onExpand }: { file: string; label: string; on
           <span className="flex items-center gap-1.5 rounded bg-black/50 px-1.5 py-0.5 text-xs font-bold tracking-wide text-[#D9DCD0]">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-clay" />
             {label}
+            {test && <TestTag />}
           </span>
           <span className="rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-bold tracking-widest text-clay-light">REC</span>
         </div>
@@ -55,7 +71,7 @@ function CameraTile({ file, label, onExpand }: { file: string; label: string; on
   );
 }
 
-function ExpandedCamera({ file, label, onClose }: { file: string; label: string; onClose: () => void }) {
+function ExpandedCamera({ file, label, test, onClose }: { file: string; label: string; test?: boolean; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -84,6 +100,7 @@ function ExpandedCamera({ file, label, onClose }: { file: string; label: string;
             <span className="flex items-center gap-1.5 rounded bg-black/50 px-2 py-1 text-sm font-bold tracking-wide text-[#D9DCD0]">
               <span className="h-2 w-2 animate-pulse rounded-full bg-clay" />
               {label}
+              {test && <TestTag />}
             </span>
             <span className="rounded bg-black/50 px-2 py-1 text-xs font-bold tracking-widest text-clay-light">REC</span>
           </div>
@@ -114,12 +131,13 @@ export default function LiveFootagePage() {
         <h1 className="m-0 font-display text-[40px] leading-none font-bold">Live footage</h1>
         <span className="text-[15px] text-ink-2">Recorded demo clips, played back as a camera wall. Click a camera to expand it.</span>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Full-bleed: break out of the dashboard layout's max-w-6xl so four tiles can span near the full browser width. */}
+      <div className="relative left-1/2 grid w-screen -translate-x-1/2 grid-cols-1 gap-4 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
         {CAMERAS.map((c) => (
           <CameraTile key={c.file} {...c} onExpand={() => setExpanded(c.file)} />
         ))}
       </div>
-      {active && <ExpandedCamera file={active.file} label={active.label} onClose={() => setExpanded(null)} />}
+      {active && <ExpandedCamera file={active.file} label={active.label} test={active.test} onClose={() => setExpanded(null)} />}
     </>
   );
 }

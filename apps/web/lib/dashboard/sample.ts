@@ -31,9 +31,13 @@ export const COMPANY = "Example Kitchen";
 export type Camera = { id: string; name: string };
 export type Site = { id: string; name: string; cameras: Camera[]; perDay: number };
 
+// Common Massachusetts and Cambridge streets, standing in for real store addresses (no store runs the guide yet).
 export const SITES: Site[] = [
-  { id: "main", name: "Main Street", perDay: 150, cameras: [{ id: "main-patio", name: "Patio bins" }, { id: "main-indoor", name: "Indoor bins" }] },
-  { id: "harbor", name: "Harbor Ave", perDay: 95, cameras: [{ id: "harbor-front", name: "Front bins" }] },
+  { id: "mass-ave", name: "Massachusetts Avenue", perDay: 150, cameras: [{ id: "mass-ave-patio", name: "Patio bins" }, { id: "mass-ave-indoor", name: "Indoor bins" }] },
+  { id: "brattle", name: "Brattle Street", perDay: 95, cameras: [{ id: "brattle-front", name: "Front bins" }] },
+  { id: "mount-auburn", name: "Mount Auburn Street", perDay: 70, cameras: [{ id: "mount-auburn-bins", name: "Curbside bins" }] },
+  { id: "western-ave", name: "Western Avenue", perDay: 60, cameras: [{ id: "western-ave-bins", name: "Alley bins" }] },
+  { id: "beacon", name: "Beacon Street", perDay: 110, cameras: [{ id: "beacon-patio", name: "Patio bins" }, { id: "beacon-back", name: "Back bins" }] },
 ];
 
 const HOUR = 3_600_000;
@@ -42,7 +46,7 @@ const DAY = 24 * HOUR;
 export const NOW = Date.UTC(2026, 9, 17, 18, 0);
 
 /** Camera health shown on the dashboard; the indoor camera went offline this afternoon, so it has no records since. */
-export const CAMERA_OFFLINE_SINCE: Record<string, number> = { "main-indoor": NOW - 2 * HOUR - 48 * 60_000 };
+export const CAMERA_OFFLINE_SINCE: Record<string, number> = { "mass-ave-indoor": NOW - 2 * HOUR - 48 * 60_000 };
 
 /** Catalog items the sample uses, copied from worker/rules/cambridge-ma-2022.bins.json (sample.test.ts checks them). */
 export const CATALOG: { id: string; name: string; dest: Exclude<Destination, "none">; basis: string; weight: number }[] = [

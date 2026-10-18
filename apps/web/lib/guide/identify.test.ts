@@ -8,28 +8,30 @@ function fakeFetch(answers: { catalog: object; generic: object; jev?: object; fa
     const body = JSON.parse(init.body);
     calls.push({ url, body });
     if (answers.fail) return new Response("down", { status: 500 });
-    if (url.includes("deepseek")) {
+    if (url.includes("anthropic")) {
       const text = body.messages[0].content[0].text as string;
       const ans = text.includes("Describe the object generically") ? answers.generic : answers.catalog;
-      return Response.json({ choices: [{ message: { content: JSON.stringify(ans) } }] });
+      return Response.json({ content: [{ type: "text", text: JSON.stringify(ans) }] });
     }
     return Response.json({ answers: { bin: answers.jev } });
   };
 }
 
-const KEYS = { deepseek: "ds", jev: "jv" };
+const KEYS = { anthropic: "ak", jev: "jv" };
 const CROP = "data:image/jpeg;base64,AAAA";
 
-describe("identify (DeepSeek, then Jev for items not in the catalog)", () => {
+describe("identify (Claude, then Jev for items not in the catalog)", () => {
   it("a catalog item is answered from the bin table", async () => {
     const calls: Call[] = [];
     const r = await identify([CROP], KEYS, fakeFetch({ catalog: { catalog_item_id: "item_generic_can", what: "a can", confidence: 0.9 },
       generic: { holding: true, name: "aluminum can", material: "metal", form: "can", condition: "clean", hazardous: false } }, calls) as never);
     expect(r).toEqual({ message: { bin: "recycle", explanation: "aluminum can, placed in recycling" }, source: "catalog" });
     expect(calls.filter((c) => c.url.includes("typesafe"))).toHaveLength(0);
-    const ds = calls.find((c) => c.url.includes("deepseek"))!.body;
-    expect(ds.thinking).toEqual({ type: "disabled" });
-    expect(ds.response_format).toEqual({ type: "json_object" });
+    const cl = calls.find((c) => c.url.includes("anthropic"))!.body;
+    expect(cl.model).toBe("claude-sonnet-5-5");
+    expect(cl.thinking).toEqual({ type: "between_tools" });
+    expect(cl.output_config.format.type).toBe("json_schema");
+    expect(cl.messages[0].content[1]).toEqual({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAAA" } });
   });
 
   it("an unknown item goes through Jev with the city's rules", async () => {

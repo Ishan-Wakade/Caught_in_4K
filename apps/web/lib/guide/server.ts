@@ -69,7 +69,7 @@ async function json(request: Request, limit = MAX_CROPS * MAX_CROP_CHARS + 10_00
 
 /** Server-only secret for signing the messages /identify produced (only those, and the fixed default, are voiced). */
 function speakSecret(): string {
-  const s = process.env.GUIDE_SPEAK_SECRET || process.env.ELEVENLABS_API_KEY || process.env.DEEPSEEK_API_KEY;
+  const s = process.env.GUIDE_SPEAK_SECRET || process.env.ELEVENLABS_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!s) throw new HttpError(503, "voice guide is not configured");
   return `guide-speak|${s}`;
 }
@@ -118,8 +118,8 @@ export async function handleIdentify(request: Request, identify: Identify = DEBU
     return err(400, "send 1-3 JPEG data URLs as crops");
   }
   if (crops.some((c: string) => c.length > MAX_CROP_CHARS)) return err(413, "crop too large");
-  const keys = { deepseek: process.env.DEEPSEEK_API_KEY ?? "", jev: process.env.TYPESAFE_API_KEY ?? "" };
-  if (!keys.deepseek) return err(503, "DEEPSEEK_API_KEY is not configured");
+  const keys = { anthropic: process.env.ANTHROPIC_API_KEY ?? "", jev: process.env.TYPESAFE_API_KEY ?? "" };
+  if (!keys.anthropic) return err(503, "ANTHROPIC_API_KEY is not configured");
   const r = await identify(crops as string[], keys);
   // A new/unrecognized item just got a Jev-suggested destination — log it for manager review.
   // Fire-and-forget: a DB hiccup must never delay or break the spoken response.

@@ -8,7 +8,7 @@ import siteJson from "../../../../contracts/fixtures/demo-site.json";
 import { CATALOG_IDS, defaultTrash, fromCatalog, fromSuggestion, unsureSuggestion, type GuideMessage } from "./message";
 import { LOCAL_RULES, RULES_SOURCE } from "./rules";
 
-export type Keys = { deepseek: string; jev: string };
+export type Keys = { anthropic: string; jev: string };
 /**
  * source "unclear": DeepSeek could not see what it is (blurry, or covered by the face blackout): worth another look.
  * `name`/`confidence` are only set for source "llm" — what it was, and how sure Jev's destination suggestion was; the
@@ -22,7 +22,9 @@ export type Result = {
 };
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Response>;
 
-const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
+/** The vision model: Claude Sonnet 5.5 in place of DeepSeek (18 Oct, team decision); same two prompts, same flow. */
+const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
+const CLAUDE_MODEL = "claude-sonnet-5-5";
 const JEV_URL = "https://api.typesafe.ai/v1/systemone";
 const TIMEOUT_MS = 8000;
 
@@ -101,13 +103,35 @@ async function post(fetchFn: Fetch, url: string, key: string, body: object): Pro
   return res.json();
 }
 
-async function deepseek(fetchFn: Fetch, key: string, prompt: string, crops: string[]): Promise<any> {
-  const r = await post(fetchFn, DEEPSEEK_URL, key, {
-    model: "deepseek-flash", temperature: 0, max_tokens: 800, response_format: { type: "json_object" },
-    thinking: { type: "disabled" },
-    messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...crops.map((url) => ({ type: "image_url", image_url: { url } }))] }],
+/** The JSON shape each prompt asks for (DeepSeek's response_format json_object, as Claude's structured output). */
+const CATALOG_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["catalog_item_id", "what", "material", "brand_visible", "confidence"],
+  properties: { catalog_item_id: { anyOf: [{ type: "string" }, { type: "null" }] }, what: { type: "string" }, material: { type: "string" },
+    brand_visible: { anyOf: [{ type: "string" }, { type: "null" }] }, confidence: { type: "number" } },
+};
+const GENERIC_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["holding", "name", "material", "form", "condition", "hazardous"],
+  properties: { holding: { type: "boolean" }, name: { type: "string" }, material: { type: "string" }, form: { type: "string" },
+    condition: { type: "string" }, hazardous: { type: "boolean" } },
+};
+
+/** One Claude call with one of the two prompts (unchanged) and the item crops; returns the parsed JSON answer. */
+async function claude(fetchFn: Fetch, key: string, prompt: string, schema: object, crops: string[]): Promise<any> {
+  const res = await fetchFn(CLAUDE_URL, {
+    method: "POST",
+    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL, max_tokens: 800,
+      thinking: { type: "between_tools" },  // Sonnet 5.5's "no thinking" (it rejects "disabled")
+      output_config: { format: { type: "json_schema", schema } },
+      messages: [{ role: "user", content: [{ type: "text", text: prompt },
+        ...crops.map((url) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: url.split(",")[1] } }))] }],
+    }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  return JSON.parse(r.choices[0].message.content);
+  if (!res.ok) throw new Error(`${CLAUDE_URL} HTTP ${res.status}`);
+  const r = await res.json();
+  return JSON.parse(r.content.find((b: { type: string }) => b.type === "text").text);
 }
 
 async function jev(fetchFn: Fetch, key: string, item: object): Promise<{ choice: string; confidence: number }> {
@@ -124,10 +148,10 @@ export async function identify(crops: string[], keys: Keys, fetchFn: Fetch = fet
   trace: (step: object) => void = () => {}): Promise<Result> {
   try {
     const [cat, gen] = await Promise.all([
-      deepseek(fetchFn, keys.deepseek, CATALOG_PROMPT(crops.length), crops),
-      deepseek(fetchFn, keys.deepseek, GENERIC_PROMPT(crops.length), crops),
+      claude(fetchFn, keys.anthropic, CATALOG_PROMPT(crops.length), CATALOG_SCHEMA, crops),
+      claude(fetchFn, keys.anthropic, GENERIC_PROMPT(crops.length), GENERIC_SCHEMA, crops),
     ]);
-    trace({ deepseek_catalog: cat, deepseek_generic: gen });
+    trace({ claude_catalog: cat, claude_generic: gen });
     if (gen && gen.holding === false) return { message: null, source: "nothing_held" };
     if (cat && typeof cat.catalog_item_id === "string" && CATALOG_IDS.includes(cat.catalog_item_id)) {
       return { message: fromCatalog(cat.catalog_item_id), source: "catalog" };

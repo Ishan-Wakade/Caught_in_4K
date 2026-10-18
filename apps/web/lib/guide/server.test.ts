@@ -7,7 +7,7 @@ const { handleIdentify, handleSpeak, signMessage } = await import("./server");
 
 const signed = (message: { bin: string; explanation: string }) => ({ message, sig: signMessage(message as never) });
 
-const ENV = { GUIDE_TOKEN: "demo-token", DEEPSEEK_API_KEY: "ds", TYPESAFE_API_KEY: "jv", ELEVENLABS_API_KEY: "el", ELEVENLABS_VOICE_ID: "voice1" };
+const ENV = { GUIDE_TOKEN: "demo-token", ANTHROPIC_API_KEY: "ak", TYPESAFE_API_KEY: "jv", ELEVENLABS_API_KEY: "el", ELEVENLABS_VOICE_ID: "voice1" };
 const req = (body: unknown, token = "demo-token") =>
   new Request("http://x/api/guide", { method: "POST", headers: { "x-guide-token": token, "content-type": "application/json" }, body: JSON.stringify(body) });
 
@@ -26,12 +26,12 @@ describe("guide API", () => {
     expect((await handleIdentify(req({ crops: ["data:image/jpeg;base64," + "A".repeat(400_000)] }))).status).toBe(413);
   });
   it("identifies with the injected identifier", async () => {
-    const fake = vi.fn(async (_crops: string[], _keys: { deepseek: string; jev: string }) => ({ message: { bin: "compost" as const, explanation: "paper napkin, placed in compost" }, source: "catalog" as const }));
+    const fake = vi.fn(async (_crops: string[], _keys: { anthropic: string; jev: string }) => ({ message: { bin: "compost" as const, explanation: "paper napkin, placed in compost" }, source: "catalog" as const }));
     const res = await handleIdentify(req({ crops: ["data:image/jpeg;base64,AAAA"] }), fake);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ message: { bin: "compost", explanation: "paper napkin, placed in compost" }, source: "catalog",
       spoken: "Compost. paper napkin, placed in compost", sig: expect.stringMatching(/^[0-9a-f]{64}$/) });
-    expect(fake.mock.calls[0][1]).toEqual({ deepseek: "ds", jev: "jv" });
+    expect(fake.mock.calls[0][1]).toEqual({ anthropic: "ak", jev: "jv" });
   });
   it("logs a new/unrecognized item as a sighting for manager review, but not a catalog match", async () => {
     const llm = vi.fn(async () => ({ message: { bin: "trash" as const, explanation: "sauce packet, placed in trash" }, source: "llm" as const, name: "sauce packet", confidence: 0.81 }));

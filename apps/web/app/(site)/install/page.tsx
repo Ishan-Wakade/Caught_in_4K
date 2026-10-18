@@ -9,11 +9,9 @@ const NEEDS = [
 ];
 
 const STEPS = [
-  ["Plug in", "Connect the computer to your store's internet and the speaker."],
-  ["Install Caught in 4K", "One download. It runs on its own after that."],
-  ["Choose your camera", "Pick the camera that sees your bins."],
-  ["Mark your bins", "Draw a box around the bins on the camera picture, then tap the four corners of a 1 m square of tape on the floor."],
-  ["Show it your items", "Hold each cup, box or wrapper you serve in front of the camera for three seconds."],
+  ["Download Caught in 4K", "Download and install Caught in 4K on your restaurant's computer."],
+  ["Connect your speaker and cameras", "Connect your speaker and existing surveillance cameras to the computer."],
+  ["Show it what you serve", "Hold each cup, container, wrapper or other item you serve in front of the camera for a few seconds so Caught in 4K can recognize it."],
 ];
 
 export default function InstallPage() {

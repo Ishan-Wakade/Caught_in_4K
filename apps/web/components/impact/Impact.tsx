@@ -31,10 +31,10 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
     <ul className={`m-0 grid list-none gap-4 p-0 sm:grid-cols-2 ${stats.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
       {stats.map((s) => (
         <li key={s.label} className="flex flex-col gap-2 rounded-2xl bg-card p-6">
-          <span className="text-[44px] leading-none font-bold tracking-[-0.02em] text-forest-deep">
+          <span className="text-[36px] leading-none font-bold tracking-[-0.02em] text-forest-deep">
             {s.text}
           </span>
-          <span className="text-[15px] leading-snug text-ink-2">
+          <span className="text-[15px] leading-snug text-muted">
             {s.label}
             <Cite id={s.source} />
           </span>
@@ -76,7 +76,7 @@ export function WhereItGoes() {
       </div>
 
       <div className="flex flex-col gap-1">
-        <h3 className="m-0 text-lg font-bold text-ink">
+        <h3 className="m-0 text-[17px] font-bold text-ink">
           {b.title}
           <Cite id={b.source} />
         </h3>
@@ -227,11 +227,11 @@ export function BinQuiz() {
 
   if (done) {
     return (
-      <div className="flex flex-col items-center gap-4 rounded-2xl bg-card p-8 text-center sm:p-12">
-        <span className="text-[56px] leading-none font-bold text-forest-deep">
+      <div className="flex flex-col items-center gap-4 rounded-2xl bg-card p-6 text-center sm:p-8">
+        <span className="font-display text-[clamp(28px,4vw,40px)] leading-none font-bold text-forest-deep">
           {score}/{QUIZ.length}
         </span>
-        <p className="m-0 max-w-md text-[17px] text-ink">
+        <p className="m-0 max-w-md text-[15px] text-muted">
           {score === QUIZ.length
             ? "Perfect, with time to think. At a real bin, people decide in a moment, with no answer key."
             : "Even with time to think, it's easy to miss one. At a real bin, people decide in a moment."}
@@ -246,7 +246,7 @@ export function BinQuiz() {
   const right = answer === q.bin;
 
   return (
-    <div className="flex flex-col gap-6 rounded-2xl bg-card p-6 sm:p-10">
+    <div className="flex flex-col gap-6 rounded-2xl bg-card p-6 sm:p-8">
       <div className="flex items-center justify-between text-sm text-muted-2">
         <span>
           Item {index + 1} of {QUIZ.length}
@@ -258,7 +258,7 @@ export function BinQuiz() {
         <span aria-hidden="true" className="text-[72px] leading-none">
           {q.emoji}
         </span>
-        <span className="font-display text-[28px] leading-tight font-bold text-ink">{q.item}</span>
+        <span className="font-display text-2xl leading-tight font-bold text-ink">{q.item}</span>
         <span className="text-[15px] text-muted">Which bin does this go in, in Cambridge, MA?</span>
       </div>
 

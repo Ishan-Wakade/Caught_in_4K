@@ -1,159 +1,86 @@
 "use client";
 
-import { useDisposals, type Disposal } from "@/hooks/useDisposals";
-import { useResource } from "@/hooks/useResource";
-import { api } from "@/lib/api";
-import { BIN_DOT, BIN_INK, BIN_LABEL, dayTime, fullnessPercent, time } from "@/lib/format";
-import type { BinStatus, CatalogItem } from "@/lib/types";
-import { BinFigure, fillUnknown } from "@/components/BinFigure";
-import { Dot, Empty, LoadError, Mono } from "@/components/ui";
+import { Section, num } from "@/components/dashboard/charts";
+import { useFilters } from "@/components/dashboard/DashboardContext";
+import { Filters } from "@/components/dashboard/Filters";
+import { DEST_COLOR, DEST_LABEL, DESTINATIONS, SITES, countBy, slice, windowFor, type Destination } from "@/lib/dashboard/sample";
 
-function BinColumn({ bin, lead, emptyingRequested, highlight }: { bin: BinStatus; lead: boolean; emptyingRequested: boolean; highlight: boolean }) {
-  const unknown = fillUnknown(bin);
-  const pct = fullnessPercent(bin.estimated_fullness);
-  const over = bin.estimated_fullness >= bin.fullness_threshold;
-  const ill = bin.illustration;
+/**
+ * Destination glyph, one size for all four so the card headers line up. The bins are the shape of the /bins drawing,
+ * with no fill level (there's no fullness data here); special disposal isn't a bin, so it gets a warning sign.
+ */
+function DestIcon({ dest }: { dest: Destination }) {
+  const c = DEST_COLOR[dest];
   return (
-    <section
-      aria-label={`${bin.name}`}
-      className={`flex min-w-0 flex-col gap-1.5 ${lead ? "flex-[1.4_1_420px]" : "flex-[1_1_300px]"} ${highlight ? "animate-rise-in" : ""}`}
-    >
-      <h2 className={`m-0 flex items-center gap-2.5 font-display font-bold ${lead ? "text-[26px]" : "text-[23px]"} ${BIN_INK[bin.type]}`}>
-        <Dot className={BIN_DOT[bin.type]} size={lead ? 12 : 11} />
-        {BIN_LABEL[bin.type]}
-        <span className="font-sans text-sm font-normal text-muted-2">{bin.name} · {bin.capacity_l} L</span>
-      </h2>
-      <BinFigure bin={bin} height={lead ? 310 : 250} />
-
-      {unknown ? (
+    <svg aria-hidden="true" width="20" height="22" viewBox="0 0 100 110" className="shrink-0">
+      {dest === "none" ? (
         <>
-          <span className="font-display text-[38px] leading-[0.95] font-bold text-muted">Not enough data</span>
-          <span className="text-[15px] leading-snug text-ink-2">Nothing seen going in yet, and we don&apos;t know what was in it before monitoring began.</span>
+          <path d="M50 8 Q55 8 58 13 L96 92 Q99 100 90 102 L10 102 Q1 100 4 92 L42 13 Q45 8 50 8 Z" fill={c} />
+          <rect x="44" y="36" width="12" height="36" rx="6" fill="#FBF8F1" />
+          <circle cx="50" cy="86" r="7" fill="#FBF8F1" />
         </>
       ) : (
         <>
-          <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-            <span className={`font-display leading-[0.85] font-extrabold tracking-[-0.02em] ${lead ? "text-[104px]" : "text-[72px]"}`}>~{pct}%</span>
-            <span className="text-sm text-muted-2">full · estimated</span>
-          </div>
-          {over ? (
-            <span className="flex items-center gap-2.5 text-lg font-bold text-clay-deep">
-              <Dot className="bg-clay" size={10} />
-              {emptyingRequested ? "Nearly full · emptying requested" : "Nearly full · time to empty it soon"}
-            </span>
-          ) : (
-            <span className="text-[17px] text-ink-2">{pct >= 50 ? "Filling up" : "Plenty of room"}</span>
-          )}
-          <span className="text-[13px] text-muted-2">
-            {bin.assumed_initial_l > 0
-              ? `Includes ~${Math.round(bin.assumed_initial_l)} L assumed to be in it when monitoring began`
-              : !bin.initial_contents_known
-                ? "Counts only what we've seen since monitoring began"
-                : `Since emptied ${dayTime(bin.last_emptied_at)}`}
-          </span>
+          <rect x="37" y="4" width="26" height="12" rx="6" fill={c} />
+          <rect x="6" y="14" width="88" height="14" rx="7" fill={c} />
+          <path d="M14 34 L86 34 L80 100 Q79 106 73 106 L27 106 Q21 106 20 100 Z" fill={c} />
         </>
       )}
-
-      <span className="text-[13px] text-muted-2">
-        {ill ? (
-          <>
-            AI illustration, not a photo · drawn from snapshot <Mono>{time(ill.snapshot_taken_at)}</Mono>
-            {ill.mocked ? " · mock image service" : " · Grok Imagine"}
-          </>
-        ) : (
-          "No illustration yet"
-        )}
-      </span>
-    </section>
+    </svg>
   );
 }
 
-/** Per-item counts for a bin: from the API when it sends them, else from this session's feed. */
-function countsFor(bin: BinStatus, disposals: Disposal[]): BinStatus["observed_counts"] {
-  if (bin.observed_counts.length || !bin.observed_total) return bin.observed_counts;
-  const since = bin.last_emptied_at ? Date.parse(bin.last_emptied_at) : -Infinity;
-  const rows = new Map<string, { catalog_item_id: string | null; name: string; count: number }>();
-  for (const d of disposals) {
-    if (d.bin !== bin.type || !d.identified || Date.parse(d.at) <= since) continue;
-    const row = rows.get(d.item_name) ?? { catalog_item_id: d.item_id, name: d.item_name, count: 0 };
-    row.count++;
-    rows.set(d.item_name, row);
-  }
-  return [...rows.values()];
-}
-
-function SeenList({ bin, catalog, disposals }: { bin: BinStatus; catalog: Map<string, CatalogItem>; disposals: Disposal[] }) {
-  const byName = new Map([...catalog.values()].map((c) => [c.name, c]));
-  const rows = [...countsFor(bin, disposals)].sort((a, b) => b.count - a.count);
+/** One bin's count + most-announced items for a site, in the selected window. */
+function BinCard({ dest, total, top }: { dest: Destination; total: number; top: [string, number][] }) {
   return (
-    <div className="flex min-w-0 flex-[1_1_300px] flex-col">
-      <span className={`flex items-center gap-2 pb-1 text-[13px] font-bold ${BIN_INK[bin.type]}`}>
-        <Dot className={BIN_DOT[bin.type]} size={7} />
-        {BIN_LABEL[bin.type]}
+    <div className="flex min-w-0 flex-1 flex-col rounded-xl bg-paper-deep p-5">
+      <span className="flex h-6 items-center justify-between gap-2 text-[15px] font-bold text-ink-2">
+        {DEST_LABEL[dest]}
+        <DestIcon dest={dest} />
       </span>
-      {rows.length === 0 && bin.unknown_count === 0 && <span className="py-1.5 text-base text-muted">Nothing yet</span>}
-      {rows.map((r, i) => {
-        const cat = (r.catalog_item_id && catalog.get(r.catalog_item_id)) || byName.get(r.name);
-        const wrong = cat && cat.correct_destination !== bin.type;
-        return (
-          <div key={r.name} className={`flex justify-between gap-3 py-[5px] text-base ${i ? "border-t border-rule" : ""}`}>
-            <span>
-              {r.name}
-              {wrong && <span className="text-sm font-bold text-clay-deep"> · belongs in {BIN_LABEL[cat.correct_destination]}</span>}
-            </span>
-            <Mono>{r.count}</Mono>
-          </div>
-        );
-      })}
-      {bin.unknown_count > 0 && (
-        <div className={`flex justify-between gap-3 py-[5px] text-base text-ink-2 ${rows.length ? "border-t border-rule" : ""}`}>
-          <span>
-            Couldn&apos;t identify <span className="text-[13px] text-muted-2">· not counted as mistakes</span>
-          </span>
-          <Mono>{bin.unknown_count}</Mono>
-        </div>
-      )}
+      <span className="mt-3 font-display text-[34px] leading-none font-extrabold text-ink tabular-nums">{num(total)}</span>
+      <span className="mt-1 text-xs text-muted">items this range</span>
+      <ul className="m-0 mt-4 flex list-none flex-col divide-y divide-rule-soft border-t border-rule-soft p-0">
+        {top.length === 0 && <li className="py-2 text-sm text-muted">Nothing yet</li>}
+        {top.map(([item, n]) => (
+          <li key={item} className="flex justify-between gap-3 py-2 text-sm">
+            <span className="text-ink">{item}</span>
+            <span className="text-ink-2 tabular-nums">{num(n)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
 export default function BinsPage() {
-  const bins = useResource(api.bins);
-  const alerts = useResource(api.alerts);
-  const catalog = useResource(api.catalog);
-  const disposals = useDisposals();
-
-  if (bins.error && !bins.data) return <LoadError error={bins.error} />;
-  if (!bins.data) return <Empty title="Loading bins…" />;
-
-  const list = bins.data.bins;
-  const leadId = [...list].sort((a, b) => b.estimated_fullness - a.estimated_fullness)[0]?.bin_id;
-  const requested = new Set(
-    (alerts.data?.alerts ?? []).filter((a) => a.kind === "emptying" && a.state !== "emptied").map((a) => a.bin_id),
-  );
-  const catMap = new Map((catalog.data?.items ?? []).map((c) => [c.catalog_item_id, c]));
+  const { site, range } = useFilters();
+  const w = windowFor(range);
+  const sites = site === "all" ? SITES : SITES.filter((s) => s.id === site);
 
   return (
-    // Full-bleed: break out of the dashboard layout's max-w-6xl, same as this page got under the old Shell's
-    // unconstrained <main> — three bin columns need more room than the dashboard column gives them.
-    <div className="relative left-1/2 flex w-screen -translate-x-1/2 flex-1 flex-col">
-      <div className="flex flex-1 flex-wrap items-end gap-x-14 gap-y-6 px-10 pt-[18px] pb-[22px]">
-        {list.map((b) => (
-          <BinColumn key={b.bin_id} bin={b} lead={b.bin_id === leadId} emptyingRequested={requested.has(b.bin_id)} highlight={false} />
-        ))}
+    <>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="m-0 font-display text-[40px] leading-none font-bold">Bins</h1>
+          <span className="text-[15px] text-ink-2">How many items were categorized into each bin at each site</span>
+        </div>
+        <Filters />
       </div>
-
-      <section aria-labelledby="seen-h" className="bg-paper-deep px-10 pt-4 pb-[18px]">
-        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-          <h2 id="seen-h" className="m-0 font-display text-xl font-bold">Seen going in</h2>
-          <span className="font-mono text-[13px] text-muted">since each bin was last emptied</span>
-        </div>
-        <div className="flex flex-wrap gap-x-14 gap-y-3">
-          {list.map((b) => (
-            <SeenList key={b.bin_id} bin={b} catalog={catMap} disposals={disposals} />
-          ))}
-        </div>
-      </section>
-    </div>
+      {sites.map((s) => {
+        const rows = slice(s.id, w.from, w.to);
+        return (
+          <Section key={s.id} title={s.name}>
+            <div className="flex flex-wrap gap-4">
+              {DESTINATIONS.map((d) => {
+                const inDest = rows.filter((a) => a.dest === d);
+                const top = [...countBy(inDest, (a) => a.item)].sort((a, b) => b[1] - a[1]).slice(0, 5);
+                return <BinCard key={d} dest={d} total={inDest.length} top={top} />;
+              })}
+            </div>
+          </Section>
+        );
+      })}
+    </>
   );
 }

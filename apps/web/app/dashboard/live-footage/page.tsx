@@ -43,7 +43,7 @@ function CameraTile({ file, label, test, onExpand }: { file: string; label: stri
       type="button"
       onClick={onExpand}
       aria-label={`Expand ${label}`}
-      className="group relative aspect-video overflow-hidden rounded-md border border-[#3A3C38] bg-night text-left"
+      className="group relative aspect-video overflow-hidden rounded-md bg-night text-left"
     >
       <video
         src={`/footage/${file}`}
@@ -93,7 +93,7 @@ function ExpandedCamera({ file, label, test, onClose }: { file: string; label: s
           loop
           muted
           playsInline
-          className="max-h-[85vh] max-w-[90vw] rounded-md border border-[#3A3C38] bg-night object-contain"
+          className="max-h-[85vh] max-w-[90vw] rounded-md bg-night object-contain"
         />
         <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3.5">
           <div className="flex items-center justify-between">
@@ -131,8 +131,8 @@ export default function LiveFootagePage() {
         <h1 className="m-0 font-display text-[40px] leading-none font-bold">Live footage</h1>
         <span className="text-[15px] text-ink-2">Recorded demo clips, played back as a camera wall. Click a camera to expand it.</span>
       </div>
-      {/* Full-bleed: break out of the dashboard layout's max-w-6xl so four tiles can span near the full browser width. */}
-      <div className="relative left-1/2 grid w-screen -translate-x-1/2 grid-cols-1 gap-4 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
+      {/* As many 300 px+ tiles as fit, like YouTube's grid: three across at the dashboard's full width, fewer on smaller screens. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4">
         {CAMERAS.map((c) => (
           <CameraTile key={c.file} {...c} onExpand={() => setExpanded(c.file)} />
         ))}

@@ -8,6 +8,9 @@ export const DATA_SOURCE: "mock" | "api" =
 /** Base URL of the CV worker (contract §4). Empty when not configured. */
 export const WORKER_URL = (process.env.NEXT_PUBLIC_WORKER_URL ?? "").replace(/\/$/, "");
 
+/** Base URL of the "Try your video" backend (worker/modal_app.py on Modal). Empty: the tab says uploads are off. */
+export const UPLOAD_API_URL = (process.env.NEXT_PUBLIC_UPLOAD_API_URL ?? "").replace(/\/$/, "");
+
 export function evidenceUrl(uri: string): string | null {
   if (!WORKER_URL) return null;
   // The contract sample uri already starts with "evidence/" while §4 serves

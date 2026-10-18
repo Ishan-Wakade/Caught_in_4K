@@ -52,6 +52,7 @@ The hosting location remains to be decided: the dashboard may run locally with t
 | CLIP | Matches hand crops to product descriptions and store reference images. |
 | DeepSeek, followed by a Claude adapter | Describes unfamiliar items through a common vision-language interface. |
 | Jev | Selects a destination using the item description and local disposal rules. |
+| Chalk Model Gateway (optional prerecorded path) | Routes unknown-item vision and Jev calls through configured provider connections; records gateway requests, latency, token usage and separate local cache counts. See [setup and verification](docs/chalk.md). |
 | FastSAM and the item tracker | Supports the slower analysis path without blocking announcements. |
 | Speech provider interface | Plays cached known-item guidance and synthesizes new explanations; starts with the operating system's voice. |
 | Docker | Packages a separately configured deployment for each store. |

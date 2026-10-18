@@ -319,6 +319,13 @@ def area_from_roi(roi) -> str | None:
 def cmd_guide(args, make_guide_parts=None) -> int:
     """Voice guide (docs/superpowers/specs/2026-10-17-voice-guidance-roadmap-design.md): a person with waste close to
     the bins hears "<bin>. <explanation>". Live camera (index / Continuity Camera / rtsp://) or a recorded file."""
+    if args.prepared:
+        from .prepared_guide import cmd_prepared_guide
+
+        return cmd_prepared_guide(args, make_guide_parts)
+    if getattr(args, "chalk", False) or getattr(args, "bin_layout", None):
+        print("--chalk and --bin-layout require --prepared with a recorded video file", file=sys.stderr)
+        return 2
     import subprocess
     import tempfile
 
@@ -719,6 +726,8 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     gd.add_argument("--prepared", action="store_true",
                     help="video file only: identify each person's item from the whole clip first (store-tuned demo), "
                          "then run the guide with the answers ready")
+    gd.add_argument("--chalk", action="store_true", help="prepared videos only: route item vision + Jev through Chalk (docs/chalk.md)")
+    gd.add_argument("--bin-layout", help="prepared videos only: local JSON with three bin-opening keyframes (visual overlay only)")
     gd.add_argument("--item", help="with --prepared: the catalog item everyone in the clip carries (skips identification)")
     gd.add_argument("--claude-model", choices=["claude-haiku-5-5", "claude-sonnet-5-5"],
                     help="default: Sonnet 5.5 for --prepared (more accurate; ~$0.004 per item), Haiku 5.5 live (fast)")

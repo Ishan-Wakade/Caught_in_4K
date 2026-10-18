@@ -43,6 +43,8 @@ Companies will have their own branding, authenticated accounts, and server-enfor
 
 The hosting location remains to be decided: the dashboard may run locally with the store deployment, or a central service may receive explicitly agreed aggregate counts. Categorization counts will not be presented as verified disposal outcomes or evidence of reduced contamination.
 
+**Current state of the dashboard prototype.** A Postgres-backed catalog exists today: items the camera can't match against the approved catalog land in a New items review queue, and a manager's approve or reject decision writes back to the same database the Catalog page reads from. Bins and a Live-footage camera-wall page (recorded demo clips, not a live feed) are also live for internal monitoring. The Sites page still renders placeholder data, and the dashboard has no authentication or per-company access control yet—anyone who can reach it can see and approve everything.
+
 ## Technology
 
 | Component | Role in the target product |
@@ -50,8 +52,9 @@ The hosting location remains to be decided: the dashboard may run locally with t
 | Python, OpenCV, NumPy | Video input, image crops, geometry, and worker orchestration. |
 | YOLO11n-pose | Locates people, hands, and floor positions for carrying and approach detection. |
 | CLIP | Matches hand crops to product descriptions and store reference images. |
-| DeepSeek, followed by a Claude adapter | Describes unfamiliar items through a common vision-language interface. |
+| DeepSeek and Claude (Haiku 5.5) | Swappable vision-language identification for unfamiliar items; the live guide defaults to DeepSeek, the recorded-demo pipeline defaults to Claude. |
 | Jev | Selects a destination using the item description and local disposal rules. |
+| Chalk Model Gateway (optional prerecorded path) | Routes unknown-item vision and Jev calls through configured provider connections; records gateway requests, latency, token usage and separate local cache counts. See [setup and verification](docs/chalk.md). |
 | FastSAM and the item tracker | Supports the slower analysis path without blocking announcements. |
 | Speech provider interface | Plays cached known-item guidance and synthesizes new explanations; starts with the operating system's voice. |
 | Docker | Packages a separately configured deployment for each store. |
@@ -70,13 +73,17 @@ Hardware performance will be measured on the deployment device. Native Mac model
 
 Evaluation will measure announcement coverage, correct destinations, false announcements, recognition latency, and how much time the customer has between hearing the guidance and disposing of the item. Prerecorded footage, offline analysis, staged behavior, and live results will be identified explicitly.
 
+## Try your own video
+
+The public site's **Try your video** tab lets a visitor record or upload a short clip of themselves throwing something away. They get back the annotated video with the spoken guidance mixed in, which they can download. The clip is processed by the prerecorded-demo pipeline on a cloud GPU (Modal; see [deployment](docs/deployment.md)) and deleted after 24 hours. This is a demonstration of the recognition and speech on someone's own footage, not the store deployment. Results on footage the pipeline was not tuned on can be poor, and processing takes minutes, not real time.
+
 ## Repository guide
 
 - `worker/` — Python perception, identification, tracking, and video tools; the starting point for voice guidance.
 - `contracts/` — shared types and validation schemas; announcement/counting contracts will be introduced as their semantics are finalized.
 - `packages/core/` — backend logic and persistence.
 - `packages/integrations/` — integration adapters from the prototype.
-- `apps/web/` — dashboard and API application.
+- `apps/web/` — dashboard and API application. The dashboard's Catalog and New-items pages are backed by a real Postgres database; Bins and a Live-footage camera-wall page sit alongside them.
 - `docs/superpowers/specs/2026-10-17-voice-guidance-roadmap-design.md` — source roadmap, including the later team decisions.
 
 Some existing modules and documents describe earlier iterations. Use the root [AGENTS.md](AGENTS.md) and the voice-guidance roadmap to determine the active product direction.

@@ -64,7 +64,7 @@ class YoloPoseTracker:
         from ultralytics import YOLO
 
         self.model, self.imgsz = YOLO(str(weights)), imgsz
-        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
+        self.device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
     def __call__(self, frame) -> list[tuple[int, np.ndarray]]:
         r = self.model.track(frame, persist=True, verbose=False, device=self.device, imgsz=self.imgsz, conf=0.3,

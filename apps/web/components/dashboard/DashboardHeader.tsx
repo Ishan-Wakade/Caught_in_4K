@@ -37,6 +37,7 @@ function tabs(pending: number | null): NavLink[] {
     { href: "/dashboard", label: "Overview" },
     { href: "/dashboard/live", label: "Live camera", match: (p) => p.startsWith("/dashboard/live") },
     { href: "/dashboard/bins", label: "Bins", match: (p) => p.startsWith("/dashboard/bins") },
+    { href: "/dashboard/live-footage", label: "Live footage", match: (p) => p.startsWith("/dashboard/live-footage") },
     { href: "/dashboard/new-items", label: "New items", badge: pending ?? undefined, match: (p) => p.startsWith("/dashboard/new-items") },
     { href: "/dashboard/catalog", label: "Catalog", match: (p) => p.startsWith("/dashboard/catalog") },
     { href: "/dashboard/sites", label: "Sites", match: (p) => p.startsWith("/dashboard/sites") },

@@ -12,6 +12,7 @@ The root README describes the intended finished product. Inspect implementation 
 
 - Recognize a person carrying an item, identify its product type, and announce the correct destination early enough to affect their choice.
 - Mark **one bin area for the entire set of bins**. Separate boxes for each bin are not required.
+- Chalk integration, bin overlays and render changes are restricted to the prerecorded `--prepared` workflow. Keep live model providers, tracking, speech and rendering unchanged; use the separate `prepared_*` adapters. See `docs/chalk.md` and `docs/bin-overlays.md`.
 - Record items brought to the bin area, their categories, and the guidance given. This design does not establish which individual bin an item actually entered.
 - Keep transient person tracks for approach and cooldown logic; do not identify people.
 - The old demo centered on manager messages, Grok bin illustrations, fullness alerts, and six disposal scenarios is superseded. Do not maintain or extend that demo as part of this roadmap unless the user requests it.
@@ -61,6 +62,8 @@ spoken as "Recycling. Aluminum can should be placed in recycling because metal c
 - Per-store adaptation initially means approved catalog entries, same-camera reference images, and caches. Describe actual model retraining only after implementing and evaluating it on enough labeled crops.
 - Keep secrets outside Git and out of browser bundles. Use configuration/environment variables without committing real keys.
 - Validate container runtime and GPU access separately from native Mac development. The design calls for Linux/NVIDIA hardware or measured CPU performance for store deployment; do not assume Mac MPS behavior carries into Docker.
+
+- **Public "Try your video" tab (user decision, 17 Oct):** visitors upload their own clip from `/upload`. `worker/modal_app.py` runs `recyclone_worker/job.py` (the prerecorded `guide --prepared --headless --render` pipeline) on Modal and returns the annotated video for viewing and download. This is a deliberate cloud exception for visitor-supplied videos, not store footage. Keep its limits (size, length, per-IP and daily caps, 24 h retention) and provider keys in Modal, never in the browser. Label it as a demo of offline processing, not real-time store operation.
 
 ## Dashboard requirements
 

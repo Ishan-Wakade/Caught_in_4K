@@ -117,6 +117,9 @@ export class GuideEngine {
   static async load(onProgress: (p: Progress) => void): Promise<GuideEngine> {
     const ort = (await import("onnxruntime-web/webgpu")) as unknown as Ort;
     ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+    // ORT prints warnings through console.error (e.g. "some nodes were not assigned to the preferred execution
+    // providers": it keeps shape ops on the CPU on purpose), which Next's dev overlay counts as errors. Errors only.
+    ort.env.logLevel = "error";
     const data = (await (await fetch("/models/guide.json")).json()) as GuideData;
     const clipUrl = (file: string) => `https://huggingface.co/${data.clip.repo}/resolve/${data.clip.revision}/${file}`;
 
@@ -127,7 +130,7 @@ export class GuideEngine {
       onProgress({ loaded: all.reduce((s, p) => s + p.loaded, 0), total: all.reduce((s, p) => s + p.total, 0) });
     };
     const open = (model: Uint8Array, backend: Backend) =>
-      ort.InferenceSession.create(model, { executionProviders: [backend], graphOptimizationLevel: "all" });
+      ort.InferenceSession.create(model, { executionProviders: [backend], graphOptimizationLevel: "all", logSeverityLevel: 3 });
 
     if (await hasWebGpu()) {
       try {

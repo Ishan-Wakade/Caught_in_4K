@@ -37,6 +37,46 @@ because of its deployment-author permissions. The Actions workflow instead uses
 the dedicated CI credential. It does not alter commit authors or grant teammates
 access to unrelated Vercel projects.
 
+## "Try your video" backend (Modal)
+
+The public `/upload` tab sends a visitor's video straight from the browser to a
+separate backend on [Modal](https://modal.com), `worker/modal_app.py`. Vercel only
+serves the page. Each upload runs `recyclone_worker/job.py` (the
+`guide --prepared --render` pipeline) on a GPU. The result is kept for 24 hours.
+
+One-time setup, by someone with the team's Modal account:
+
+```bash
+pip install modal && modal token new          # interactive login
+modal secret create caught-in-4k \
+  ANTHROPIC_API_KEY=... TYPESAFE_API_KEY=... ELEVENLABS_API_KEY=... ELEVENLABS_VOICE_ID=...
+modal deploy worker/modal_app.py              # prints the api URL (https://<workspace>--caught-in-4k-api.modal.run)
+```
+
+Then set that URL as `NEXT_PUBLIC_UPLOAD_API_URL` in the Vercel project and
+redeploy. Without it, the tab says that uploads are off. `modal serve
+worker/modal_app.py` gives a temporary development URL that reloads on save.
+
+Limits are provisional and are read at deploy time, e.g. `UPLOAD_GPU=L4 modal deploy …`:
+
+| Variable | Default |
+| --- | --- |
+| `UPLOAD_GPU` | `T4`; `cpu` runs on 8 CPUs instead, which is slower but works without a payment method on the Modal account |
+| `UPLOAD_MAX_CONTAINERS` | `3` (concurrent jobs; the rest queue) |
+| `UPLOAD_MAX_MB` | `150` |
+| `UPLOAD_PER_IP_PER_HOUR` | `20` (a shared Wi-Fi network is one address) |
+| `UPLOAD_PER_DAY` | `200` (all visitors) |
+| `UPLOAD_ALLOWED_ORIGINS` | production URL and `http://localhost:3000` (CORS) |
+
+The image pins weights from the Hugging Face repo `eymen160/caught-in-4k` at a fixed
+revision and checks them against its `SHA256SUMS`. Jev is called over its HTTP API
+when the `jev` CLI is not installed, which is the case in the image.
+
+Uploaded videos are processed in the cloud, unlike store footage. Modal holds the
+video until the job ends and the result for 24 hours. Only face-blanked item crops
+go to Claude; only sentence text goes to ElevenLabs. Processing time per clip has
+not been measured yet.
+
 ## Verification and limits
 
 Check the Actions run and Vercel deployment status before claiming a release is

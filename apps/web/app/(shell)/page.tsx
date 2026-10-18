@@ -93,7 +93,7 @@ export default function OverviewPage() {
                   {unknown ? (
                     <>
                       <span className="font-display text-3xl leading-[1.1] font-bold text-muted">Not enough data</span>
-                      <span className="text-[13px] text-muted">nothing seen going in yet</span>
+                      <span className="text-[13px] text-muted">nothing caught going in yet</span>
                     </>
                   ) : (
                     <>

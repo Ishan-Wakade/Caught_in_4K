@@ -14,8 +14,10 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 MATERIALS = ("plastic_film", "rigid_plastic", "paper", "cardboard", "metal", "glass", "organic", "textile", "foam", "mixed", "unknown")
@@ -72,8 +74,30 @@ def jev_key() -> str | None:
     return None
 
 
+JEV_URL = "https://api.typesafe.ai/v1/systemone"  # the same API the web app's guide calls (apps/web/lib/guide/identify.ts)
+
+
+def _http_post(url: str, headers: dict, body: bytes, timeout: float) -> dict:
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
+def run_jev_http(state: str, post=_http_post) -> dict:
+    """The same question over Jev's HTTP API, for machines without the jev CLI (the cloud upload job); answer in the
+    CLI's shape ({"answers": {"answer": {"choice", "confidence"}}}). Raises on a failed call."""
+    body = {"model": "jev-latest", "state": state,
+            "questions": {"answer": {"type": "choice", "instructions": QUESTION, "criteria": DESTINATIONS}}}
+    r = post(JEV_URL, {"Authorization": f"Bearer {jev_key() or ''}", "Content-Type": "application/json"},
+             json.dumps(body).encode(), 60)
+    return {"answers": {"answer": r["answers"]["answer"]}}
+
+
 def run_jev(state: str) -> dict:
-    """One `jev choice` call; the parsed JSON answer. Raises RuntimeError on a failed call (never a fake answer)."""
+    """One `jev choice` call; the parsed JSON answer. Raises RuntimeError on a failed call (never a fake answer).
+    Without the jev CLI on PATH, the same question goes to Jev's HTTP API (run_jev_http)."""
+    if shutil.which("jev") is None:
+        return run_jev_http(state)
     env = dict(os.environ, TYPESAFE_API_KEY=jev_key() or "")
     cmd = ["jev", "choice", "--question", QUESTION, "--state", "-"] + [a for k, v in DESTINATIONS.items() for a in ("-o", f"{k}={v}")]
     r = subprocess.run(cmd, input=state, capture_output=True, text=True, env=env, timeout=60)

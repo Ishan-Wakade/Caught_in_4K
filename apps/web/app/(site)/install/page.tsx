@@ -4,12 +4,12 @@ export const metadata: Metadata = { title: "Install", description: "How a store 
 
 const NEEDS = [
   ["Your security camera", "The one that already sees your bins. No new camera needed."],
-  ["A computer", "Sits in the back office. We tell you which one to get."],
-  ["A speaker", "Placed by the bins, plugged into the computer."],
+  ["Your existing computer", "You can likely use the computer already in your restaurant."],
+  ["A speaker", "Likely the only new equipment you'll need. Place it by the bins and connect it to the computer."],
 ];
 
 const STEPS = [
-  ["Download Caught in 4K", "Download and install Caught in 4K on your restaurant's computer."],
+  ["Download Caught in 4K", "Download and install Caught in 4K on your restaurant's existing computer."],
   ["Connect your speaker and cameras", "Connect your speaker and existing surveillance cameras to the computer."],
   ["Show it what you serve", "Hold each cup, container, wrapper or other item you serve in front of the camera for a few seconds so Caught in 4K can recognize it."],
 ];

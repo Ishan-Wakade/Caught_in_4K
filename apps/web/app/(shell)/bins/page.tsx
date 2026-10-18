@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useDisposals, type Disposal } from "@/hooks/useDisposals";
 import { useResource } from "@/hooks/useResource";
 import { useScenes } from "@/hooks/useScenes";
 import { api } from "@/lib/api";
 import { BIN_DOT, BIN_INK, BIN_LABEL, dayTime, fullnessPercent, time } from "@/lib/format";
-import { SITE } from "@/lib/site";
 import type { BinStatus, CatalogItem } from "@/lib/types";
 import { BinFigure, fillUnknown } from "@/components/BinFigure";
 import { Dot, Empty, LoadError, Mono } from "@/components/ui";
@@ -85,39 +83,18 @@ function countsFor(bin: BinStatus, disposals: Disposal[]): BinStatus["observed_c
   return [...rows.values()];
 }
 
-function SeenList({
-  bin,
-  catalog,
-  disposals,
-  businessFilter,
-}: {
-  bin: BinStatus;
-  catalog: Map<string, CatalogItem>;
-  disposals: Disposal[];
-  businessFilter: string | null;
-}) {
+function SeenList({ bin, catalog, disposals }: { bin: BinStatus; catalog: Map<string, CatalogItem>; disposals: Disposal[] }) {
   const byName = new Map([...catalog.values()].map((c) => [c.name, c]));
-  const resolveCat = (r: { catalog_item_id: string | null; name: string }) =>
-    (r.catalog_item_id && catalog.get(r.catalog_item_id)) || byName.get(r.name);
-
-  let rows = [...countsFor(bin, disposals)];
-  if (businessFilter) rows = rows.filter((r) => resolveCat(r)?.business_id === businessFilter);
-  rows = rows.sort((a, b) => b.count - a.count);
-
-  // Unidentified items have no business attribution, so they're out of scope once filtered to one restaurant.
-  const showUnknown = !businessFilter && bin.unknown_count > 0;
-
+  const rows = [...countsFor(bin, disposals)].sort((a, b) => b.count - a.count);
   return (
     <div className="flex min-w-0 flex-[1_1_300px] flex-col">
       <span className={`flex items-center gap-2 pb-1 text-[13px] font-bold ${BIN_INK[bin.type]}`}>
         <Dot className={BIN_DOT[bin.type]} size={7} />
         {BIN_LABEL[bin.type]}
       </span>
-      {rows.length === 0 && !showUnknown && (
-        <span className="py-1.5 text-base text-muted">{businessFilter ? "Nothing from this restaurant yet" : "Nothing yet"}</span>
-      )}
+      {rows.length === 0 && bin.unknown_count === 0 && <span className="py-1.5 text-base text-muted">Nothing yet</span>}
       {rows.map((r, i) => {
-        const cat = resolveCat(r);
+        const cat = (r.catalog_item_id && catalog.get(r.catalog_item_id)) || byName.get(r.name);
         const wrong = cat && cat.correct_destination !== bin.type;
         return (
           <div key={r.name} className={`flex justify-between gap-3 py-[5px] text-base ${i ? "border-t border-rule" : ""}`}>
@@ -129,7 +106,7 @@ function SeenList({
           </div>
         );
       })}
-      {showUnknown && (
+      {bin.unknown_count > 0 && (
         <div className={`flex justify-between gap-3 py-[5px] text-base text-ink-2 ${rows.length ? "border-t border-rule" : ""}`}>
           <span>
             Couldn&apos;t identify <span className="text-[13px] text-muted-2">· not counted as mistakes</span>
@@ -141,47 +118,12 @@ function SeenList({
   );
 }
 
-function HamburgerIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function RestaurantSidebar({ selected, onSelect }: { selected: string | "all"; onSelect: (id: string | "all") => void }) {
-  const tab = (id: string | "all", name: string) => (
-    <button
-      key={id}
-      onClick={() => onSelect(id)}
-      aria-current={selected === id ? "true" : undefined}
-      className={`flex min-h-10 flex-none items-center rounded-md px-2.5 text-left text-[15px] no-underline ${
-        selected === id ? "font-bold text-forest" : "font-medium text-ink-2 hover:text-ink"
-      }`}
-    >
-      {name}
-    </button>
-  );
-  return (
-    <aside
-      aria-label="Filter bins by restaurant"
-      className="flex w-60 flex-none flex-col gap-0.5 overflow-y-auto border-r border-rule-soft bg-paper-deep px-3 py-4"
-    >
-      <span className="px-2.5 pb-1 text-xs font-medium text-muted">Restaurants</span>
-      {tab("all", "All restaurants")}
-      {SITE.businesses.map((b) => tab(b.business_id, b.name))}
-    </aside>
-  );
-}
-
 export default function BinsPage() {
   const bins = useResource(api.bins);
   const alerts = useResource(api.alerts);
   const catalog = useResource(api.catalog);
   const { focusBinId } = useScenes();
   const disposals = useDisposals();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [businessId, setBusinessId] = useState<string | "all">("all");
 
   if (bins.error && !bins.data) return <LoadError error={bins.error} />;
   if (!bins.data) return <Empty title="Loading bins…" />;
@@ -193,48 +135,25 @@ export default function BinsPage() {
   );
   const catMap = new Map((catalog.data?.items ?? []).map((c) => [c.catalog_item_id, c]));
 
-  const filter = businessId === "all" ? null : businessId;
-  const selectedName = filter ? SITE.businesses.find((b) => b.business_id === filter)?.name ?? "Restaurant" : null;
-
   return (
-    <div className="flex flex-1">
-      {sidebarOpen && <RestaurantSidebar selected={businessId} onSelect={setBusinessId} />}
+    <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-wrap items-end gap-x-14 gap-y-6 px-10 pt-[18px] pb-[22px]">
+        {list.map((b) => (
+          <BinColumn key={b.bin_id} bin={b} lead={b.bin_id === leadId} emptyingRequested={requested.has(b.bin_id)} highlight={b.bin_id === focusBinId} />
+        ))}
+      </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-3 px-10 pt-[18px]">
-          <button
-            onClick={() => setSidebarOpen((o) => !o)}
-            aria-label={sidebarOpen ? "Hide restaurant filter" : "Show restaurant filter"}
-            aria-expanded={sidebarOpen}
-            className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-rule-soft text-ink-2 hover:text-ink"
-          >
-            <HamburgerIcon />
-          </button>
-          {filter && (
-            <span className="text-[13px] text-muted">
-              Showing <strong className="text-ink-2">{selectedName}</strong>&apos;s items in each bin · fullness and the illustration are shared by everyone using the bin
-            </span>
-          )}
+      <section aria-labelledby="seen-h" className="bg-paper-deep px-10 pt-4 pb-[18px]">
+        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+          <h2 id="seen-h" className="m-0 font-display text-xl font-bold">Seen going in</h2>
+          <span className="font-mono text-[13px] text-muted">since each bin was last emptied</span>
         </div>
-
-        <div className="flex flex-1 flex-wrap items-end gap-x-14 gap-y-6 px-10 pt-[14px] pb-[22px]">
+        <div className="flex flex-wrap gap-x-14 gap-y-3">
           {list.map((b) => (
-            <BinColumn key={b.bin_id} bin={b} lead={b.bin_id === leadId} emptyingRequested={requested.has(b.bin_id)} highlight={b.bin_id === focusBinId} />
+            <SeenList key={b.bin_id} bin={b} catalog={catMap} disposals={disposals} />
           ))}
         </div>
-
-        <section aria-labelledby="seen-h" className="bg-paper-deep px-10 pt-4 pb-[18px]">
-          <div className="mb-1.5 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-            <h2 id="seen-h" className="m-0 font-display text-xl font-bold">Seen going in</h2>
-            <span className="font-mono text-[13px] text-muted">since each bin was last emptied{selectedName ? ` · ${selectedName}` : ""}</span>
-          </div>
-          <div className="flex flex-wrap gap-x-14 gap-y-3">
-            {list.map((b) => (
-              <SeenList key={b.bin_id} bin={b} catalog={catMap} disposals={disposals} businessFilter={filter} />
-            ))}
-          </div>
-        </section>
-      </div>
+      </section>
     </div>
   );
 }

@@ -22,7 +22,9 @@ import { itemCrop } from "@/lib/live/session";
 export type LiveStatus = "idle" | "loading" | "starting" | "live" | "ended" | "blocked" | "error";
 export type LiveSource = { kind: "camera"; facing: "user" | "environment" } | { kind: "file"; url: string; name: string; rate: number };
 /** One answered item, for the session list (what Claude saw, when, how long the answer took). */
-export type SeenItem = { at: number; message: GuideMessage; source: string; item?: ItemAnswer["item"]; ms?: number };
+export type SeenItem = { at: number; message: GuideMessage; source: string; item?: ItemAnswer["item"]; ms?: number;
+  /** Seconds from the item first being seen in the hand to its answer on screen. */
+  tookS?: number };
 
 const HOLD_P = 0.35;
 
@@ -58,13 +60,19 @@ function speaker(token: string) {
   };
 }
 
-/** The engine with a lower "possibly held" bar for its CLIP watcher (her files unchanged: a view over the engine). */
+/**
+ * The engine with a lower "possibly held" bar for its CLIP watcher. Her on-device catalog answer stays on (as in her
+ * design): it answers when Claude is unsure (18 Oct: sauce cup and paper coffee cup came back "not sure" from Claude
+ * on small webcam crops, and with it off nothing was shown). Her files are unchanged: this is a view over the engine.
+ */
 function withHoldBar(engine: GuideEngine): GuideEngine {
   const data = { ...engine.data, constants: { ...engine.data.constants, item_p: HOLD_P } };
   return Object.create(engine, { data: { value: data } }) as GuideEngine;
 }
 
-export function useLiveGuide(source: LiveSource | null, token: string, videoRef: RefObject<HTMLVideoElement | null>, canvasRef: RefObject<HTMLCanvasElement | null>) {
+export function useLiveGuide(source: LiveSource | null, token: string, videoRef: RefObject<HTMLVideoElement | null>,
+  canvasRef: RefObject<HTMLCanvasElement | null>, opts: { stamp?: boolean } = {}) {
+  const stamp = opts.stamp ?? true;
   const [status, setStatus] = useState<LiveStatus>("idle");
   const [progress, setProgress] = useState<Progress | null>(null);
   const [backend, setBackend] = useState<Backend | null>(null);
@@ -73,6 +81,8 @@ export function useLiveGuide(source: LiveSource | null, token: string, videoRef:
   const [banner, setBanner] = useState<Banner | null>(null);
   const [inView, setInView] = useState(false);
   const [checking, setChecking] = useState(false); // true only while Claude is engaged on an item in view
+  const [unsure, setUnsure] = useState(false);
+  const [people, setPeople] = useState(0);
   const [items, setItems] = useState<SeenItem[]>([]);
   const [sound, setSound] = useState(false);
   const soundRef = useRef(false);
@@ -152,6 +162,7 @@ export function useLiveGuide(source: LiveSource | null, token: string, videoRef:
         const say = speaker(token);
         const clock = () => (source.kind === "file" ? video.currentTime : performance.now() / 1000);
         let prev = 0, rate = 0, lastKey = "", lastView = false, lastCheck = false;
+        const seenSince = new Map<number, number>(); // person id -> when their current item was first seen held
         while (!stopped) {
           if (source.kind === "file" && video.ended) break;
           if (video.readyState >= 2 && video.videoWidth) {
@@ -174,23 +185,30 @@ export function useLiveGuide(source: LiveSource | null, token: string, videoRef:
                   item: engaged && p.holding && p.best >= 0 ? (p.hands[p.best] as [number, number, number, number]) : null,
                   label: engaged && p.holding && p.best >= 0 ? (frame.banner && !frame.banner.fallback ? name : frame.unsure ? "not sure" : "identifying…") : null,
                 })),
-                openings: [], caption: null, cam: "CAM 01", now: new Date(), fps: rate,
+                openings: [], caption: null, cam: "CAM 01", now: new Date(), fps: rate, stamp,
               });
             }
             if (soundRef.current) frame.speak.forEach(say);
+            for (const p of frame.people) {
+              if (p.holding && !seenSince.has(p.id)) seenSince.set(p.id, now);
+              if (!p.holding && !frame.banner) seenSince.delete(p.id);
+            }
             const key = frame.banner ? JSON.stringify(frame.banner) : "";
             if (key !== lastKey) {
               lastKey = key;
               setBanner(frame.banner);
               if (frame.banner && !frame.banner.fallback) {
                 const d = details.current.get(frame.banner.message.explanation);
-                setItems((xs) => [...xs, { at: now, message: frame.banner!.message, source: frame.banner!.source ?? "", item: d?.item, ms: d?.ms }]);
+                const firstSeen = Math.min(...frame.people.filter((p) => p.holding).map((p) => seenSince.get(p.id) ?? now), now);
+                setItems((xs) => [...xs, { at: now, message: frame.banner!.message, source: frame.banner!.source ?? "", item: d?.item, ms: d?.ms, tookS: now - firstSeen }]);
               }
             }
             if (frame.inView !== lastView) setInView((lastView = frame.inView));
             const isChecking = frame.checking && (asking > 0 || performance.now() - askedAt < 2500);
             if (isChecking !== lastCheck) setChecking((lastCheck = isChecking));
             setFps(Math.round(rate));
+            setUnsure(frame.unsure);
+            setPeople(frame.people.length);
           }
           await new Promise((r) => requestAnimationFrame(r));
         }
@@ -215,9 +233,9 @@ export function useLiveGuide(source: LiveSource | null, token: string, videoRef:
       setChecking(false);
       setStatus("idle");
     };
-  }, [source, token, videoRef, canvasRef]);
+  }, [source, token, videoRef, canvasRef, stamp]);
 
-  return { status, progress, backend, error, fps, banner, inView, checking, items, details: details.current, sound, toggleSound };
+  return { status, progress, backend, error, fps, banner, inView, checking, unsure, people, items, details: details.current, sound, toggleSound };
 }
 
 export { readGuideKey };

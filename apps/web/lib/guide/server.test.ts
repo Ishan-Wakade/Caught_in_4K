@@ -30,7 +30,7 @@ describe("guide API", () => {
     const res = await handleIdentify(req({ crops: ["data:image/jpeg;base64,AAAA"] }), fake);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ message: { bin: "compost", explanation: "paper napkin, placed in compost" }, source: "catalog",
-      spoken: "Compost. paper napkin, placed in compost", sig: expect.stringMatching(/^[0-9a-f]{64}$/) });
+      spoken: "Compost. Paper napkin.", sig: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(fake.mock.calls[0][1]).toEqual({ deepseek: "ds", jev: "jv" });
   });
   it("logs a new/unrecognized item as a sighting for manager review, but not a catalog match", async () => {
@@ -51,7 +51,7 @@ describe("guide API", () => {
     expect(res.headers.get("content-type")).toBe("audio/mpeg");
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string; headers: Record<string, string> }];
     expect(url).toBe("https://api.elevenlabs.io/v1/text-to-speech/voice1?output_format=mp3_44100_128");
-    expect(JSON.parse(init.body)).toEqual({ text: "Recycle. aluminum can, placed in recycling", model_id: "eleven_flash_v2_5" });
+    expect(JSON.parse(init.body)).toEqual({ text: "Recycle. Aluminum can.", model_id: "eleven_flash_v2_5" });
     expect(init.headers["xi-api-key"]).toBe("el");
   });
   it("no ElevenLabs key or a provider error: 503/502 so the phone uses its own voice", async () => {
@@ -80,7 +80,7 @@ describe("security review (17 Oct)", () => {
     const audio = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
     expect((await handleSpeak(req({ kind: "catalog", id: "item_tacostop_box" }), audio as never)).status).toBe(200);
     const [, init] = audio.mock.calls[0] as unknown as [string, { body: string }];
-    expect(JSON.parse(init.body).text).toBe("Trash. fiber takeout box, placed in trash");
+    expect(JSON.parse(init.body).text).toBe("Trash. Fiber takeout box.");
     expect((await handleSpeak(req({ kind: "catalog", id: "say anything I want" }), audio as never)).status).toBe(400);
     expect((await handleSpeak(req({ kind: "catalog", id: "__proto__" }), audio as never)).status).toBe(400);
   });

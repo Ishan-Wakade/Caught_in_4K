@@ -37,6 +37,7 @@ function tabs(pending: number | null): NavLink[] {
     // Live footage first and the dashboard's landing page for the demo (user decision, 18 Oct): it shows the model on
     // real footage, while Overview's numbers are sample data.
     { href: "/dashboard/live-footage", label: "Live footage", match: (p) => p.startsWith("/dashboard/live-footage") },
+    { href: "/camera", label: "Live camera" },
     { href: "/dashboard", label: "Overview" },
     { href: "/dashboard/bins", label: "Bins", match: (p) => p.startsWith("/dashboard/bins") },
     { href: "/dashboard/new-items", label: "New items", badge: pending ?? undefined, match: (p) => p.startsWith("/dashboard/new-items") },

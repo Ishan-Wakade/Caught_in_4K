@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 describe("spoken message (same rules as worker/recyclone_worker/guide_message.py)", () => {
   it("catalog items read like the team example", () => {
     expect(fromCatalog("item_generic_can")).toEqual({ bin: "recycle", explanation: "aluminum can, placed in recycling" });
-    expect(spoken({ bin: "recycle", explanation: "aluminum can, placed in recycling" })).toBe("Recycle. aluminum can, placed in recycling");
+    expect(spoken({ bin: "recycle", explanation: "aluminum can, placed in recycling" })).toBe("Recycle. Aluminum can.");
   });
   it("only compost / trash / recycle / none, explanation at most 8 words", () => {
     expect(() => validateMessage({ bin: "landfill" as never, explanation: "x" })).toThrow();

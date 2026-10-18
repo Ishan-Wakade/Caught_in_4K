@@ -5,14 +5,13 @@ import { NUMBERS, SOURCES } from "@/lib/impact";
 
 export const metadata: Metadata = { title: "Why it matters", description: "What happens at the bin, by the numbers, with sources" };
 
+/** Type and spacing follow the Install and Try your video pages: small grey section labels, 15 px muted body. */
 function Chapter({ n, kicker, title, children }: { n: string; kicker: string; title: string; children: React.ReactNode }) {
   return (
-    <section aria-labelledby={`ch-${n}`} className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <span className="font-mono text-sm text-forest">
-          {n} · {kicker}
-        </span>
-        <h2 id={`ch-${n}`} className="m-0 max-w-3xl font-display text-[clamp(28px,4vw,44px)] leading-[1.05] font-bold text-balance text-ink">
+    <section aria-labelledby={`ch-${n}`} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-muted-2">{kicker}</span>
+        <h2 id={`ch-${n}`} className="m-0 font-display text-[clamp(22px,3vw,28px)] leading-tight font-bold text-balance text-ink">
           {title}
         </h2>
       </div>
@@ -22,7 +21,7 @@ function Chapter({ n, kicker, title, children }: { n: string; kicker: string; ti
 }
 
 function Lede({ children }: { children: React.ReactNode }) {
-  return <p className="m-0 max-w-2xl text-[17px] leading-relaxed text-pretty text-ink-2">{children}</p>;
+  return <p className="m-0 max-w-2xl text-[15px] leading-snug text-pretty text-muted">{children}</p>;
 }
 
 const RESEARCH = [
@@ -48,20 +47,17 @@ const RESEARCH = [
 
 export default function ImpactPage() {
   return (
-    <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-24 px-6 pt-16 pb-24 sm:px-10">
-      <header className="flex flex-col gap-6">
-        <span className="font-mono text-sm text-forest">why it matters</span>
-        <h1 className="m-0 max-w-4xl font-display text-[clamp(40px,7vw,80px)] leading-[0.95] font-extrabold tracking-[-0.02em] text-balance text-forest-deep">
-          Most of us are guessing at the bin.
-        </h1>
-        <Lede>
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-14 px-6 pt-16 pb-24 sm:px-10">
+      <header className="flex flex-col items-center gap-1.5 text-center">
+        <h1 className="m-0 font-display text-[clamp(28px,4vw,40px)] leading-tight font-bold">Most of us are guessing at the bin</h1>
+        <span className="max-w-xl text-[15px] text-pretty text-muted">
           Nearly nine in ten Americans say recycling is important.
           <Cite id="kab-2025" /> But at the bin, many of us aren&apos;t sure which one to use. So recyclables end up in the
           trash, and trash ends up in recycling. Read below to see what that costs, why it happens, and what helps.
-        </Lede>
+        </span>
       </header>
 
-      <Chapter n="01" kicker="by the numbers" title="Half of what we throw away gets buried.">
+      <Chapter n="01" kicker="by the numbers" title="Half of what we throw away gets buried">
         <Lede>
           Most of what we could recycle at home never makes it into a recycling bin.
           <Cite id="trp-2024" /> Half of what Americans throw away ends up in a landfill,
@@ -72,7 +68,7 @@ export default function ImpactPage() {
         <WhereItGoes />
       </Chapter>
 
-      <Chapter n="02" kicker="the confusion" title="People want to get it right. The rules make it hard.">
+      <Chapter n="02" kicker="the confusion" title="People want to get it right. The rules make it hard">
         <Lede>
           Each bin follows local rules that change from city to city and item to item. Pick a finding to see it as
           people.
@@ -80,7 +76,7 @@ export default function ImpactPage() {
         <PeopleGrid />
       </Chapter>
 
-      <Chapter n="03" kicker="your turn" title="Beat the bin.">
+      <Chapter n="03" kicker="your turn" title="Beat the bin">
         <Lede>
           Six items people often get wrong, four choices. The answers follow the City of Cambridge rules the voice guide
           uses in our demo.
@@ -91,12 +87,12 @@ export default function ImpactPage() {
         </div>
       </Chapter>
 
-      <Chapter n="04" kicker="what helps" title="The answer has to be specific, and it has to arrive in time.">
-        <ul className="m-0 grid list-none gap-4 p-0 lg:grid-cols-3">
+      <Chapter n="04" kicker="what helps" title="The answer has to be specific, and it has to arrive in time">
+        <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-3">
           {RESEARCH.map((r) => (
-            <li key={r.source} className="flex flex-col gap-2 rounded-2xl bg-card p-6">
-              <span className="text-[19px] leading-snug font-bold text-ink">{r.finding}</span>
-              <span className="text-[15px] leading-relaxed text-ink-2">
+            <li key={r.source} className="flex flex-col gap-1 rounded-2xl bg-card p-6">
+              <span className="text-[17px] leading-snug font-bold text-ink">{r.finding}</span>
+              <span className="text-[15px] leading-snug text-muted">
                 {r.detail}
                 <Cite id={r.source} />
               </span>
@@ -109,10 +105,10 @@ export default function ImpactPage() {
         </Lede>
       </Chapter>
 
-      <section aria-labelledby="pitch-h" className="flex flex-col gap-6 rounded-3xl bg-forest-deep p-8 text-card sm:p-12">
-        <span className="font-mono text-sm text-leaf">that&apos;s why we built Caught in 4K</span>
-        <h2 id="pitch-h" className="m-0 max-w-3xl font-display text-[clamp(28px,4vw,44px)] leading-[1.05] font-bold text-balance">
-          It&apos;s built to name the bin for the item in your hand, before you reach the bins.
+      <section aria-labelledby="pitch-h" className="flex flex-col gap-6 rounded-2xl bg-forest-deep p-6 text-card sm:p-10">
+        <span className="text-sm font-medium text-leaf">that&apos;s why we built Caught in 4K</span>
+        <h2 id="pitch-h" className="m-0 font-display text-[clamp(22px,3vw,28px)] leading-tight font-bold text-balance">
+          It&apos;s built to name the bin for the item in your hand, before you reach the bins
         </h2>
         <ol className="m-0 grid list-none gap-6 p-0 sm:grid-cols-3">
           {[
@@ -121,7 +117,7 @@ export default function ImpactPage() {
             ["Says it", "A speaker by the bins says the bin and the reason: “Recycling. Aluminum can…”"],
           ].map(([t, d], i) => (
             <li key={t} className="flex flex-col gap-1">
-              <span className="font-mono text-leaf">{i + 1}</span>
+              <span className="font-mono text-[17px] text-leaf">{i + 1}</span>
               <span className="text-[17px] font-bold">{t}</span>
               <span className="text-[15px] leading-snug text-[#D9DCD0]">{d}</span>
             </li>

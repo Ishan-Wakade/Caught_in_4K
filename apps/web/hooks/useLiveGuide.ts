@@ -26,7 +26,7 @@ function drawZone(ctx: CanvasRenderingContext2D, z: number[], w: number) {
 
 /**
  * Jolie's live camera model (lib/guide/engine.ts: YOLO11n-pose, her close-up hand scan, CLIP holding check, one steady
- * answer per item, her Assist timing) with three changes for the dashboard's Live camera tab:
+ * answer per item, her Assist timing) with three changes for the public site's Live camera page:
  *  - the server answer is ONE Claude Haiku 5.5 call (/api/model/identify: ~1 s, the ~110 product types with
  *    rule-based bins, Jev only for the rest) instead of DeepSeek x2 + Jev;
  *  - CLIP counts an item as possibly held from P(item) >= HOLD_P (0.35, her 0.5): small items and tissues rarely reach

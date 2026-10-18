@@ -12,6 +12,7 @@ import type { FaceFinder } from "../guide/redact";
 import type { GuideMessage } from "../guide/message";
 import type { ItemAnswer, Opening } from "./claude";
 import type { Caption, OverlayPerson } from "./overlay";
+import { autoLevels, keepRegion, type Found } from "./focus";
 import { BAR_S, LiveWatcher, demoHandBox, sameOpenings, type Event, type Item } from "./watch";
 
 export type LiveAnswer = ItemAnswer & { sig?: string | null; ms?: number };
@@ -27,10 +28,14 @@ const CROP_MAX_PX = 512;
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 /**
  * Close-up crops (18 Oct: items held up close to a MacBook camera came back "not sure"): the item then fills much of
- * the picture, so the crop is the hand box grown to CONTEXT and at least MIN_SHARE of the frame's short side, centred
- * on the hand. Faces are covered twice, but face-sized: every face the face detector finds (+20% margin) and each
- * person's head box shrunk to HEAD_SHRINK (the pose head box is ~1.2 x shoulder width, fail-closed sizing: filled
- * whole it also blacked out an item held in front of the face). A head that cannot be sized: its whole box is filled.
+ * the picture, so the crop is the hand box grown to CONTEXT and at least MIN_SHARE of the frame's short side.
+ *
+ * Redaction. Without `scene` (the /model page): every head box filled whole, a head that cannot be sized -> null,
+ * then every face the detector finds (fail closed, as Jolie's redactedCrop). With `scene` (the live camera, one person
+ * at the camera, focus.ts): everything outside that person's region is black (bystanders, detected or not: 20 of 94
+ * crowd crops showed a face before, 18 Oct), every other person's head box is filled whole (unsizable: their whole
+ * box), and that person's own head box is filled at HEAD_SHRINK (whole, it also blacked out an item held in front of
+ * the face) plus every face the detector finds (+20%). Then light levels (focus.autoLevels).
  */
 const CONTEXT = 2.2;
 const MIN_SHARE = 0.5;
@@ -40,28 +45,58 @@ const FACE_MARGIN = 0.2;
 const MAX_BLACK_LIVE = 0.7;
 
 export function itemCrop(source: CanvasImageSource & { videoWidth?: number; videoHeight?: number }, box: Rect,
-  heads: Array<{ box: Rect; reliable: boolean }>, face: FaceFinder | null): string | null {
+  heads: Array<{ box: Rect; reliable: boolean }>, face: FaceFinder | null, scene?: { all: Found[]; primary: number },
+  exact = false): string | null {
   if (!face) return null;
   const fw = source.videoWidth ?? 1e6, fh = source.videoHeight ?? 1e6;
-  const side = Math.min(Math.max(CONTEXT * Math.max(box.x1 - box.x0, box.y1 - box.y0), MIN_SHARE * Math.min(fw, fh)), fw, fh);
-  const cx = Math.min(Math.max((box.x0 + box.x1) / 2, side / 2), fw - side / 2);
-  const cy = Math.min(Math.max((box.y0 + box.y1) / 2, side / 2), fh - side / 2);
-  box = { x0: cx - side / 2, y0: cy - side / 2, x1: cx + side / 2, y1: cy + side / 2 };
-  const s = Math.min(1, CROP_MAX_PX / side);
+  if (!exact) {  // grow the hand box (close-ups); `exact`: the caller already chose the region
+    const side = Math.min(Math.max(CONTEXT * Math.max(box.x1 - box.x0, box.y1 - box.y0), MIN_SHARE * Math.min(fw, fh)), fw, fh);
+    const cx = Math.min(Math.max((box.x0 + box.x1) / 2, side / 2), fw - side / 2);
+    const cy = Math.min(Math.max((box.y0 + box.y1) / 2, side / 2), fh - side / 2);
+    box = { x0: cx - side / 2, y0: cy - side / 2, x1: cx + side / 2, y1: cy + side / 2 };
+  }
+  const bw = box.x1 - box.x0, bh = box.y1 - box.y0;
+  if (bw < 16 || bh < 16) return null;
+  const s = Math.min(1, CROP_MAX_PX / Math.max(bw, bh));
   const c = document.createElement("canvas");
-  c.width = c.height = Math.round(side * s);
+  c.width = Math.round(bw * s);
+  c.height = Math.round(bh * s);
   const g = c.getContext("2d", { willReadFrequently: true })!;
   g.imageSmoothingQuality = "high";
-  g.drawImage(source, box.x0, box.y0, side, side, 0, 0, c.width, c.height);
+  g.drawImage(source, box.x0, box.y0, bw, bh, 0, 0, c.width, c.height);
   g.fillStyle = "#000";
-  for (const hd of heads) {
-    let b = hd.box;
-    if (hd.reliable) {
-      const hx = (b.x0 + b.x1) / 2, hy = (b.y0 + b.y1) / 2, r = (HEAD_SHRINK * (b.x1 - b.x0)) / 2;
-      b = { x0: hx - r, y0: hy - r, x1: hx + r, y1: hy + r };
+  const fill = (b: Rect) => {
+    if (b.x1 > box.x0 && b.y1 > box.y0 && b.x0 < box.x1 && b.y0 < box.y1) g.fillRect((b.x0 - box.x0) * s, (b.y0 - box.y0) * s, (b.x1 - b.x0) * s, (b.y1 - b.y0) * s);
+  };
+  const rect = (b: Box): Rect => ({ x0: b[0], y0: b[1], x1: b[2], y1: b[3] });
+  if (!scene) {
+    for (const hd of heads) {
+      const b = hd.box;
+      if (!(b.x1 > box.x0 && b.y1 > box.y0 && b.x0 < box.x1 && b.y0 < box.y1)) continue;
+      if (!hd.reliable) return null;
+      fill(b);
     }
-    if (!(b.x1 > box.x0 && b.y1 > box.y0 && b.x0 < box.x1 && b.y0 < box.y1)) continue;
-    g.fillRect((b.x0 - box.x0) * s, (b.y0 - box.y0) * s, (b.x1 - b.x0) * s, (b.y1 - b.y0) * s);
+  } else {
+    const me = scene.all[scene.primary];
+    const [k0, k1, k2, k3] = keepRegion(me, fw, fh);
+    fill({ x0: box.x0, y0: box.y0, x1: box.x1, y1: k1 });   // above the person's region
+    fill({ x0: box.x0, y0: k3, x1: box.x1, y1: box.y1 });   // below
+    fill({ x0: box.x0, y0: box.y0, x1: k0, y1: box.y1 });   // left
+    fill({ x0: k2, y0: box.y0, x1: box.x1, y1: box.y1 });   // right
+    scene.all.forEach((p, i) => {
+      const hd = headBox(fromCoco(p.kp));
+      if (i === scene.primary) {
+        if (!hd) return;
+        let b = hd.box;
+        if (hd.reliable) {
+          const hx = (b.x0 + b.x1) / 2, hy = (b.y0 + b.y1) / 2, r = (HEAD_SHRINK * (b.x1 - b.x0)) / 2;
+          b = { x0: hx - r, y0: hy - r, x1: hx + r, y1: hy + r };
+        }
+        fill(b);
+      } else {
+        fill(hd?.reliable ? hd.box : rect(p.box));
+      }
+    });
   }
   for (const d of face.detect(c).detections) {
     const bb = d.boundingBox;
@@ -69,10 +104,15 @@ export function itemCrop(source: CanvasImageSource & { videoWidth?: number; vide
     const mx = FACE_MARGIN * bb.width, my = FACE_MARGIN * bb.height;
     g.fillRect(bb.originX - mx, bb.originY - my, bb.width + 2 * mx, bb.height + 2 * my);
   }
-  const px = g.getImageData(0, 0, c.width, c.height).data;
+  const img = g.getImageData(0, 0, c.width, c.height);
+  const px = img.data;
   let black = 0;
   for (let i = 0; i < px.length; i += 4) if (px[i] === 0 && px[i + 1] === 0 && px[i + 2] === 0) black++;
   if (black / (px.length / 4) > MAX_BLACK_LIVE) return null;
+  if (scene) {
+    autoLevels(px);
+    g.putImageData(img, 0, 0);
+  }
   return c.toDataURL("image/jpeg", 0.88);
 }
 

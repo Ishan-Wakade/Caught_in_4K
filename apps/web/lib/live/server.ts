@@ -23,7 +23,7 @@ export async function handleLiveIdentify(request: Request): Promise<Response> {
   if (denied) return denied;
   const key = anthropicKey();
   if (!key) return err(503, "ANTHROPIC_API_KEY is not configured");
-  let body: { crops?: unknown };
+  let body: { crops?: unknown; mode?: unknown };
   try {
     body = await json(request, MAX_CROPS * MAX_CROP_CHARS + 10_000);
   } catch (e) {
@@ -35,7 +35,7 @@ export async function handleLiveIdentify(request: Request): Promise<Response> {
     return err(400, "send 1-3 JPEG data URLs as crops");
   }
   const t0 = Date.now();
-  const r = await identifyItem(crops as string[], { anthropic: key, jev: process.env.TYPESAFE_API_KEY ?? "" });
+  const r = await identifyItem(crops as string[], { anthropic: key, jev: process.env.TYPESAFE_API_KEY ?? "" }, undefined, body.mode === "holdup");
   // One text line per answer (no image data) so a live session can be checked from the Vercel logs.
   console.info(`[identify] ${JSON.stringify({ source: r.source, name: r.item?.name ?? null, conf: r.item?.confidence ?? null, bin: r.message?.bin ?? null,
     form: r.item?.form ?? null, model: r.model ?? null, ms: Date.now() - t0, crops: (crops as string[]).length,

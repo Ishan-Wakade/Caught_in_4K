@@ -1,0 +1,1111 @@
+{
+ "source": "Product types for /model. bin comes from the rule line quoted VERBATIM from worker/rules/cambridge-ma-2022.md (City of Cambridge 2022/2023 guide; products.test.ts checks every quote is in that file); \"jev\" = the rules do not clearly decide it, Jev chooses under the rules (as for any new item). prompts = how the item looks (kept for reference; not used by the on-device check).",
+ "rules": {
+  "R_CANS": "Metal cans and foil.",
+  "R_GLASS": "Glass bottles and jars.",
+  "R_PLASTIC": "Plastic containers.",
+  "R_PAPER": "Paper and cardboard (flatten boxes).",
+  "R_FOOD": "All food scraps, even meat, bones, and shells; dairy, bread and grains, leftovers.",
+  "R_NAPKIN": "Napkins and paper towels.",
+  "R_COFFEE": "Coffee grounds and filters, tea bags.",
+  "R_FLOWERS": "Cut flowers. Compostable bags.",
+  "R_NO_PAPER_TAKEOUT": "NO paper takeout containers, paper towels, napkins, or paper plates.",
+  "R_NO_FILM": "NO plastic bags or plastic film (air pillows, plastic wrap, shrink wrap), NO wrappers.",
+  "R_TRASH": "Items that are not recyclable, not compostable, and not special items below.",
+  "R_ELECTRONICS": "Batteries (non-alkaline), small electronics, fluorescent bulbs, plastic bags, scrap metal, books: Recycle Center.",
+  "R_TEXTILES": "Clothing and textiles (state law bans textiles in the trash): donate or textile recycling, even if torn or stained.",
+  "R_HAZARD": "Items labeled HAZARDOUS, POISON, DANGER, WARNING, or CAUTION"
+ },
+ "products": [
+  [
+   "p_soda_can",
+   "aluminum soda can",
+   "recycle",
+   "R_CANS",
+   [
+    "an aluminum soda can",
+    "a crushed soda can"
+   ]
+  ],
+  [
+   "p_energy_can",
+   "energy drink can",
+   "recycle",
+   "R_CANS",
+   [
+    "an energy drink can",
+    "a tall slim drink can"
+   ]
+  ],
+  [
+   "p_beer_can",
+   "beer can",
+   "recycle",
+   "R_CANS",
+   [
+    "a beer can"
+   ]
+  ],
+  [
+   "p_seltzer_can",
+   "sparkling water can",
+   "recycle",
+   "R_CANS",
+   [
+    "a sparkling water can",
+    "a seltzer can"
+   ]
+  ],
+  [
+   "p_tin_can",
+   "food tin can",
+   "recycle",
+   "R_CANS",
+   [
+    "a soup tin can",
+    "an empty food tin can"
+   ]
+  ],
+  [
+   "p_foil",
+   "aluminum foil",
+   "recycle",
+   "R_CANS",
+   [
+    "a ball of aluminum foil",
+    "a piece of aluminum foil"
+   ]
+  ],
+  [
+   "p_foil_tray",
+   "aluminum foil tray",
+   "recycle",
+   "R_CANS",
+   [
+    "an aluminum foil tray",
+    "an aluminum pie pan"
+   ]
+  ],
+  [
+   "p_glass_beer",
+   "glass beer bottle",
+   "recycle",
+   "R_GLASS",
+   [
+    "a glass beer bottle",
+    "a brown glass bottle"
+   ]
+  ],
+  [
+   "p_wine_bottle",
+   "wine bottle",
+   "recycle",
+   "R_GLASS",
+   [
+    "a wine bottle"
+   ]
+  ],
+  [
+   "p_glass_jar",
+   "glass jar",
+   "recycle",
+   "R_GLASS",
+   [
+    "a glass jar",
+    "an empty jam jar"
+   ]
+  ],
+  [
+   "p_glass_soda",
+   "glass soda bottle",
+   "recycle",
+   "R_GLASS",
+   [
+    "a glass soda bottle"
+   ]
+  ],
+  [
+   "p_water_bottle",
+   "plastic water bottle",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic water bottle",
+    "a crushed plastic water bottle"
+   ]
+  ],
+  [
+   "p_soda_bottle",
+   "plastic soda bottle",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic soda bottle",
+    "a plastic cola bottle"
+   ]
+  ],
+  [
+   "p_sports_bottle",
+   "sports drink bottle",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a sports drink bottle",
+    "a plastic gatorade bottle"
+   ]
+  ],
+  [
+   "p_juice_bottle",
+   "plastic juice bottle",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic juice bottle"
+   ]
+  ],
+  [
+   "p_milk_jug",
+   "plastic milk jug",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic milk jug"
+   ]
+  ],
+  [
+   "p_yogurt_cup",
+   "plastic yogurt cup",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic yogurt cup",
+    "an empty yogurt container"
+   ]
+  ],
+  [
+   "p_clamshell",
+   "plastic clamshell container",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a clear plastic clamshell container",
+    "a plastic berry box"
+   ]
+  ],
+  [
+   "p_takeout_plastic",
+   "plastic takeout container",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic takeout container",
+    "a plastic food container with lid"
+   ]
+  ],
+  [
+   "p_deli_tub",
+   "plastic deli tub",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic deli tub",
+    "a round plastic tub"
+   ]
+  ],
+  [
+   "p_smoothie_cup",
+   "plastic smoothie cup",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic smoothie cup",
+    "a clear plastic iced coffee cup"
+   ]
+  ],
+  [
+   "p_shampoo",
+   "shampoo bottle",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic shampoo bottle"
+   ]
+  ],
+  [
+   "p_detergent",
+   "plastic detergent jug",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic laundry detergent jug"
+   ]
+  ],
+  [
+   "p_sauce_bottle",
+   "plastic sauce bottle",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "a plastic ketchup bottle",
+    "a plastic squeeze bottle"
+   ]
+  ],
+  [
+   "p_pill_bottle_empty",
+   "empty plastic jar",
+   "recycle",
+   "R_PLASTIC",
+   [
+    "an empty plastic jar",
+    "a plastic peanut butter jar"
+   ]
+  ],
+  [
+   "p_cardboard_box",
+   "cardboard box",
+   "recycle",
+   "R_PAPER",
+   [
+    "a cardboard box",
+    "a flattened cardboard box"
+   ]
+  ],
+  [
+   "p_cereal_box",
+   "cereal box",
+   "recycle",
+   "R_PAPER",
+   [
+    "a cereal box",
+    "an empty paperboard box"
+   ]
+  ],
+  [
+   "p_egg_carton",
+   "cardboard egg carton",
+   "recycle",
+   "R_PAPER",
+   [
+    "a cardboard egg carton"
+   ]
+  ],
+  [
+   "p_tp_roll",
+   "toilet paper tube",
+   "recycle",
+   "R_PAPER",
+   [
+    "a cardboard toilet paper tube",
+    "a paper towel tube"
+   ]
+  ],
+  [
+   "p_paper_bag",
+   "paper bag",
+   "recycle",
+   "R_PAPER",
+   [
+    "a brown paper bag",
+    "a white paper bag"
+   ]
+  ],
+  [
+   "p_newspaper",
+   "newspaper",
+   "recycle",
+   "R_PAPER",
+   [
+    "a newspaper",
+    "a folded newspaper"
+   ]
+  ],
+  [
+   "p_magazine",
+   "magazine",
+   "recycle",
+   "R_PAPER",
+   [
+    "a magazine"
+   ]
+  ],
+  [
+   "p_office_paper",
+   "sheet of paper",
+   "recycle",
+   "R_PAPER",
+   [
+    "a sheet of printer paper",
+    "a crumpled sheet of paper"
+   ]
+  ],
+  [
+   "p_envelope",
+   "envelope",
+   "recycle",
+   "R_PAPER",
+   [
+    "a paper envelope",
+    "a piece of mail"
+   ]
+  ],
+  [
+   "p_cup_carrier",
+   "cardboard cup carrier",
+   "recycle",
+   "R_PAPER",
+   [
+    "a cardboard cup carrier tray"
+   ]
+  ],
+  [
+   "p_tissue_box",
+   "tissue box",
+   "recycle",
+   "R_PAPER",
+   [
+    "an empty tissue box"
+   ]
+  ],
+  [
+   "p_paper_sleeve",
+   "cardboard coffee sleeve",
+   "recycle",
+   "R_PAPER",
+   [
+    "a cardboard coffee cup sleeve"
+   ]
+  ],
+  [
+   "p_banana_peel",
+   "banana peel",
+   "compost",
+   "R_FOOD",
+   [
+    "a banana peel",
+    "a banana"
+   ]
+  ],
+  [
+   "p_apple_core",
+   "apple core",
+   "compost",
+   "R_FOOD",
+   [
+    "an apple core",
+    "a half eaten apple"
+   ]
+  ],
+  [
+   "p_orange_peel",
+   "orange peel",
+   "compost",
+   "R_FOOD",
+   [
+    "an orange peel",
+    "an orange"
+   ]
+  ],
+  [
+   "p_bread",
+   "bread",
+   "compost",
+   "R_FOOD",
+   [
+    "a piece of bread",
+    "a sandwich crust"
+   ]
+  ],
+  [
+   "p_sandwich",
+   "half-eaten sandwich",
+   "compost",
+   "R_FOOD",
+   [
+    "a half eaten sandwich"
+   ]
+  ],
+  [
+   "p_pizza",
+   "pizza slice",
+   "compost",
+   "R_FOOD",
+   [
+    "a pizza slice",
+    "a pizza crust"
+   ]
+  ],
+  [
+   "p_bone",
+   "chicken bone",
+   "compost",
+   "R_FOOD",
+   [
+    "a chicken bone",
+    "a chicken wing bone"
+   ]
+  ],
+  [
+   "p_egg_shell",
+   "egg shells",
+   "compost",
+   "R_FOOD",
+   [
+    "broken egg shells"
+   ]
+  ],
+  [
+   "p_salad",
+   "leftover salad",
+   "compost",
+   "R_FOOD",
+   [
+    "leftover salad",
+    "lettuce leaves"
+   ]
+  ],
+  [
+   "p_fries",
+   "french fries",
+   "compost",
+   "R_FOOD",
+   [
+    "french fries"
+   ]
+  ],
+  [
+   "p_pastry",
+   "donut or pastry",
+   "compost",
+   "R_FOOD",
+   [
+    "a donut",
+    "a croissant",
+    "a muffin"
+   ]
+  ],
+  [
+   "p_cookie",
+   "cookie",
+   "compost",
+   "R_FOOD",
+   [
+    "a cookie",
+    "a half eaten cookie"
+   ]
+  ],
+  [
+   "p_cheese",
+   "cheese",
+   "compost",
+   "R_FOOD",
+   [
+    "a piece of cheese"
+   ]
+  ],
+  [
+   "p_rice",
+   "leftover rice or pasta",
+   "compost",
+   "R_FOOD",
+   [
+    "leftover rice",
+    "leftover pasta"
+   ]
+  ],
+  [
+   "p_veg_scraps",
+   "vegetable scraps",
+   "compost",
+   "R_FOOD",
+   [
+    "vegetable scraps",
+    "carrot peels"
+   ]
+  ],
+  [
+   "p_melon_rind",
+   "melon rind",
+   "compost",
+   "R_FOOD",
+   [
+    "a watermelon rind",
+    "a melon rind"
+   ]
+  ],
+  [
+   "p_avocado",
+   "avocado peel and pit",
+   "compost",
+   "R_FOOD",
+   [
+    "an avocado peel",
+    "an avocado pit"
+   ]
+  ],
+  [
+   "p_corn_cob",
+   "corn cob",
+   "compost",
+   "R_FOOD",
+   [
+    "a corn cob"
+   ]
+  ],
+  [
+   "p_nut_shells",
+   "nut shells",
+   "compost",
+   "R_FOOD",
+   [
+    "peanut shells",
+    "pistachio shells"
+   ]
+  ],
+  [
+   "p_seafood_shells",
+   "shrimp shells",
+   "compost",
+   "R_FOOD",
+   [
+    "shrimp shells",
+    "a lobster shell"
+   ]
+  ],
+  [
+   "p_candy",
+   "candy or chocolate",
+   "compost",
+   "R_FOOD",
+   [
+    "a piece of chocolate",
+    "a candy bar without wrapper"
+   ]
+  ],
+  [
+   "p_paper_towel",
+   "used paper towel",
+   "compost",
+   "R_NAPKIN",
+   [
+    "a used paper towel",
+    "a crumpled paper towel"
+   ]
+  ],
+  [
+   "p_tissue",
+   "used tissue",
+   "compost",
+   "R_NAPKIN",
+   [
+    "a used tissue",
+    "a crumpled tissue"
+   ]
+  ],
+  [
+   "p_coffee_grounds",
+   "coffee grounds",
+   "compost",
+   "R_COFFEE",
+   [
+    "coffee grounds",
+    "a used coffee filter"
+   ]
+  ],
+  [
+   "p_tea_bag",
+   "tea bag",
+   "compost",
+   "R_COFFEE",
+   [
+    "a used tea bag"
+   ]
+  ],
+  [
+   "p_flowers",
+   "cut flowers",
+   "compost",
+   "R_FLOWERS",
+   [
+    "a bunch of wilted flowers"
+   ]
+  ],
+  [
+   "p_compost_bag",
+   "compostable bag",
+   "compost",
+   "R_FLOWERS",
+   [
+    "a green compostable bag"
+   ]
+  ],
+  [
+   "p_paper_plate",
+   "paper plate",
+   "trash",
+   "R_NO_PAPER_TAKEOUT",
+   [
+    "a paper plate",
+    "a dirty paper plate"
+   ]
+  ],
+  [
+   "p_takeout_paper",
+   "paper takeout box",
+   "trash",
+   "R_NO_PAPER_TAKEOUT",
+   [
+    "a paper takeout box",
+    "a paper food tray"
+   ]
+  ],
+  [
+   "p_plastic_wrap",
+   "plastic wrap",
+   "trash",
+   "R_NO_FILM",
+   [
+    "a ball of plastic wrap",
+    "cling film"
+   ]
+  ],
+  [
+   "p_candy_wrapper",
+   "candy wrapper",
+   "trash",
+   "R_NO_FILM",
+   [
+    "a candy wrapper",
+    "a chocolate bar wrapper"
+   ]
+  ],
+  [
+   "p_chip_bag",
+   "chip bag",
+   "trash",
+   "R_NO_FILM",
+   [
+    "a chip bag",
+    "a crisp packet"
+   ]
+  ],
+  [
+   "p_bar_wrapper",
+   "snack bar wrapper",
+   "trash",
+   "R_NO_FILM",
+   [
+    "a granola bar wrapper",
+    "a protein bar wrapper"
+   ]
+  ],
+  [
+   "p_condiment_packet",
+   "condiment packet",
+   "trash",
+   "R_NO_FILM",
+   [
+    "a ketchup packet",
+    "a soy sauce packet"
+   ]
+  ],
+  [
+   "p_straw",
+   "plastic straw",
+   "trash",
+   "R_TRASH",
+   [
+    "a plastic drinking straw"
+   ]
+  ],
+  [
+   "p_cutlery",
+   "plastic cutlery",
+   "trash",
+   "R_TRASH",
+   [
+    "a plastic fork",
+    "a plastic spoon",
+    "a plastic knife"
+   ]
+  ],
+  [
+   "p_gum",
+   "chewing gum",
+   "trash",
+   "R_TRASH",
+   [
+    "a piece of chewing gum"
+   ]
+  ],
+  [
+   "p_cigarette",
+   "cigarette butt",
+   "trash",
+   "R_TRASH",
+   [
+    "a cigarette butt"
+   ]
+  ],
+  [
+   "p_gloves",
+   "disposable gloves",
+   "trash",
+   "R_TRASH",
+   [
+    "a disposable latex glove",
+    "a used plastic glove"
+   ]
+  ],
+  [
+   "p_mask",
+   "disposable face mask",
+   "trash",
+   "R_TRASH",
+   [
+    "a disposable face mask"
+   ]
+  ],
+  [
+   "p_sponge",
+   "sponge",
+   "trash",
+   "R_TRASH",
+   [
+    "a kitchen sponge"
+   ]
+  ],
+  [
+   "p_toothbrush",
+   "toothbrush",
+   "trash",
+   "R_TRASH",
+   [
+    "a toothbrush"
+   ]
+  ],
+  [
+   "p_pen",
+   "pen",
+   "trash",
+   "R_TRASH",
+   [
+    "a ballpoint pen",
+    "a marker pen"
+   ]
+  ],
+  [
+   "p_mug",
+   "broken ceramic mug",
+   "trash",
+   "R_TRASH",
+   [
+    "a broken ceramic mug",
+    "a ceramic plate"
+   ]
+  ],
+  [
+   "p_drinking_glass",
+   "drinking glass",
+   "trash",
+   "R_TRASH",
+   [
+    "a drinking glass",
+    "a broken drinking glass"
+   ]
+  ],
+  [
+   "p_paper_coffee_cup",
+   "paper coffee cup",
+   "trash",
+   "R_NO_PAPER_TAKEOUT",
+   [
+    "a paper coffee cup",
+    "a disposable coffee cup with lid"
+   ]
+  ],
+  [
+   "p_phone",
+   "smartphone",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a smartphone",
+    "a mobile phone"
+   ]
+  ],
+  [
+   "p_cable",
+   "charging cable",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a phone charging cable",
+    "a usb cable"
+   ]
+  ],
+  [
+   "p_earbuds",
+   "earbuds or headphones",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "wireless earbuds",
+    "headphones"
+   ]
+  ],
+  [
+   "p_vape",
+   "vape",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a disposable vape",
+    "an e-cigarette"
+   ]
+  ],
+  [
+   "p_tablet",
+   "tablet or laptop",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a tablet computer",
+    "a laptop"
+   ]
+  ],
+  [
+   "p_watch",
+   "smartwatch",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a smartwatch"
+   ]
+  ],
+  [
+   "p_battery_lithium",
+   "rechargeable battery",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a lithium battery",
+    "a rechargeable battery pack"
+   ]
+  ],
+  [
+   "p_bulb",
+   "fluorescent bulb",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a fluorescent light bulb",
+    "a light bulb"
+   ]
+  ],
+  [
+   "p_plastic_bag",
+   "plastic shopping bag",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a plastic shopping bag",
+    "a plastic grocery bag"
+   ]
+  ],
+  [
+   "p_book",
+   "book",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a book",
+    "a paperback book"
+   ]
+  ],
+  [
+   "p_hanger",
+   "metal hanger",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a metal clothes hanger",
+    "a piece of scrap metal"
+   ]
+  ],
+  [
+   "p_pan",
+   "pot or pan",
+   "none",
+   "R_ELECTRONICS",
+   [
+    "a frying pan",
+    "a cooking pot"
+   ]
+  ],
+  [
+   "p_shirt",
+   "shirt",
+   "none",
+   "R_TEXTILES",
+   [
+    "a t-shirt",
+    "a folded shirt"
+   ]
+  ],
+  [
+   "p_sock",
+   "socks",
+   "none",
+   "R_TEXTILES",
+   [
+    "a sock",
+    "a pair of socks"
+   ]
+  ],
+  [
+   "p_shoe",
+   "shoe",
+   "none",
+   "R_TEXTILES",
+   [
+    "a single shoe",
+    "a sneaker"
+   ]
+  ],
+  [
+   "p_towel",
+   "towel or rag",
+   "none",
+   "R_TEXTILES",
+   [
+    "a cloth towel",
+    "a rag"
+   ]
+  ],
+  [
+   "p_medicine",
+   "medication",
+   "none",
+   "R_HAZARD",
+   [
+    "a medicine bottle",
+    "a blister pack of pills"
+   ]
+  ],
+  [
+   "p_paint",
+   "paint can",
+   "none",
+   "R_HAZARD",
+   [
+    "a can of paint"
+   ]
+  ],
+  [
+   "p_propane",
+   "propane canister",
+   "none",
+   "R_HAZARD",
+   [
+    "a small propane canister"
+   ]
+  ],
+  [
+   "p_aerosol",
+   "aerosol spray can",
+   "none",
+   "R_HAZARD",
+   [
+    "an aerosol spray can",
+    "a can of spray paint"
+   ]
+  ],
+  [
+   "p_carton",
+   "milk or juice carton",
+   "jev",
+   "",
+   [
+    "a milk carton",
+    "a juice carton"
+   ]
+  ],
+  [
+   "p_pizza_box",
+   "pizza box",
+   "jev",
+   "",
+   [
+    "a pizza box"
+   ]
+  ],
+  [
+   "p_foam",
+   "styrofoam container",
+   "jev",
+   "",
+   [
+    "a styrofoam takeout container",
+    "a foam cup"
+   ]
+  ],
+  [
+   "p_cup_lid",
+   "plastic cup lid",
+   "jev",
+   "",
+   [
+    "a plastic coffee cup lid"
+   ]
+  ],
+  [
+   "p_receipt",
+   "receipt",
+   "jev",
+   "",
+   [
+    "a paper receipt"
+   ]
+  ],
+  [
+   "p_juice_pouch",
+   "juice pouch",
+   "jev",
+   "",
+   [
+    "a juice pouch",
+    "a drink pouch"
+   ]
+  ],
+  [
+   "p_bubble_wrap",
+   "bubble wrap",
+   "jev",
+   "",
+   [
+    "bubble wrap",
+    "plastic air pillows"
+   ]
+  ],
+  [
+   "p_chopsticks",
+   "wooden chopsticks",
+   "jev",
+   "",
+   [
+    "wooden chopsticks",
+    "a wooden stirrer"
+   ]
+  ],
+  [
+   "p_battery_aa",
+   "AA battery",
+   "jev",
+   "",
+   [
+    "a AA battery",
+    "an alkaline battery"
+   ]
+  ]
+ ]
+}

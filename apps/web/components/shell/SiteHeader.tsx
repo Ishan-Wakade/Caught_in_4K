@@ -7,12 +7,14 @@ import { APP_NAME } from "@/lib/config";
 
 export type NavLink = { href: string; label: string; scene?: "live" | "bins"; match?: (p: string) => boolean; badge?: number };
 
-// The site's tabs (user decisions, 2026-10-17): try it live, watch the recorded demo, run it on your own video, see
-// how a store installs it. The old manager pages still exist at their URLs but are no longer linked.
+// The site's tabs (user decisions, 2026-10-17/18): try it live, watch the recorded demo, run it on your own video,
+// see why it matters (sourced statistics), see how a store installs it. The old manager pages still exist at their
+// URLs but are no longer linked.
 export const PAGES: NavLink[] = [
   { href: "/camera", label: "Live camera" },
   { href: "/demo", label: "Demo video" },
   { href: "/upload", label: "Try your video" },
+  { href: "/impact", label: "Why it matters" },
   { href: "/install", label: "Install" },
 ];
 

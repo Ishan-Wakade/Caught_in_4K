@@ -1,5 +1,6 @@
 # CAUGHT IN 4K
-AI-powered waste sorting mechanism to improve eco footprint and assign responsibility to individual disposal. 📸 ♻️ 🚮 🌎
+AI-powered waste sorting mechanism to improve eco footprint and assign responsibility to individual disposal. \
+📸 ♻️ 🚮 🌎
 
 Caught in 4K was built to give customers waste-sorting guidance as they approach bins. It uses the store's existing surveillance camera to recognize what someone is carrying, apply local disposal rules, and announce the destination through a nearby speaker before they throw the item away.
 
@@ -63,4 +64,4 @@ The public site's **Try your video** tab lets a visitor record or upload a short
 
 We had a lot of fun collaborating on this project and hope that you enjoy it too!
 
-Please look further on [Vercel](caught-in-4k-app.vercel.app) for the deployement and [devpost](https://devpost.com/software/caught-in-4k-9ci7fv) for the demo vid.
+Please look further on [Vercel](caught-in-4k-app.vercel.app) for the deployment and [devpost](https://devpost.com/software/caught-in-4k-9ci7fv) for the demo vid.

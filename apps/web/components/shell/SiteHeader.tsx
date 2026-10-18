@@ -23,7 +23,7 @@ type Unseen = Partial<Record<NonNullable<NavLink["scene"]>, boolean>>;
 export type HeaderAction = { href: string; label: string };
 
 /** The button at the end of the nav that switches between the public site and the manager dashboard. */
-export const TO_DASHBOARD: HeaderAction = { href: "/dashboard/live-footage", label: "Manager dashboard →" };
+export const TO_DASHBOARD: HeaderAction = { href: "/dashboard", label: "Manager dashboard →" };
 
 /**
  * The page links plus that button. Every page anchors them at the right of its top bar, so they never move between

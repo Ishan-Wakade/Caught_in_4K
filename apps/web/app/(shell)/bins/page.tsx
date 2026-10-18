@@ -69,6 +69,22 @@ function BinColumn({ bin, lead, emptyingRequested, highlight }: { bin: BinStatus
   );
 }
 
+/** Floating, decorative echo of the three bins on the right edge — purely visual, so it's hidden from assistive tech and doesn't intercept clicks. */
+function FloatingBins({ bins }: { bins: BinStatus[] }) {
+  const order: BinStatus["type"][] = ["trash", "recycling", "compost"];
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed top-1/2 right-6 z-10 hidden -translate-y-1/2 flex-col gap-8 xl:flex"
+    >
+      {order.map((t) => {
+        const bin = bins.find((b) => b.type === t);
+        return bin ? <BinFigure key={t} bin={bin} height={220} showThreshold={false} /> : null;
+      })}
+    </div>
+  );
+}
+
 /** Per-item counts for a bin: from the API when it sends them, else from this session's feed. */
 function countsFor(bin: BinStatus, disposals: Disposal[]): BinStatus["observed_counts"] {
   if (bin.observed_counts.length || !bin.observed_total) return bin.observed_counts;
@@ -137,6 +153,7 @@ export default function BinsPage() {
 
   return (
     <div className="flex flex-1 flex-col">
+      <FloatingBins bins={list} />
       <div className="flex flex-1 flex-wrap items-end gap-x-14 gap-y-6 px-10 pt-[18px] pb-[22px]">
         {list.map((b) => (
           <BinColumn key={b.bin_id} bin={b} lead={b.bin_id === leadId} emptyingRequested={requested.has(b.bin_id)} highlight={b.bin_id === focusBinId} />

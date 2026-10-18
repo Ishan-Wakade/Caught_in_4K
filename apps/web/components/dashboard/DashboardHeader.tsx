@@ -34,12 +34,10 @@ function usePendingCount(): number | null {
 
 function tabs(pending: number | null): NavLink[] {
   return [
-    // Live footage first and the dashboard's landing page for the demo (user decision, 18 Oct): it shows the model on
-    // real footage, while Overview's numbers are sample data.
-    { href: "/dashboard/live-footage", label: "Live footage", match: (p) => p.startsWith("/dashboard/live-footage") },
-    { href: "/camera", label: "Live camera" },
     { href: "/dashboard", label: "Overview" },
+    { href: "/camera", label: "Live camera" },
     { href: "/dashboard/bins", label: "Bins", match: (p) => p.startsWith("/dashboard/bins") },
+    { href: "/dashboard/live-footage", label: "Live footage", match: (p) => p.startsWith("/dashboard/live-footage") },
     { href: "/dashboard/new-items", label: "New items", badge: pending ?? undefined, match: (p) => p.startsWith("/dashboard/new-items") },
     { href: "/dashboard/catalog", label: "Catalog", match: (p) => p.startsWith("/dashboard/catalog") },
     { href: "/dashboard/sites", label: "Sites", match: (p) => p.startsWith("/dashboard/sites") },
@@ -52,7 +50,7 @@ export function DashboardHeader() {
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-7 gap-y-1 border-b border-rule-soft px-6 py-2.5 sm:px-10">
       <div className="flex min-h-11 items-center gap-3">
-        <Link href="/dashboard/live-footage" aria-label={`${APP_NAME}, dashboard home`} className="flex items-center gap-2.5 text-forest-deep no-underline hover:text-forest-deep">
+        <Link href="/dashboard" aria-label={`${APP_NAME}, dashboard overview`} className="flex items-center gap-2.5 text-forest-deep no-underline hover:text-forest-deep">
           <LogoMark />
           <span className="font-display text-2xl leading-none font-extrabold">{APP_NAME}</span>
         </Link>

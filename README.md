@@ -6,7 +6,7 @@ Caught in 4K was built to give customers waste-sorting guidance as they approach
 
 ## CUSTOMER EXPERIENCE
 
-Persion walks toward the bins holding a soda can. The camera recognizes the item while they approach. Before they arrive, the speaker says:
+Person walks toward the bins holding a soda can. The camera recognizes the item while they approach. Before they arrive, the speaker says:
 -  *"Recycle. Aluminum can, placed in recycling."*
 
 The customer doesn't scan a code, open an app, or hold each item in front of a dedicated scanner. The goal is to make the correct destination clear during the approach to the bins.

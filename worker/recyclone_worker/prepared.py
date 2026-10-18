@@ -38,8 +38,10 @@ class ReplayPose:
         return people
 
 
-def observe_clip(frames, pose, watcher) -> int:
-    """Pass 1: every frame through pose + the item watcher (heads blanked as in the guide); the LLM is not asked here."""
+def observe_clip(frames, pose, watcher, trace: dict | None = None, distance=None) -> int:
+    """Pass 1: every frame through pose + the item watcher (heads blanked as in the guide); the LLM is not asked here.
+    trace (optional) collects, per person, (t, item box if CLIP saw the item in this frame else None, feet distance from
+    distance(kp), or 0.0 without it) for every frame: where the item went (bins.thrown_into)."""
     from .demo_watcher import head_box
 
     namer, watcher.namer = watcher.namer, None
@@ -51,18 +53,33 @@ def observe_clip(frames, pose, watcher) -> int:
                 watcher.set_heads([head_box(kp) for _, kp in people])
             for tid, kp in people:
                 watcher.observe(tid, t, frame, kp)
+                if trace is not None:
+                    seen = watcher.seen(tid, t) if hasattr(watcher, "seen") else watcher.holding(tid, t)
+                    box = watcher.item_box(tid, t) if seen and hasattr(watcher, "item_box") else None
+                    trace.setdefault(tid, []).append((t, box, distance(kp) if distance else 0.0))
             n += 1
     finally:
         watcher.namer = namer
     return n
 
 
-def prepare_answers(watcher, item: str | None = None) -> dict[int, tuple[dict, str]]:
+MIN_CARRY_VOTES = 6  # CLIP saw the item at least this often (~0.6 s): a real carrier, not a glimpse (IMG_2960)
+
+
+def prepare_answers(watcher, item: str | None = None, min_hand_px: int = 0,
+                    min_votes: int = MIN_CARRY_VOTES) -> dict[int, tuple[dict, str]]:
     """track_id -> (message, source) for everyone seen holding an item: "store" (the item named by the team),
-    "catalog" (CLIP sure), "llm" (DeepSeek + Jev on the best crops), "nothing" (no identifiable object: not announced),
+    "catalog" (CLIP sure), "llm" (Claude/DeepSeek + Jev on the best crops), "nothing" (no identifiable object, or hand
+    crops smaller than min_hand_px: background; not announced),
     or "default" (trash: the network failed)."""
     answers = {}
     for tid, p in watcher.people.items():
+        if p.n_votes < min_votes:  # seen with an item only for a moment: not identified, never sent out
+            answers[tid] = (None, "nothing")
+            continue
+        if min_hand_px and max((max(c[2].shape[:2]) for c in p.crops), default=0) < min_hand_px:
+            answers[tid] = (None, "nothing")  # hands this small are far from the camera: background, never sent out
+            continue
         if item:
             answers[tid] = (gm.from_catalog(item, watcher.table), "store")
             continue

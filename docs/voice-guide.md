@@ -27,7 +27,30 @@ ElevenLabs key -> the Mac's `say` voice. The worker needs `ffmpeg` (and `cloudfl
 worker/scripts/demo.sh ~/Downloads/clip1.MOV                       # draw the bin box, press Enter
 worker/scripts/demo.sh ~/Downloads/clip2.MOV --item item_generic_can # the item is known: no identification call
 DEMO_OUT=~/Desktop/renders worker/scripts/demo.sh clip3.mp4 --area 700,560,1080,1920
+worker/scripts/demo.sh ~/Downloads/IMG_2958.MOV --min-hand 0.1      # hand-held clip: ignore far-away passers-by
 ```
+
+What a demo render does now (17 Oct evening):
+- **Bins found automatically** (`--area auto`, the default in `demo.sh`): Claude Sonnet 5.5 finds every opening on the
+  first frame, reads its label or icon (RECYCLING / WASTE / ORGANICS, recycling arrows, trash figure, apple) and boxes
+  it; the guide's area is built from those boxes. `--area pick` draws it by hand instead.
+- **Where the item went**: pass 1 records each frame where CLIP sees the item; the end of the long carrying stretch is
+  the drop, and the opening under where the item hangs (bottom of the item box: a camera above the bins sees a raised
+  hand higher than the hole it is over) is where it went. The openings are found again on the drop frame; if they
+  moved (a hand-held or panning camera) those are used and the boxes are not drawn. The bar then shows
+  "Thrown in: Waste  CORRECT" (green) or "WRONG BIN" (red); an opening of unknown type gives no verdict.
+- **Fewer hallucinations**: Sonnet 5.5 by default for demos (`--claude-model` to change; Haiku 5.5 live), only the
+  generic catalog (no brand guesses), a more general name when unsure ("food item"), nothing named below 0.4
+  confidence, a catalog pick only at 0.5+, and only people seen carrying an item for ~0.6 s+ are identified.
+- **Memory**: every demo render writes `worker/state/demo-memory/<clip>.json` (bins, items, announcements, outcomes,
+  model) and appends what was said to `worker/state/demo-memory/ledger.jsonl` (not committed).
+
+Checked by eye on the five fixed-hallway clips (IMG_9117-9121): the drop opening matched the video in all five (two
+were wrong bins: food into WASTE, a chip bag into RECYCLING). The older hand-held clips (IMG_2958-2960, 9096-9102)
+show bins only partly, so their verdicts are not reliable. Cost: Sonnet ~$0.006 per bin detection, ~$0.004 per item.
+
+`--min-hand F`: people whose hand crop is smaller than F x the frame width are background: never sent to Claude, never
+announced (0.1 fits a hand-held phone clip at the bins; leave it off for a fixed corner camera, where everyone is small).
 
 Two passes (`guide --prepared`, recyclone_worker/prepared.py): the whole clip through YOLO pose + CLIP first, then each
 person's item is identified ONCE from their best face-redacted crops (CLIP's catalog when sure, else Claude Haiku 5.5 +

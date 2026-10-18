@@ -328,3 +328,13 @@ def test_the_bottom_bar_text_fits_a_portrait_video(tmp_path):
     bar = out[-140:]
     assert (bar[:, -6:] < 40).all()  # nothing reaches the right edge
     assert (bar[:, :, 0] > 200).any() and ((bar[:, :, 0] > 200) & (bar[:, :, 2] < 150)).any()  # white item + blue bin text
+
+
+def test_the_bottom_bar_with_an_outcome_never_overlaps_in_portrait(tmp_path):
+    g = make(lambda t: [(1, 300)], BoxWatcher({1: CAN}), tmp_path)
+    msg = {"bin": "trash", "item": "paper coffee cup", "place": "trash", "reason": "lined cups are not recyclable here"}
+    rows = g._bar_rows(msg, {"t": 1.0, "bin": "recycle", "label": "RECYCLING"}, width=720)
+    texts = [[t for t, _ in line] for line in rows]
+    assert texts == [["Item: paper coffee cup"], ["Bin: Trash"], ["Thrown in: Recycling"], ["WRONG BIN"]]
+    wide = g._bar_rows(msg, {"t": 1.0, "bin": "trash", "label": "WASTE"}, width=1920)
+    assert [[t for t, _ in line] for line in wide] == [["Item: paper coffee cup", "Bin: Trash"], ["Thrown in: Waste", "CORRECT"]]

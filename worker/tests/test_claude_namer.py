@@ -24,7 +24,7 @@ def fake_post(calls, answer=ANSWER, fail=False, gate=None):
         calls.append((url, headers, json.loads(body)))
         if fail:
             raise OSError("down")
-        return {"content": [{"type": "tool_use", "name": "report_item", "input": answer}],
+        return {"content": [{"type": "text", "text": json.dumps(answer)}],
                 "usage": {"input_tokens": 1800, "output_tokens": 150, "cache_read_input_tokens": 0}}
     return post
 
@@ -53,18 +53,30 @@ def test_parallel_name_and_describe_still_make_one_request(tmp_path):
     assert len(calls) == 1
 
 
-def test_request_is_haiku_with_a_forced_tool_cached_system_and_jpeg_images(tmp_path):
+def test_request_uses_a_json_schema_output_a_cached_system_and_jpeg_images(tmp_path):
+    """Sonnet 5.5 rejects a forced tool_choice; output_config.format json_schema works on Haiku 5.5 and Sonnet 5.5."""
     calls = []
     namer(tmp_path, calls).name([CROP, CROP])
     url, headers, body = calls[0]
     assert url == "https://api.anthropic.com/v1/messages"
     assert headers["x-api-key"] == "sk-test" and headers["anthropic-version"] == "2023-06-01"
     assert body["model"] == "claude-haiku-5-5" and body["max_tokens"] <= 600
-    assert body["tool_choice"] == {"type": "tool", "name": "report_item"}
+    assert "tools" not in body and "tool_choice" not in body
+    fmt = body["output_config"]["format"]
+    assert fmt["type"] == "json_schema" and fmt["schema"]["additionalProperties"] is False
+    assert "minimum" not in json.dumps(fmt["schema"]) and "maxItems" not in json.dumps(fmt["schema"])
     assert body["system"][-1]["cache_control"] == {"type": "ephemeral"}
     assert "RULES TEXT" in body["system"][-1]["text"] and "item_generic_can: aluminum can" in body["system"][-1]["text"]
     images = [c for c in body["messages"][0]["content"] if c["type"] == "image"]
     assert len(images) == 2 and images[0]["source"]["media_type"] == "image/jpeg"
+
+
+def test_the_model_is_selectable_and_sonnet_is_priced_as_sonnet(tmp_path):
+    calls = []
+    n = cn.ClaudeNamer(tmp_path, key="sk-test", catalog=CATALOG, rules="R", post=fake_post(calls), model="claude-sonnet-5-5")
+    n.name([CROP])
+    assert calls[0][2]["model"] == "claude-sonnet-5-5"
+    assert abs(n.cost_usd() - (1800 * 2.0 + 150 * 10.0) / 1e6) < 1e-9
 
 
 def test_answers_are_cached_on_disk(tmp_path):
@@ -107,3 +119,27 @@ def test_no_temperature_is_sent_haiku_5_5_rejects_it(tmp_path):
     calls = []
     namer(tmp_path, calls).name([CROP])
     assert "temperature" not in calls[0][2]
+
+
+def test_unidentifiable_only_when_no_object_is_seen_not_when_its_type_is_unsure():
+    """IMG_2958: a clearly visible printed paper was marked unidentifiable (0.3) because the prompt said "clearly"."""
+    assert "ONLY if no object is visible at all" in cn.SYSTEM
+    assert "If you cannot clearly see an object" not in cn.SYSTEM
+
+
+def test_thinking_is_off_with_each_models_own_setting(tmp_path):
+    """Haiku 5.5 spent all 500 tokens thinking and returned no answer; Sonnet 5.5 rejects {"type": "disabled"}."""
+    for model, want in (("claude-haiku-5-5", {"type": "disabled"}), ("claude-sonnet-5-5", {"type": "between_tools"})):
+        calls = []
+        cn.ClaudeNamer(tmp_path / model, key="k", catalog=CATALOG, rules="R", post=fake_post(calls), model=model).name([CROP])
+        assert calls[0][2]["thinking"] == want
+
+
+def test_the_prompt_prefers_a_general_name_over_a_guess():
+    """IMG_9118: a bread roll was named "banana peel"; the bin was right, the name was a guess."""
+    assert "more general name" in cn.SYSTEM
+
+
+def test_generic_catalog_drops_brand_products():
+    cat = [("item_generic_cup", "clear plastic cup"), ("item_shakeshack_cup", "Shake Shack cup"), ("item_napkin", "napkin")]
+    assert cn.generic_catalog(cat) == [("item_generic_cup", "clear plastic cup"), ("item_napkin", "napkin")]

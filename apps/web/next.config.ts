@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   // Those packages import siblings as "./x.js" (NodeNext style) while the files are .ts.
   // Only webpack honours this, so dev/build run with --webpack (Turbopack ignores it).
   experimental: { extensionAlias: { ".js": [".ts", ".tsx", ".js"] } },
+  // The core API reads the demo site seed at runtime; bundle it with every API function (Vercel traces imports only).
+  outputFileTracingIncludes: { "/api/**/*": ["../../contracts/fixtures/demo-site.json"] },
   // Stop `next dev` from appending its own block to apps/web/AGENTS.md on every
   // run (on every agent's branch), which would cause merge conflicts.
   agentRules: false,

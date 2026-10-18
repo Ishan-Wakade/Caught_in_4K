@@ -4,7 +4,10 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Demo video", description: "How the voice guide works in a store" };
 
-/** Drop the processed video (annotations + voice mixed in, from `recyclone-worker guide --render`) here. */
+/** The published demo video; shown first. Empty it to fall back to the local file below. */
+const YOUTUBE_ID = "nsEW_CfX42w";
+
+/** Fallback: drop the processed video (annotations + voice mixed in, from `recyclone-worker guide --render`) here. */
 const VIDEO = "/demo/recording.mp4";
 
 /** 16:9, as large as the space under the header allows (container units), never wider than 1200 px. */
@@ -16,7 +19,16 @@ export default function DemoPage() {
   return (
     <div className="flex min-h-0 flex-1 p-6 sm:p-10">
       <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
-        {ready ? (
+        {YOUTUBE_ID ? (
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${YOUTUBE_ID}?rel=0`}
+            title="Caught in 4K demo video"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+            className={`${FIT} border-0`}
+          />
+        ) : ready ? (
           <video src={VIDEO} controls playsInline preload="metadata" className={`${FIT} object-contain`} />
         ) : (
           <div className={`${FIT} flex items-center justify-center`}>

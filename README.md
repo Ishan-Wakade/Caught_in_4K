@@ -58,10 +58,10 @@ The finished dashboard will show how many items were categorized over time, with
 | Shared schemas and backend storage | Will define validated announcement records, category counts, approvals, and access boundaries; the existing backend includes PostgreSQL. |
 
 
-## TRY IT YOURSELF (MODAL)
+## Try it yourself
 
-The public site's **Try your video** tab lets a visitor record or upload a short clip of themselves throwing something away. They get back the annotated video with the spoken guidance mixed in, which they can download. The clip is processed by the prerecorded-demo pipeline on a cloud GPU (Modal; see [deployment](docs/deployment.md)) and deleted after 24 hours. This is a demonstration of the recognition and speech on someone's own footage.
+The public site's **Try your video** tab lets a visitor record or upload a short clip of themselves throwing something away. They get back the annotated video with the spoken guidance mixed in, which they can download. The video is deleted after 24 hours.
 
 We had a lot of fun collaborating on this project and hope that you enjoy it too!
 
-Please look further on [Vercel](caught-in-4k-app.vercel.app) for the deployment and [devpost](https://devpost.com/software/caught-in-4k-9ci7fv) for the demo vid.
+Watch the [demo video on YouTube](https://youtu.be/nsEW_CfX42w). Please look further on [Vercel](caught-in-4k-app.vercel.app) for the deployment and [devpost](https://devpost.com/software/caught-in-4k-9ci7fv) for more.

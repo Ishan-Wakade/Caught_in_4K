@@ -331,3 +331,38 @@ def test_the_spoken_reason_is_the_llms_reason_for_the_bin_jev_chose():
                        executor=ThreadPoolExecutor(1))
     assert w._identify([np.zeros((8, 8, 3), np.uint8)]) == {
         "bin": "trash", "item": "plastic fork", "place": "trash", "reason": "plastic cutlery is not accepted in recycling"}
+
+
+def test_low_confidence_answers_are_never_spoken_as_an_item():
+    """IMG_2960: an empty hand became "metal tube handle" at confidence 0.3."""
+
+    class Unsure(FakeNamer):
+        def name(self, crops):
+            return {"catalog_item_id": None, "what": "metal tube handle", "confidence": 0.3}
+
+        def describe(self, crops):
+            return {"identifiable": True, "name": "metal tube handle", "material": "metal", "form": "tube",
+                    "condition": "clean", "hazardous": False, "reasons": {}}
+
+    w = gi.DemoItemWatcher(embed, FakeScorer(0.9, {}), TABLE, namer=Unsure(), advisor=FakeAdvisor(), executor=ThreadPoolExecutor(1))
+    assert w._identify([np.zeros((8, 8, 3), np.uint8)]) == gm.default_trash(None)
+
+
+def test_a_catalog_pick_needs_confidence():
+    class Guess(FakeNamer):
+        def name(self, crops):
+            return {"catalog_item_id": "item_generic_can", "what": "can", "confidence": 0.45}
+
+        def describe(self, crops):
+            return {"identifiable": True, "name": "metal can", "material": "metal", "form": "can", "condition": "clean",
+                    "hazardous": False, "reasons": {"recycling": "metal cans are recyclable"}}
+
+    class Recycle:
+        available = True
+
+        def suggest(self, gt):
+            return dict(gt, suggested_destination="recycling", suggestion_confidence=0.9)
+
+    w = gi.DemoItemWatcher(embed, FakeScorer(0.9, {}), TABLE, namer=Guess(), advisor=Recycle(), executor=ThreadPoolExecutor(1))
+    m = w._identify([np.zeros((8, 8, 3), np.uint8)])
+    assert m["item"] == "metal can" and m["reason"] == "metal cans are recyclable"  # not the 0.45 catalog pick

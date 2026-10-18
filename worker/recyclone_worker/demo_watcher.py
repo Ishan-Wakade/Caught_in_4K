@@ -152,6 +152,10 @@ HOLD_WINDOW_S = 1.0  # "holding" = an item seen in a hand within the last second
 OBSERVE_EVERY_S = 0.1  # CLIP on a person's hands at most 10 times a second (speed; the hand moves little in 0.1 s)
 
 
+CATALOG_PICK_MIN = 0.5  # the LLM's catalog pick is used only this sure; otherwise its generic description + Jev
+NAME_MIN = 0.4          # below this the LLM's answer is not spoken as any item ("not sure")
+
+
 class _Person:
     def __init__(self, n_cats: int):
         self.votes = np.zeros(n_cats, np.float64)
@@ -214,6 +218,11 @@ class DemoItemWatcher:
         p = self.people.get(track_id)
         return p is not None and now - p.last_held <= HOLD_WINDOW_S
 
+    def seen(self, track_id: int, now: float) -> bool:
+        """CLIP saw this person's item in the frame observed at `now` (not just within the holding window)."""
+        p = self.people.get(track_id)
+        return p is not None and p.last_held == now
+
     def item_box(self, track_id: int, now: float):
         """(x0, y0, x1, y1) of the hand crop where the item was last seen, while the person holds it."""
         p = self.people.get(track_id)
@@ -272,11 +281,14 @@ class DemoItemWatcher:
             with ThreadPoolExecutor(2) as both:  # the catalog pick and the generic description at the same time
                 named, described = both.submit(self.namer.name, crops), both.submit(self.namer.describe, crops)
                 ans = named.result()
-                if ans and ans.get("catalog_item_id") in self.table:
+                conf = (ans or {}).get("confidence") or 0.0
+                if ans and ans.get("catalog_item_id") in self.table and conf >= CATALOG_PICK_MIN:
                     return gm.from_catalog(ans["catalog_item_id"], self.table)
                 generic = described.result()
             if ans is None and generic is None:  # the service failed (no answer at all): that is not "nothing seen"
                 raise RuntimeError("identification unavailable")
+            if ans is not None and conf < NAME_MIN:  # too unsure to name anything (IMG_2960: "metal tube handle", 0.3)
+                return gm.default_trash(None)
             gt = generic_type({"what": (ans or {}).get("what"), "generic": generic or {}})
             if gt is None:  # nothing identifiable: "not sure", unless the catalog pass did describe it with some confidence
                 what = (ans or {}).get("what") if ((ans or {}).get("confidence") or 0) >= gm.DEFAULT_TRASH_BELOW else None

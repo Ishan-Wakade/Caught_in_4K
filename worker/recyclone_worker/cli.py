@@ -304,6 +304,11 @@ def cmd_run_station(args, analyze_items=None) -> int:
     return 0
 
 
+def demo_memory_dir(log: Path) -> Path:
+    """Where the prerecorded demo remembers what the model said: next to the guide log (worker/state by default)."""
+    return Path(log).parent / "demo-memory"
+
+
 def area_from_roi(roi) -> str | None:
     """cv2.selectROI's (x, y, w, h) -> "x0,y0,x1,y1"; None for an empty box (Enter without dragging)."""
     x, y, w, h = (int(v) for v in roi)
@@ -362,6 +367,18 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             print("voice: macOS say", file=sys.stderr)
     voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])  # before the camera
     source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
+    openings: list[dict] = []
+    if args.area == "auto":  # find the bins with a vision model (bins.py); fixed camera: once, on the first frame
+        from . import bins
+
+        first_frame = next(iter(LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))))[2]
+        openings = bins.detect_openings(first_frame, WORKER_DIR / "state/bins-cache")
+        if openings:
+            args.area = ",".join(str(v) for v in bins.area_from_openings(openings, first_frame.shape[1], first_frame.shape[0]))
+            print("bins: " + ", ".join(f"{o['label']} ({o['bin']})" for o in openings) + f"  -> --area {args.area}", file=sys.stderr)
+        else:
+            print("bins: none found; draw the area by hand", file=sys.stderr)
+            args.area = "pick"
     if args.area == "pick":  # draw the box around the bins on the first frame with the mouse
         picker = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
         first = next(iter(picker))[2]
@@ -389,7 +406,12 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             if args.namer == "claude":  # Haiku 5.5: one call per item (claude_namer.py)
                 from .claude_namer import ClaudeNamer
 
-                namer = ClaudeNamer(WORKER_DIR / "state/vlm-cache", rules_path=Path(args.local_rules))
+                from .claude_namer import generic_catalog
+                from .namer import load_catalog
+
+                model = args.claude_model or ("claude-sonnet-5-5" if args.prepared else "claude-haiku-5-5")
+                namer = ClaudeNamer(WORKER_DIR / "state/vlm-cache", rules_path=Path(args.local_rules), model=model,
+                                    catalog=generic_catalog(load_catalog()) if args.prepared else None)
                 missing = "no ANTHROPIC_API_KEY (~/.config/recyclone/anthropic.env)"
             else:
                 from .namer import DeepSeekNamer
@@ -398,7 +420,7 @@ def cmd_guide(args, make_guide_parts=None) -> int:
                 missing = "no DEEPSEEK_API_KEY"
             advisor = BinAdvisor(Path(args.local_rules), WORKER_DIR / "state/generic-types.json")
             namer_used["namer"] = namer
-            print(f"identification: {args.namer} + Jev", file=sys.stderr)
+            print(f"identification: {args.namer}{' ' + namer.model if hasattr(namer, 'model') else ''} + Jev", file=sys.stderr)
             if not namer.available:
                 print(f"note: {missing}; items not recognized by CLIP will be announced as trash", file=sys.stderr)
         if args.prepared:  # the prerecorded demo has its own watcher (demo_watcher.py), independent of live changes
@@ -410,7 +432,7 @@ def cmd_guide(args, make_guide_parts=None) -> int:
 
         pose = YoloPoseTracker(weight("yolo11n-pose.pt"))
         watcher = ItemWatcher(clip.images, Scorer(clip, guide_prompts()), table, namer=namer, advisor=advisor)
-    answers = None
+    answers, outcomes, camera_moved = None, {}, False
     if args.prepared:  # prerecorded, store-tuned demo (prepared.py): items identified from the whole clip first
         from .prepared import PreparedWatcher, RecordingPose, ReplayPose, observe_clip, prepare_answers
 
@@ -421,17 +443,51 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             print(f"--item {args.item} is not in the bin table ({Path(args.bins).name})", file=sys.stderr)
             return 2
         print("preparing: the whole clip through YOLO pose + CLIP, then each person's item identified once", file=sys.stderr)
-        recorded = RecordingPose(pose)
-        observe_clip(source, recorded, watcher)
-        answers = prepare_answers(watcher, args.item)
+        recorded, trace = RecordingPose(pose), {}
+        from .approach import distance_m
+
+        observe_clip(source, recorded, watcher, trace=trace, distance=lambda kp: distance_m(kp, area, homography))
+        first = next(iter(source))[2]  # the frame width sets --min-hand in pixels
+        answers = prepare_answers(watcher, args.item, int(args.min_hand * first.shape[1]))
         for tid, (msg, src) in sorted(answers.items()):
             print(f"  person {tid}: {gm.spoken(msg) if msg else '(nothing identifiable: not announced)'}  [{src}]", file=sys.stderr)
         voice.prepare([gm.spoken(m) for m, _ in answers.values() if m])
+        if openings:  # which opening each announced item went into (bins.thrown_into)
+            from . import bins as bins_mod
+
+            # the openings are found again on the frame where the item left the hand: a moving camera (IMG_9121 pans)
+            # has them elsewhere by then; on a fixed camera they match the first frame (and the answer is cached)
+            ends = {tid: bins_mod.carry_end(trace.get(tid, [])) for tid, (msg, _) in answers.items() if msg}
+            ends = {tid: t for tid, t in ends.items() if t is not None}
+            frames_at, wanted = {}, sorted(set(ends.values()))
+            for _, t, frame in RecordedClipSource(Path(args.source)):
+                while wanted and t >= wanted[0]:
+                    frames_at[wanted.pop(0)] = frame
+                if not wanted:
+                    break
+            for tid, t_end in ends.items():
+                frame = frames_at.get(t_end)
+                here = (bins_mod.detect_openings(frame, WORKER_DIR / "state/bins-cache") if frame is not None else []) or openings
+                here = bins_mod.fill_from_reference(here, openings)
+                if bins_mod.same_openings(openings, here, frame.shape[1] if frame is not None else 1):
+                    here = openings  # fixed camera: the first frame's openings (nobody's arm over them)
+                else:
+                    camera_moved = True
+                msg = answers[tid][0]
+                went = bins_mod.thrown_into(trace.get(tid, []), here)
+                if went and went["bin"] in bins_mod.BIN_NAME:  # an opening of unknown type gives no verdict
+                    outcomes[tid] = dict(went, recommended=msg["bin"], correct=went["bin"] == msg["bin"], message=msg)
+                    print(f"  person {tid}: went into {went['label'] or went['bin']} -> {'CORRECT' if outcomes[tid]['correct'] else 'WRONG BIN'}",
+                          file=sys.stderr)
+            if camera_moved:
+                print("  the camera moved: openings are not drawn; results use the openings at each drop", file=sys.stderr)
         watcher.people.clear()  # pass 2 watches again from the start, on the same skeletons
         watcher.last_observed.clear()
         watcher.namer = None
         pose, watcher = ReplayPose(recorded.frames), PreparedWatcher(watcher, answers)
     guide = Guide(pose, watcher, Approach(area, homography), voice, log_path=Path(args.log), area=area, homography=homography)
+    guide.openings, guide.outcomes = ([] if camera_moved else openings), outcomes
+    guide.draw_area = not camera_moved
     stream = writer = tmp = None
     if not args.no_stream:
         from .stream import StreamServer
@@ -495,8 +551,24 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             "video": str(args.render), "source": str(args.source), "prepared": bool(args.prepared),
             "items": [{"track_id": int(tid), "message": m, "source": src} for tid, (m, src) in sorted((answers or {}).items())],
             "announcements": said, "fps": round(guide.fps, 1),
+            "openings": [{"bin": o["bin"], "label": o["label"], "box": list(o["box"])} for o in openings],
+            "camera_moved": camera_moved,
+            "outcomes": [{"track_id": int(tid), "recommended": o["recommended"], "thrown_into": o["bin"], "correct": o["correct"],
+                          "t": round(o["t"], 2)} for tid, o in sorted(outcomes.items())],
+            "model": getattr(namer_used["namer"], "model", args.namer),
         }
         Path(args.render).with_suffix(".json").write_text(json.dumps(report, indent=2))
+        if args.prepared:  # remember what the model said, per clip (state/demo-memory next to the log, never committed)
+            memory = demo_memory_dir(Path(args.log))
+            memory.mkdir(parents=True, exist_ok=True)
+            (memory / f"{Path(args.source).stem}.json").write_text(json.dumps(report, indent=2))
+            with (memory / "ledger.jsonl").open("a") as f:
+                for it in report["items"]:
+                    if it["message"]:
+                        out = next((o for o in report["outcomes"] if o["track_id"] == it["track_id"]), None)
+                        f.write(json.dumps({"clip": Path(args.source).name, "track_id": it["track_id"], "model": report["model"],
+                                            "spoken": gm.spoken(it["message"]), "source": it["source"],
+                                            "thrown_into": out and out["thrown_into"], "correct": out and out["correct"]}) + "\n")
     print(f"guide: {len(said)} announcement(s); fast path {guide.fps:.1f} fps (camera {source.fps:.0f} fps)", file=sys.stderr)
     used = namer_used["namer"]
     if used is not None and hasattr(used, "cost_usd"):
@@ -630,12 +702,17 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
                                          "default: the camera's fixed bin regions from demo-site.json")
     gd = sub.add_parser("guide", help="voice guide: tell a person with waste which bin, before they reach the bins")
     gd.add_argument("--source", required=True, help="camera index (0 = built-in webcam), rtsp:// URL, or a video file")
-    gd.add_argument("--area", required=True, help="one box around all the bins: x0,y0,x1,y1 in pixels, or 'pick' to draw it")
+    gd.add_argument("--area", required=True, help="one box around all the bins: x0,y0,x1,y1 in pixels, 'pick' to draw it, or 'auto' (a vision model finds the bins and their labels)")
     gd.add_argument("--show", action="store_true", help="show the camera view in a window (q to stop)")
     gd.add_argument("--prepared", action="store_true",
                     help="video file only: identify each person's item from the whole clip first (store-tuned demo), "
                          "then run the guide with the answers ready")
     gd.add_argument("--item", help="with --prepared: the catalog item everyone in the clip carries (skips identification)")
+    gd.add_argument("--claude-model", choices=["claude-haiku-5-5", "claude-sonnet-5-5"],
+                    help="default: Sonnet 5.5 for --prepared (more accurate; ~$0.004 per item), Haiku 5.5 live (fast)")
+    gd.add_argument("--min-hand", type=float, default=0.0,
+                    help="with --prepared: people whose hand crop is smaller than this fraction of the frame width are "
+                         "background (not identified, not announced), e.g. 0.1 for a hand-held phone clip")
     gd.add_argument("--fullscreen", action="store_true",
                     help="the camera view full screen at full resolution, e.g. on a monitor behind the bins (f toggles, q stops)")
     gd.add_argument("--cctv", nargs="?", const="CAM 01", help="surveillance look: camera name + clock on the video")

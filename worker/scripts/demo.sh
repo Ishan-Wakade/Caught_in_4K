@@ -8,7 +8,7 @@ shift
 out_dir="${DEMO_OUT:-$HOME/Downloads/recyclone-demo}"
 mkdir -p "$out_dir"
 name="$(basename "${clip%.*}")"
-area="pick"
+area="auto"  # the bins are found by a vision model; --area pick draws them by hand
 for a in "$@"; do [[ "$a" == --area ]] && area=""; done
 cd "$(dirname "$0")/.."
 exec uv run recyclone-worker guide --source "$clip" ${area:+--area "$area"} --prepared --cctv --no-stream \

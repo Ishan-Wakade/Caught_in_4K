@@ -25,7 +25,7 @@ function err(status: number, error: string): Response {
   return Response.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export function guard(request: Request): Response | null {
+function guard(request: Request): Response | null {
   const token = process.env.GUIDE_TOKEN;
   if (!token) return err(503, "voice guide is not configured");
   const a = Buffer.from(request.headers.get("x-guide-token") ?? ""), e = Buffer.from(token);
@@ -43,12 +43,12 @@ export function guard(request: Request): Response | null {
   return null;
 }
 
-export class HttpError extends Error {
+class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
 /** The body as JSON, refusing anything over `limit` bytes: by its declared length first, then while streaming. */
-export async function json(request: Request, limit = MAX_CROPS * MAX_CROP_CHARS + 10_000): Promise<any> {
+async function json(request: Request, limit = MAX_CROPS * MAX_CROP_CHARS + 10_000): Promise<any> {
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > limit) throw new HttpError(413, "too large");
   const reader = request.body?.getReader();

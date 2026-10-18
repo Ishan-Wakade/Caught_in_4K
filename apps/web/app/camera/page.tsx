@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LogoMark } from "@/components/shell/Logo";
 import { PageNav } from "@/components/shell/SiteHeader";
-import { usePageVisible, type GuideStatus } from "@/hooks/useBrowserGuide";
-import { readGuideKey, useLiveGuide } from "@/hooks/useLiveGuide";
+import { usePageVisible, useBrowserGuide, type GuideStatus } from "@/hooks/useBrowserGuide";
 import { APP_NAME } from "@/lib/config";
 import { BIN_HEX } from "@/lib/format";
-import { shownText } from "@/lib/guide/message";
 import type { Banner, Progress } from "@/lib/guide/engine";
 import type { BinType } from "@/lib/types";
 
@@ -16,27 +14,8 @@ import type { BinType } from "@/lib/types";
 const FADE_MS = 200;
 
 const BIN_TYPE: Record<string, BinType> = { recycle: "recycling", compost: "compost", trash: "trash" };
-/** Who answered (shown with ?debug only): Claude with a rule-based bin, or Claude + Jev for an item the rules don't settle. */
-const SOURCE: Record<string, string> = { clip: "on-device CLIP", llm: "Claude + Jev", catalog: "Claude (rule-based bin)", default: "not sure: trash" };
-
-/**
- * This page's model (18 Oct): Jolie's live camera engine with the improvements of hooks/useLiveGuide.ts (one Claude
- * call per item, ~110 product types with rule-based bins, head-free crops, no on-device catalog guess), drawn in the
- * worker's look (green skeleton, black item box); the page itself (layout, bin card, prompts) is unchanged. Same
- * fields as useBrowserGuide. The server model needs the demo key (#key=…); without it the page says so.
- */
-function useImprovedGuide(active: boolean, videoRef: RefObject<HTMLVideoElement | null>, canvasRef: RefObject<HTMLCanvasElement | null>) {
-  const [token, setToken] = useState<string | null>(null);
-  useEffect(() => setToken(readGuideKey()), []);
-  const source = useMemo(() => (active && token ? ({ kind: "camera", facing: "user" } as const) : null), [active, token]);
-  const g = useLiveGuide(source, token ?? "", videoRef, canvasRef, { stamp: false, zone: true });
-  const noKey = token === "";
-  const status: GuideStatus = noKey ? "error" : token === null ? "loading" : g.status === "idle" || g.status === "ended" ? "paused" : g.status;
-  return {
-    status, progress: g.progress, people: g.people, banner: g.banner, inView: g.inView, checking: g.checking, unsure: g.unsure,
-    error: noKey ? "open this page with the demo key link" : g.error, smart: g.status === "live", sound: g.sound, enableSound: g.toggleSound,
-  };
-}
+/** Who answered (shown with ?debug only): CLIP on this device, or DeepSeek + Jev on the server (the full model). */
+const SOURCE: Record<string, string> = { clip: "on-device CLIP", llm: "DeepSeek + Jev", catalog: "DeepSeek", default: "not sure: trash" };
 
 /** ?debug in the URL: also show which model answered. Read after mounting, so the server render matches. */
 function useDebug(): boolean {
@@ -103,6 +82,7 @@ function PromptLine({ status, error, checking, unsure, hidden }: {
 function BinCard({ banner, shown, debug }: { banner: Banner; shown: boolean; debug: boolean }) {
   const bin = BIN_TYPE[banner.message.bin];
   const background = banner.fallback || !bin ? "#A4502F" : BIN_HEX[bin].fill;
+  const explanation = banner.message.explanation;
   return (
     <div
       aria-hidden={!shown}
@@ -113,7 +93,7 @@ function BinCard({ banner, shown, debug }: { banner: Banner; shown: boolean; deb
         {banner.message.bin.toUpperCase()}
       </div>
       <div className="mt-2 text-[clamp(22px,2.4vw,34px)] leading-snug text-card">
-        {shownText(banner.message)}.
+        {explanation.charAt(0).toUpperCase() + explanation.slice(1)}.
       </div>
       {debug && banner.source && SOURCE[banner.source] ? (
         <div className="mt-1 font-mono text-[15px] text-card/75">{SOURCE[banner.source]}</div>
@@ -126,7 +106,7 @@ export default function CameraPage() {
   const visible = usePageVisible();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { status, progress, people, banner, inView, checking, unsure, error, smart, sound, enableSound } = useImprovedGuide(visible, videoRef, canvasRef);
+  const { status, progress, people, banner, inView, checking, unsure, error, smart, sound, enableSound } = useBrowserGuide(visible, videoRef, canvasRef);
   const debug = useDebug();
   const last = useLastBanner(status === "live" ? banner : null);
   const cardShown = status === "live" && banner !== null && inView;
@@ -154,7 +134,7 @@ export default function CameraPage() {
       >
         <span className={`h-3 w-3 rounded-full ${dot}`} />
         {statusText(status, people, progress)}
-        {debug && smart ? " · Claude" : ""}
+        {debug && smart ? " · DeepSeek + Jev" : ""}
       </span>
       {smart ? (
         <button

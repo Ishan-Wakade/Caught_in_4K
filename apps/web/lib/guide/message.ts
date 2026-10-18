@@ -22,7 +22,7 @@ const MAX_WORDS = 8;
 const NOUN: Record<Exclude<Bin, "none">, string> = { compost: "compost", trash: "trash", recycle: "recycling" };
 const JEV_TO_BIN: Record<string, Exclude<Bin, "none">> = { compost: "compost", trash: "trash", recycling: "recycle" };
 const HAZARD: Array<[RegExp, string]> = [
-  [/\b(battery|batteries|electronic|electronics|phone|phones|smartphone|smartphones|cellphone|cell phone|mobile phone|iphone|tablet|laptop|charger|cable|headphones|earbuds|bulb|lamp|vape|e-cigarette)\b/, "the Recycle Center"],
+  [/\b(battery|batteries|electronic|electronics|phone|charger|cable|bulb|lamp|vape)\b/, "the Recycle Center"],
   [/\b(paint|chemical|chemicals|propane|medication|medicine|pesticide|oil|solvent|aerosol)\b/, "a hazardous waste drop-off"],
 ];
 
@@ -32,16 +32,9 @@ export function validateMessage(m: GuideMessage): void {
   if (m.bin !== "none" && m.explanation.split(/\s+/).length > MAX_WORDS) throw new Error("explanation longer than 8 words");
 }
 
-/** What people see and hear: the explanation without ", placed in <bin>" (the bin is already said first; Eymen,
- * 18 Oct). The message itself keeps the full explanation (signatures, worker parity). */
-export function shownText(m: GuideMessage): string {
-  const t = m.explanation.replace(/, placed in \w+$/, "");
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
 export function spoken(m: GuideMessage): string {
   validateMessage(m);
-  return `${m.bin[0].toUpperCase()}${m.bin.slice(1)}. ${shownText(m)}.`;
+  return `${m.bin[0].toUpperCase()}${m.bin.slice(1)}. ${m.explanation}`;
 }
 
 function placed(bin: Exclude<Bin, "none">, what: string): GuideMessage {

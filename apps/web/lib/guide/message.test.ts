@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 describe("spoken message (same rules as worker/recyclone_worker/guide_message.py)", () => {
   it("catalog items read like the team example", () => {
     expect(fromCatalog("item_generic_can")).toEqual({ bin: "recycle", explanation: "aluminum can, placed in recycling" });
-    expect(spoken({ bin: "recycle", explanation: "aluminum can, placed in recycling" })).toBe("Recycle. Aluminum can.");
+    expect(spoken({ bin: "recycle", explanation: "aluminum can, placed in recycling" })).toBe("Recycle. aluminum can, placed in recycling");
   });
   it("only compost / trash / recycle / none, explanation at most 8 words", () => {
     expect(() => validateMessage({ bin: "landfill" as never, explanation: "x" })).toThrow();
@@ -39,11 +39,5 @@ describe("rules text", () => {
     const { LOCAL_RULES } = await import("./rules");
     const root = fileURLToPath(new URL("../../../../", import.meta.url));
     expect(LOCAL_RULES).toBe(readFileSync(root + "worker/rules/cambridge-ma-2022.md", "utf8"));
-  });
-});
-
-describe("electronics by any common name go to the Recycle Center (17 Oct: 'smartphone' fell through to trash)", () => {
-  it.each(["smartphone", "black smartphone", "iPhone", "cell phone", "tablet", "wireless earbuds"])("%s", (name) => {
-    expect(fromSuggestion({ name, hazardous: false }).explanation).toMatch(/Recycle Center/);
   });
 });

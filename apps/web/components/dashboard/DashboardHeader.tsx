@@ -35,7 +35,7 @@ function usePendingCount(): number | null {
 function tabs(pending: number | null): NavLink[] {
   return [
     { href: "/dashboard", label: "Overview" },
-    { href: "/dashboard/live", label: "Live camera", match: (p) => p.startsWith("/dashboard/live") },
+    { href: "/camera", label: "Live camera" },
     { href: "/dashboard/bins", label: "Bins", match: (p) => p.startsWith("/dashboard/bins") },
     { href: "/dashboard/live-footage", label: "Live footage", match: (p) => p.startsWith("/dashboard/live-footage") },
     { href: "/dashboard/new-items", label: "New items", badge: pending ?? undefined, match: (p) => p.startsWith("/dashboard/new-items") },

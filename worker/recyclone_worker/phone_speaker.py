@@ -28,7 +28,7 @@ KEEP = 50  # sentences kept for reconnecting phones
 PING_S = 15.0  # keeps idle connections (and Wi-Fi power saving) from closing the stream
 KEY = re.compile(r"[0-9a-f]{16}")
 POLL_S = 10.0  # a long poll answers at the next sentence or after this long with none
-TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+TUNNEL_URL = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")  # not Cloudflare's own api host
 
 
 def tunnel_url(line: str) -> str | None:

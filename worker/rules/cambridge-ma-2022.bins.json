@@ -1,116 +1,138 @@
 {
- "source": "worker/rules/cambridge-ma-2022.md (City of Cambridge DPW guide 2022/23 + cambridgema.gov/services/recycling, read 17 Oct 2026)",
- "note": "Standard bin per catalog item for the voice guide. Not confirmed by the city; 'undecided' rows need a person.",
- "items": {
-  "item_beanco_cup": {
-   "bin": "recycle",
-   "name": "clear plastic cup",
-   "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids"
-  },
-  "item_generic_cup": {
-   "bin": "recycle",
-   "name": "clear plastic cup",
-   "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids"
-  },
-  "item_tacostop_box": {
-   "bin": "trash",
-   "name": "fiber takeout box",
-   "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers; COMPOST lists only food, napkins, paper towels, coffee filters, tea bags"
-  },
-  "item_greenbowl_bowl": {
-   "bin": "trash",
-   "name": "fiber bowl",
-   "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers and paper plates; COMPOST lists only food, napkins, paper towels"
-  },
-  "item_generic_can": {
-   "bin": "recycle",
-   "name": "aluminum can",
-   "basis": "Cambridge guide 2022/23: RECYCLE: metal cans and foil"
-  },
-  "item_napkin": {
-   "bin": "compost",
-   "name": "paper napkin",
-   "basis": "Cambridge guide 2022/23: COMPOST: napkins and paper towels"
-  },
-  "item_chip_bag": {
-   "bin": "trash",
-   "name": "chip bag",
-   "basis": "Cambridge guide 2022/23: NOT recycling: plastic bags/film, wrappers"
-  },
-  "item_shakeshack_cup": {
-   "bin": "recycle",
-   "name": "clear plastic cup",
-   "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids"
-  },
-  "item_shakeshack_box": {
-   "bin": "trash",
-   "name": "kraft burger box",
-   "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers; COMPOST lists only food, napkins, paper towels"
-  },
-  "item_sauce_cup": {
-   "bin": "trash",
-   "name": "sauce cup with sauce",
-   "basis": "Cambridge guide 2022/23: RECYCLE requires no food or liquids; a used sauce cup still has food. Rinsed, it would be recycling"
-  },
-  "item_goldfish_bag": {
-   "bin": "trash",
-   "name": "snack bag",
-   "basis": "Cambridge guide 2022/23: NOT recycling: wrappers, plastic film"
-  },
-  "item_biscoff_wrapper": {
-   "bin": "trash",
-   "name": "cookie wrapper",
-   "basis": "Cambridge guide 2022/23: NOT recycling: wrappers"
-  },
-  "item_granola_wrapper": {
-   "bin": "trash",
-   "name": "granola bar wrapper",
-   "basis": "Cambridge guide 2022/23: NOT recycling: wrappers"
-  },
-  "item_generic_bottle": {
-   "bin": "recycle",
-   "name": "plastic bottle",
-   "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; empty it first"
-  },
-  "item_generic_container": {
-   "bin": "recycle",
-   "name": "plastic container",
-   "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids"
-  },
-  "item_generic_paper_cup": {
-   "bin": "trash",
-   "name": "paper coffee cup",
-   "basis": "undecided by the guide (paper cups not listed); trash per the city's Get Rid of It Right tool for coffee cups, to be confirmed"
-  },
-  "item_generic_box": {
-   "bin": "trash",
-   "name": "paper takeout box",
-   "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers; COMPOST lists only food, napkins, paper towels"
-  },
-  "item_generic_paper": {
-   "bin": "recycle",
-   "name": "clean paper",
-   "basis": "Cambridge guide 2022/23: RECYCLE: paper and cardboard"
-  },
-  "item_generic_glass": {
-   "bin": "recycle",
-   "name": "glass bottle",
-   "basis": "Cambridge guide 2022/23: RECYCLE: glass bottles and jars"
-  },
-  "item_generic_wrapper": {
-   "bin": "trash",
-   "name": "snack wrapper",
-   "basis": "Cambridge guide 2022/23: NOT recycling: wrappers, plastic film"
-  },
-  "item_generic_utensil": {
-   "bin": "trash",
-   "name": "plastic cutlery",
-   "basis": "undecided by the guide (cutlery not listed; not a container); trash, to be confirmed"
-  },
-  "item_generic_food": {
-   "bin": "compost",
-   "name": "food scraps",
-   "basis": "Cambridge guide 2022/23: COMPOST: all food scraps"
+  "source": "worker/rules/cambridge-ma-2022.md (City of Cambridge DPW guide 2022/23 + cambridgema.gov/services/recycling, read 17 Oct 2026)",
+  "note": "Standard bin per catalog item for the voice guide. Not confirmed by the city; 'undecided' rows need a person. reason: the short spoken \"because ...\" for each item, written from its basis (17 Oct).",
+  "items": {
+    "item_beanco_cup": {
+      "bin": "recycle",
+      "name": "clear plastic cup",
+      "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids",
+      "reason": "clean plastic cups are recyclable in Cambridge"
+    },
+    "item_generic_cup": {
+      "bin": "recycle",
+      "name": "clear plastic cup",
+      "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids",
+      "reason": "clean plastic cups are recyclable in Cambridge"
+    },
+    "item_tacostop_box": {
+      "bin": "trash",
+      "name": "fiber takeout box",
+      "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers; COMPOST lists only food, napkins, paper towels, coffee filters, tea bags",
+      "reason": "paper takeout containers are not recyclable or compostable here"
+    },
+    "item_greenbowl_bowl": {
+      "bin": "trash",
+      "name": "fiber bowl",
+      "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers and paper plates; COMPOST lists only food, napkins, paper towels",
+      "reason": "paper bowls and plates are not recyclable or compostable here"
+    },
+    "item_generic_can": {
+      "bin": "recycle",
+      "name": "aluminum can",
+      "basis": "Cambridge guide 2022/23: RECYCLE: metal cans and foil",
+      "reason": "metal cans are recyclable in Cambridge"
+    },
+    "item_napkin": {
+      "bin": "compost",
+      "name": "paper napkin",
+      "basis": "Cambridge guide 2022/23: COMPOST: napkins and paper towels",
+      "reason": "napkins and paper towels are compostable"
+    },
+    "item_chip_bag": {
+      "bin": "trash",
+      "name": "chip bag",
+      "basis": "Cambridge guide 2022/23: NOT recycling: plastic bags/film, wrappers",
+      "reason": "chip bags and plastic film cannot be recycled"
+    },
+    "item_shakeshack_cup": {
+      "bin": "recycle",
+      "name": "clear plastic cup",
+      "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids",
+      "reason": "clean plastic cups are recyclable in Cambridge"
+    },
+    "item_shakeshack_box": {
+      "bin": "trash",
+      "name": "kraft burger box",
+      "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers; COMPOST lists only food, napkins, paper towels",
+      "reason": "paper takeout containers are not recyclable or compostable here"
+    },
+    "item_sauce_cup": {
+      "bin": "trash",
+      "name": "sauce cup with sauce",
+      "basis": "Cambridge guide 2022/23: RECYCLE requires no food or liquids; a used sauce cup still has food. Rinsed, it would be recycling",
+      "reason": "containers with food left in them cannot be recycled"
+    },
+    "item_goldfish_bag": {
+      "bin": "trash",
+      "name": "snack bag",
+      "basis": "Cambridge guide 2022/23: NOT recycling: wrappers, plastic film",
+      "reason": "snack bags and plastic film cannot be recycled"
+    },
+    "item_biscoff_wrapper": {
+      "bin": "trash",
+      "name": "cookie wrapper",
+      "basis": "Cambridge guide 2022/23: NOT recycling: wrappers",
+      "reason": "wrappers cannot be recycled or composted"
+    },
+    "item_granola_wrapper": {
+      "bin": "trash",
+      "name": "granola bar wrapper",
+      "basis": "Cambridge guide 2022/23: NOT recycling: wrappers",
+      "reason": "wrappers cannot be recycled or composted"
+    },
+    "item_generic_bottle": {
+      "bin": "recycle",
+      "name": "plastic bottle",
+      "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; empty it first",
+      "reason": "empty plastic bottles are recyclable in Cambridge"
+    },
+    "item_generic_container": {
+      "bin": "recycle",
+      "name": "plastic container",
+      "basis": "Cambridge guide 2022/23: RECYCLE: plastic containers; no food or liquids",
+      "reason": "clean plastic containers are recyclable in Cambridge"
+    },
+    "item_generic_paper_cup": {
+      "bin": "trash",
+      "name": "paper coffee cup",
+      "basis": "undecided by the guide (paper cups not listed); trash per the city's Get Rid of It Right tool for coffee cups, to be confirmed",
+      "reason": "lined paper coffee cups are not recyclable here"
+    },
+    "item_generic_box": {
+      "bin": "trash",
+      "name": "paper takeout box",
+      "basis": "Cambridge guide 2022/23: NOT recycling: paper takeout containers; COMPOST lists only food, napkins, paper towels",
+      "reason": "paper takeout containers are not recyclable or compostable here"
+    },
+    "item_generic_paper": {
+      "bin": "recycle",
+      "name": "clean paper",
+      "basis": "Cambridge guide 2022/23: RECYCLE: paper and cardboard",
+      "reason": "clean paper and cardboard are recyclable"
+    },
+    "item_generic_glass": {
+      "bin": "recycle",
+      "name": "glass bottle",
+      "basis": "Cambridge guide 2022/23: RECYCLE: glass bottles and jars",
+      "reason": "glass bottles and jars are recyclable"
+    },
+    "item_generic_wrapper": {
+      "bin": "trash",
+      "name": "snack wrapper",
+      "basis": "Cambridge guide 2022/23: NOT recycling: wrappers, plastic film",
+      "reason": "wrappers cannot be recycled or composted"
+    },
+    "item_generic_utensil": {
+      "bin": "trash",
+      "name": "plastic cutlery",
+      "basis": "undecided by the guide (cutlery not listed; not a container); trash, to be confirmed",
+      "reason": "plastic cutlery is not accepted in recycling"
+    },
+    "item_generic_food": {
+      "bin": "compost",
+      "name": "food scraps",
+      "basis": "Cambridge guide 2022/23: COMPOST: all food scraps",
+      "reason": "all food scraps are compostable"
+    }
   }
- }
 }

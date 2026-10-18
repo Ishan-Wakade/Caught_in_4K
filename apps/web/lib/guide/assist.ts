@@ -1,8 +1,8 @@
 /**
  * The live camera page's bridge to the full model: every held item is sent (face-redacted hand crops) to
  * /api/guide/identify, where DeepSeek names it and Jev picks the bin under the city's rules. One answer per item, shown
- * and spoken once decided (no switching between guesses): CLIP's catalog answer as soon as it has one (on this device,
- * fastest), else the server's. No answer at all in time -> trash (the team's default) -- or, for the live demo
+ * and spoken once decided (no switching between guesses): the server's if it answers within CLIP_WAIT_S, else CLIP's
+ * catalog answer (on this device). No answer at all in time -> trash (the team's default) -- or, for the live demo
  * (SAY_TRASH_WHEN_UNSURE off), nothing: unsure answers and failures are not shown or spoken. Spoken once per item.
  */
 import { defaultTrash, type GuideMessage } from "./message";
@@ -19,9 +19,10 @@ const RETRIES = 1;
 export const SAY_TRASH_WHEN_UNSURE = false;
 /** Held this long without the server's answer: decide with what we have. */
 export const GIVE_UP_AFTER_S = 2.0; // 17 Oct: was 4 s; a server answer after this still shows
-/** CLIP knows the item (catalog): wait this long for the server's answer before using CLIP's. 0: at once (17 Oct, the
- * 2 s wait made catalog items feel slow). */
-export const CLIP_WAIT_S = 0;
+/** CLIP knows the item (catalog): wait this long for the server's answer before using CLIP's. Was 0 (17 Oct, a 2 s
+ * wait felt slow), but CLIP can only pick a catalog item, so off-catalog items got the nearest one at once: a metal
+ * water bottle was "plastic bottle" every time (17 Oct evening). 1.5 s lets DeepSeek + Jev answer first. */
+export const CLIP_WAIT_S = 1.5;
 
 export type Asked = { message: GuideMessage | null; source: string; sig: string | null };
 export type Shown = { message: GuideMessage; fallback: boolean; source: string };

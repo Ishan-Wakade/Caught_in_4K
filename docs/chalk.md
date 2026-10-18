@@ -10,11 +10,21 @@ and audio export. The shared live-model providers, tracker, guide renderer and v
 unchanged. A normal live invocation never imports the Chalk adapters; setting Chalk environment variables
 alone does not enable them.
 
+The prerecorded `scripts/demo.sh` command now selects Claude Sonnet 5.5 and Chalk by default,
+replacing DeepSeek for recognition while retaining Jev through the same gateway. Direct live-model
+providers and defaults are unchanged.
+
 The gateway was configured and verified on 17 October 2026 in the team's Chalk environment. A fresh
 IMG_9121.MOV analysis made four successful DeepSeek vision requests through Chalk with zero local cache hits.
 The clip matched a catalog item, so Jev was not called by that video run. Jev was verified separately through
 Chalk's `/alpha/decisions` endpoint, using the same typed state/questions payload; `/v1/systemone` returned a
 provider configuration error on the managed gateway. This does not deploy Chalk Evaluations.
+
+On 18 October, the Claude connection and restricted Claude/Jev gateway key were verified. A fresh
+IMG_9121.MOV render made two successful Claude Sonnet 5.5 requests through Chalk with zero local cache
+hits; all 374 video frames and mixed audio decoded successfully. This clip again matched a catalog
+item, so Jev transport was checked separately with one successful gateway request. These checks
+establish working transport and rendering, not recognition or bin-choice accuracy.
 
 ## Configure your Chalk environment
 
@@ -35,6 +45,12 @@ CHALK_DEEPSEEK_MODEL=your-configured-deepseek-model-or-route
 CHALK_JEV_MODEL=your-configured-jev-model-or-route
 ```
 
+The repository secrets are `ANTHROPIC_API_KEY`, `CHALK_ROUTER_API_KEY`, `CHALK_ENVIRONMENT_ID`,
+`CHALK_CLAUDE_MODEL`, and `CHALK_JEV_MODEL`. The Anthropic key belongs in Chalk's provider connection;
+the prerecorded worker uses the restricted gateway key. GitHub secrets do not automatically populate
+a local worker or Modal: configure that runtime separately. Never expose either credential with a
+`NEXT_PUBLIC_` prefix.
+
 Only the selected vision provider's model and the Jev model are required. The worker reads this file directly;
 it does not load the root `.env` automatically. Environment variables override file values.
 Direct Anthropic, DeepSeek and TypeSafe keys are unnecessary on the worker in Chalk mode.
@@ -49,7 +65,9 @@ uv run recyclone-worker guide --source /absolute/path/to/clip.MOV \
   --voice say --no-stream --render /absolute/path/to/result.mp4
 ```
 
-Or use `bash scripts/demo.sh /absolute/path/to/clip.MOV --chalk --area pick --namer deepseek`.
+Or use `bash scripts/demo.sh /absolute/path/to/clip.MOV`, which selects Claude Sonnet through Chalk
+and opens the local bin-area picker. A forced `--item` is incompatible with this gateway demo;
+use the underlying `guide --prepared` command without Chalk for a forced-item presentation.
 Use pixel coordinates instead of `pick` for a headless run. Manually mark one area around the bins and floor.
 `--area auto` is rejected in Chalk mode: the existing bin detector sends whole frames, which violates the
 worker's item-crops-only cloud boundary. This adapter does not extend that behavior. No actual-bin verdict

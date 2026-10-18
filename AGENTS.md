@@ -13,6 +13,7 @@ The root README describes the intended finished product. Inspect implementation 
 - Recognize a person carrying an item, identify its product type, and announce the correct destination early enough to affect their choice.
 - Mark **one bin area for the entire set of bins**. Separate boxes for each bin are not required.
 - Chalk integration, bin overlays and render changes are restricted to the prerecorded `--prepared` workflow. Keep live model providers, tracking, speech and rendering unchanged; use the separate `prepared_*` adapters. See `docs/chalk.md` and `docs/bin-overlays.md`.
+- The prerecorded demo script defaults to Claude Sonnet 5.5 through Chalk, with Jev also routed through Chalk. DeepSeek is no longer selected by that script; this decision does not change the live model.
 - Record items brought to the bin area, their categories, and the guidance given. This design does not establish which individual bin an item actually entered.
 - Keep transient person tracks for approach and cooldown logic; do not identify people.
 - The old demo centered on manager messages, Grok bin illustrations, fullness alerts, and six disposal scenarios is superseded. Do not maintain or extend that demo as part of this roadmap unless the user requests it.

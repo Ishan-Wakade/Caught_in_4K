@@ -36,7 +36,7 @@ function DrawnContents({ bin, y }: { bin: BinStatus; y: number }) {
 }
 
 /** Large bin: the bin itself fills to the estimated level, with the illustration inside. */
-export function BinFigure({ bin, height = 300 }: { bin: BinStatus; height?: number }) {
+export function BinFigure({ bin, height = 300, showThreshold = true }: { bin: BinStatus; height?: number; showThreshold?: boolean }) {
   const uid = useId().replace(/:/g, "");
   const c = BIN_HEX[bin.type];
   const unknown = fillUnknown(bin);
@@ -102,10 +102,14 @@ export function BinFigure({ bin, height = 300 }: { bin: BinStatus; height?: numb
 
       <rect x="120" y="28" width="60" height="16" rx="8" fill={c.fill} />
       <rect x="24" y="40" width="252" height="28" rx="14" fill={c.fill} />
-      <line x1="44" y1={ty} x2="256" y2={ty} stroke="#2F332B" strokeOpacity="0.55" strokeWidth="2" strokeDasharray="6 6" />
-      <text x="266" y={ty + 5} fontFamily="var(--font-dm-sans), sans-serif" fontSize="14" fill="#5E6357">
-        empty at {Math.round(bin.fullness_threshold * 100)}%
-      </text>
+      {showThreshold && (
+        <>
+          <line x1="44" y1={ty} x2="256" y2={ty} stroke="#2F332B" strokeOpacity="0.55" strokeWidth="2" strokeDasharray="6 6" />
+          <text x="266" y={ty + 5} fontFamily="var(--font-dm-sans), sans-serif" fontSize="14" fill="#5E6357">
+            empty at {Math.round(bin.fullness_threshold * 100)}%
+          </text>
+        </>
+      )}
     </svg>
   );
 }

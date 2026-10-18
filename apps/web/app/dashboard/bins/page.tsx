@@ -4,6 +4,46 @@ import { Section, num } from "@/components/dashboard/charts";
 import { useFilters } from "@/components/dashboard/DashboardContext";
 import { Filters } from "@/components/dashboard/Filters";
 import { DEST_COLOR, DEST_LABEL, DESTINATIONS, SITES, countBy, slice, windowFor, type Destination } from "@/lib/dashboard/sample";
+import { BinFigure } from "@/components/BinFigure";
+import type { BinStatus } from "@/lib/types";
+
+/**
+ * Large, purely decorative echoes of the three bins, framing the page on both sides — this product tracks no real
+ * fullness (see DestIcon below), so these use fixed, representative levels rather than claiming real data.
+ */
+const DECORATIVE_BIN: Record<"trash" | "recycling" | "compost", BinStatus> = {
+  trash: {
+    bin_id: "deco-trash", name: "Trash", station_id: "", station_name: "", camera_id: "", type: "trash",
+    capacity_l: 100, estimated_fullness: 0.55, estimated_volume_l: 55, fullness_threshold: 0.8,
+    observed_counts: [], unknown_count: 0, observed_total: 5, initial_contents_known: true, assumed_initial_l: 0,
+    illustration: null, last_emptied_at: null,
+  },
+  recycling: {
+    bin_id: "deco-recycling", name: "Recycling", station_id: "", station_name: "", camera_id: "", type: "recycling",
+    capacity_l: 100, estimated_fullness: 0.45, estimated_volume_l: 45, fullness_threshold: 0.8,
+    observed_counts: [], unknown_count: 0, observed_total: 4, initial_contents_known: true, assumed_initial_l: 0,
+    illustration: null, last_emptied_at: null,
+  },
+  compost: {
+    bin_id: "deco-compost", name: "Compost", station_id: "", station_name: "", camera_id: "", type: "compost",
+    capacity_l: 100, estimated_fullness: 0.2, estimated_volume_l: 20, fullness_threshold: 0.8,
+    observed_counts: [], unknown_count: 0, observed_total: 3, initial_contents_known: true, assumed_initial_l: 0,
+    illustration: null, last_emptied_at: null,
+  },
+};
+
+function FloatingBins({ side }: { side: "left" | "right" }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none fixed top-1/2 z-10 hidden -translate-y-1/2 flex-col gap-8 2xl:flex ${side === "left" ? "left-6" : "right-6"}`}
+    >
+      <BinFigure bin={DECORATIVE_BIN.trash} height={220} showThreshold={false} />
+      <BinFigure bin={DECORATIVE_BIN.recycling} height={220} showThreshold={false} />
+      <BinFigure bin={DECORATIVE_BIN.compost} height={220} showThreshold={false} />
+    </div>
+  );
+}
 
 /**
  * Destination glyph, one size for all four so the card headers line up. The bins are the shape of the /bins drawing,
@@ -60,6 +100,8 @@ export default function BinsPage() {
 
   return (
     <>
+      <FloatingBins side="left" />
+      <FloatingBins side="right" />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="m-0 font-display text-[40px] leading-none font-bold">Bins</h1>

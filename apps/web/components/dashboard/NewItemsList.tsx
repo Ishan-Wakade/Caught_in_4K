@@ -5,6 +5,7 @@ import { Swatch } from "@/components/dashboard/charts";
 import { DEST_LABEL } from "@/lib/dashboard/sample";
 import type { CatalogRow } from "@/lib/dashboard/db";
 import { askForManagerToken, getManagerToken } from "@/lib/managerToken";
+import { PENDING_CHANGED } from "./DashboardHeader";
 
 type Decision = "approved" | "rejected";
 type RowState = { decision?: Decision; pending?: boolean; error?: string };
@@ -50,6 +51,7 @@ export function NewItemsList({ initial }: { initial: CatalogRow[] }) {
     try {
       await postDecision(id, decision);
       setRows((s) => ({ ...s, [id]: { decision } }));
+      window.dispatchEvent(new Event(PENDING_CHANGED));
     } catch (e) {
       setRows((s) => ({ ...s, [id]: { error: e instanceof Error ? e.message : "Failed" } }));
     }

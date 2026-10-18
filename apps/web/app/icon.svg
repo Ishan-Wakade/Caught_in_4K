@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
+  <!-- The logo lens's three-arc recycling mark (components/shell/Logo.tsx), alone: no ring or fill to show on any tab bar.
+       The grey arc goes lighter on dark tab bars (the logo's dark tone). -->
+  <style>
+    .grey { stroke: #6E706B; }
+    @media (prefers-color-scheme: dark) {
+      .grey { stroke: #A3A59F; }
+    }
+  </style>
+  <path class="grey" d="M22 6 A16 16 0 0 1 37.76 24.78" fill="none" stroke-width="7" stroke-linecap="round" />
+  <path d="M35.86 30 A16 16 0 0 1 11.72 34.26" fill="none" stroke="#5B86B0" stroke-width="7" stroke-linecap="round" />
+  <path d="M8.14 30 A16 16 0 0 1 16.53 6.96" fill="none" stroke="#5B9447" stroke-width="7" stroke-linecap="round" />
+</svg>

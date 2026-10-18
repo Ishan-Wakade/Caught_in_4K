@@ -62,6 +62,8 @@ spoken as "Recycling. Aluminum can should be placed in recycling because metal c
 - Keep secrets outside Git and out of browser bundles. Use configuration/environment variables without committing real keys.
 - Validate container runtime and GPU access separately from native Mac development. The design calls for Linux/NVIDIA hardware or measured CPU performance for store deployment; do not assume Mac MPS behavior carries into Docker.
 
+- **Public "Try your video" tab (user decision, 17 Oct):** visitors upload their own clip from `/upload`. `worker/modal_app.py` runs `recyclone_worker/job.py` (the prerecorded `guide --prepared --headless --render` pipeline) on Modal and returns the annotated video for viewing and download. This is a deliberate cloud exception for visitor-supplied videos, not store footage. Keep its limits (size, length, per-IP and daily caps, 24 h retention) and provider keys in Modal, never in the browser. Label it as a demo of offline processing, not real-time store operation.
+
 ## Dashboard requirements
 
 - Report how many items were categorized, grouped into trash/recycle/compost and item-type subcategories, over time and by site/camera. Define how `None`, fallbacks, and repeat visits appear before finalizing counts.

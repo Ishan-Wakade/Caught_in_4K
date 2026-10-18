@@ -21,6 +21,7 @@ WORKER_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_YOLO = WORKER_DIR / "weights/yolo11n.pt"
 DEFAULT_CLIP = WORKER_DIR / "weights/clip/ViT-B-32.pt"
 OUTBOX = WORKER_DIR / "state/outbox.jsonl"
+NO_BINS = 3  # guide --headless exit code: --area auto found no bins (job.py turns it into "no_bins")
 
 
 def make_sink(args):
@@ -368,14 +369,22 @@ def cmd_guide(args, make_guide_parts=None) -> int:
     voice.prepare([gm.spoken(gm.from_catalog(c, table)) for c in table] + [gm.spoken(gm.default_trash(None))])  # before the camera
     source = LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))
     openings: list[dict] = []
+    if args.headless and args.area == "pick":
+        print("--headless cannot draw the area by hand: pass --area auto or x0,y0,x1,y1", file=sys.stderr)
+        return 2
     if args.area == "auto":  # find the bins with a vision model (bins.py); fixed camera: once, on the first frame
         from . import bins
+
+        print("stage: finding bins", file=sys.stderr)
 
         first_frame = next(iter(LiveCameraSource(args.source) if live else RecordedClipSource(Path(args.source))))[2]
         openings = bins.detect_openings(first_frame, WORKER_DIR / "state/bins-cache")
         if openings:
             args.area = ",".join(str(v) for v in bins.area_from_openings(openings, first_frame.shape[1], first_frame.shape[0]))
             print("bins: " + ", ".join(f"{o['label']} ({o['bin']})" for o in openings) + f"  -> --area {args.area}", file=sys.stderr)
+        elif args.headless:  # no one to draw it (the upload page): the caller asks the person for a box instead
+            print("bins: none found", file=sys.stderr)
+            return NO_BINS
         else:
             print("bins: none found; draw the area by hand", file=sys.stderr)
             args.area = "pick"
@@ -442,6 +451,7 @@ def cmd_guide(args, make_guide_parts=None) -> int:
         if args.item and args.item not in table:
             print(f"--item {args.item} is not in the bin table ({Path(args.bins).name})", file=sys.stderr)
             return 2
+        print("stage: identifying", file=sys.stderr)
         print("preparing: the whole clip through YOLO pose + CLIP, then each person's item identified once", file=sys.stderr)
         recorded, trace = RecordingPose(pose), {}
         from .approach import distance_m
@@ -452,7 +462,7 @@ def cmd_guide(args, make_guide_parts=None) -> int:
         for tid, (msg, src) in sorted(answers.items()):
             print(f"  person {tid}: {gm.spoken(msg) if msg else '(nothing identifiable: not announced)'}  [{src}]", file=sys.stderr)
         voice.prepare([gm.spoken(m) for m, _ in answers.values() if m])
-        if openings:  # which opening each announced item went into (bins.thrown_into)
+        if openings and not args.no_verdict:  # which opening each announced item went into (bins.thrown_into)
             from . import bins as bins_mod
 
             # the openings are found again on the frame where the item left the hand: a moving camera (IMG_9121 pans)
@@ -528,6 +538,8 @@ def cmd_guide(args, make_guide_parts=None) -> int:
             writer.stdin.write(np.ascontiguousarray(img).tobytes())
 
     frames = _realtime(source, source.fps) if (args.realtime and not live) else source
+    if args.render:
+        print("stage: rendering", file=sys.stderr)
     try:
         guide.run(frames, on_frame=on_frame if (stream or args.render or args.show or args.fullscreen) else None, cctv=args.cctv)
     except KeyboardInterrupt:  # Ctrl-C ends a live run: still finish the video and print the numbers
@@ -731,6 +743,11 @@ def main(argv=None, *, make_tracker=None, make_embedder=None, analyze_items=None
     gd.add_argument("--speaker-port", type=int, default=int(os.environ.get("SPEAKER_PORT", "8766")))
     gd.add_argument("--render", help="write the annotated video with the voice mixed in to this .mp4")
     gd.add_argument("--no-stream", action="store_true")
+    gd.add_argument("--no-verdict", action="store_true",
+                    help="with --prepared: do not work out which bin each item went into (no CORRECT / WRONG BIN on the "
+                         "video); the bins still set the area (upload page)")
+    gd.add_argument("--headless", action="store_true",
+                    help="no windows: if --area auto finds no bins, exit with code 3 instead of asking for a box (upload page)")
     gd.add_argument("--evidence-dir", default=str(WORKER_DIR / "evidence"))
     gd.add_argument("--log", default=str(WORKER_DIR / "state/guide-log.jsonl"))
     sub.add_parser("cameras", help="list the cameras this computer sees (iPhone via Continuity Camera included)")

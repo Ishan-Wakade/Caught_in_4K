@@ -181,7 +181,7 @@ class Clip:
         from PIL import Image
 
         self.torch, self.Image, self.clip = torch, Image, clip
-        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
+        self.device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
         self.model, self.pre = clip.load(str(weights), device=self.device)
 
     def images(self, crops: list[np.ndarray]) -> np.ndarray:

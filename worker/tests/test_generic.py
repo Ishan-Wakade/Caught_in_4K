@@ -69,3 +69,18 @@ def test_catalog_items_never_carry_a_proposal():
     item = namer.item_from_answer(dict(MASK, catalog_item_id="item_napkin", confidence=0.7,
                                        proposed_type={"generic_type_id": "gen_paper_napkin"}), {"candidates": []})
     assert "proposed_type" not in item
+
+
+def test_without_the_jev_cli_the_question_goes_to_the_http_api(monkeypatch):
+    sent = []
+
+    def post(url, headers, body, timeout):
+        sent.append((url, headers, json.loads(body)))
+        return {"answers": {"answer": {"type": "choice", "choice": "compost", "confidence": 0.7}}}
+
+    monkeypatch.setenv("TYPESAFE_API_KEY", "k")
+    ans = generic.run_jev_http('{"item": {}}', post=post)
+    assert ans["answers"]["answer"]["choice"] == "compost"  # the CLI's shape, so BinAdvisor reads it unchanged
+    url, headers, body = sent[0]
+    assert url == generic.JEV_URL and headers["Authorization"] == "Bearer k"
+    assert body["questions"]["answer"]["criteria"] == generic.DESTINATIONS and body["state"] == '{"item": {}}'

@@ -70,6 +70,10 @@ Hardware performance will be measured on the deployment device. Native Mac model
 
 Evaluation will measure announcement coverage, correct destinations, false announcements, recognition latency, and how much time the customer has between hearing the guidance and disposing of the item. Prerecorded footage, offline analysis, staged behavior, and live results will be identified explicitly.
 
+## Try your own video
+
+The public site's **Try your video** tab lets a visitor record or upload a short clip of themselves throwing something away. They get back the annotated video with the spoken guidance mixed in, which they can download. The clip is processed by the prerecorded-demo pipeline on a cloud GPU (Modal; see [deployment](docs/deployment.md)) and deleted after 24 hours. This is a demonstration of the recognition and speech on someone's own footage, not the store deployment. Results on footage the pipeline was not tuned on can be poor, and processing takes minutes, not real time.
+
 ## Repository guide
 
 - `worker/` — Python perception, identification, tracking, and video tools; the starting point for voice guidance.

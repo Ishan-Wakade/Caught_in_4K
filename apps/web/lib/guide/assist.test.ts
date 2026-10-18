@@ -27,14 +27,25 @@ describe("Assist (CLIP first, then DeepSeek + Jev on the held item)", () => {
     expect(identify).toHaveBeenCalledTimes(1);
   });
 
-  it("CLIP's catalog answer is shown and spoken at once, and a later server answer does not replace it", async () => {
-    expect(CLIP_WAIT_S).toBe(0);
+  it("the server's answer, when it comes within CLIP_WAIT_S, wins over CLIP's catalog answer", async () => {
     const { a } = make(async () => ({ message: CUP, source: "llm", sig: "ab" }));
-    const d = a.step(1, 0, 0, CLIP_CAN, () => [JPEG]);
+    expect(a.step(1, 0, 0, CLIP_CAN, () => [JPEG]).banner).toBeNull(); // waiting for the server
+    await flush();
+    const d = a.step(1, 0, 0.5, CLIP_CAN, () => [JPEG]);
+    expect(d.banner).toEqual({ message: CUP, fallback: false, source: "llm" });
+    expect(d.speak?.body).toEqual({ message: CUP, sig: "ab" });
+  });
+
+  it("server slower than CLIP_WAIT_S: CLIP's catalog answer is shown and spoken, and a later server answer does not replace it", async () => {
+    let answer: (r: Asked) => void = () => {};
+    const { a } = make(() => new Promise<Asked>((r) => (answer = r)));
+    a.step(1, 0, 0, CLIP_CAN, () => [JPEG]);
+    const d = a.step(1, 0, CLIP_WAIT_S, CLIP_CAN, () => [JPEG]);
     expect(d.banner).toEqual({ message: CLIP_CAN.message, fallback: false, source: "clip" });
     expect(d.speak?.body).toEqual({ kind: "catalog", id: "aluminum_can" });
+    answer({ message: CUP, source: "llm", sig: "ab" });
     await flush();
-    const later = a.step(1, 0, 0.5, CLIP_CAN, () => [JPEG]);
+    const later = a.step(1, 0, CLIP_WAIT_S + 0.5, CLIP_CAN, () => [JPEG]);
     expect(later.banner?.message).toEqual(CLIP_CAN.message);
     expect(later.speak).toBeNull();
   });

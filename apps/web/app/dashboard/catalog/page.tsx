@@ -50,7 +50,7 @@ export default async function CatalogPage() {
                     <th scope="col" className="border-b border-rule px-3 pb-1.5 text-xs font-medium text-muted">Bin</th>
                     <th scope="col" className="border-b border-rule px-3 pb-1.5 text-xs font-medium text-muted">Basis</th>
                     <th scope="col" className="border-b border-rule px-3 pb-1.5 text-right text-xs font-medium text-muted">Confidence</th>
-                    <th scope="col" className="border-b border-rule pl-3 pb-1.5 text-right text-xs font-medium text-muted">Times seen</th>
+                    <th scope="col" className="border-b border-rule pl-3 pb-1.5 text-right text-xs font-medium text-muted">Times caught</th>
                   </tr>
                 </thead>
                 <tbody>

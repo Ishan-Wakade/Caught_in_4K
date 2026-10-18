@@ -23,39 +23,56 @@ const BINS_LONG_SIDE = 1536; // bins.LONG_SIDE
  * (namer.MAX_SIDE, JPEG quality 88 as namer._jpeg). */
 const CROP_MIN_PX = 224;
 const CROP_MAX_PX = 512;
-/** A crop that is mostly blacked out (a head, or a face-detector false alarm on a small crop) is not sent at all. */
-const MAX_BLACK = 0.35;
 
+type Rect = { x0: number; y0: number; x1: number; y1: number };
 /**
- * redact.redactedCrop for /model: the same fail-closed redaction (every head box, then every face the detector finds,
- * filled black; an unsizable head touching the crop -> null), scaled up when small, and dropped when mostly black.
+ * Close-up crops (18 Oct: items held up close to a MacBook camera came back "not sure"): the item then fills much of
+ * the picture, so the crop is the hand box grown to CONTEXT and at least MIN_SHARE of the frame's short side, centred
+ * on the hand. Faces are covered twice, but face-sized: every face the face detector finds (+20% margin) and each
+ * person's head box shrunk to HEAD_SHRINK (the pose head box is ~1.2 x shoulder width, fail-closed sizing: filled
+ * whole it also blacked out an item held in front of the face). A head that cannot be sized: its whole box is filled.
  */
-export function itemCrop(source: CanvasImageSource, box: { x0: number; y0: number; x1: number; y1: number },
-  heads: Array<{ box: { x0: number; y0: number; x1: number; y1: number }; reliable: boolean }>, face: FaceFinder | null): string | null {
+const CONTEXT = 2.2;
+const MIN_SHARE = 0.5;
+const HEAD_SHRINK = 0.6;
+const FACE_MARGIN = 0.2;
+/** Only a crop that is nearly all black is not sent. */
+const MAX_BLACK_LIVE = 0.7;
+
+export function itemCrop(source: CanvasImageSource & { videoWidth?: number; videoHeight?: number }, box: Rect,
+  heads: Array<{ box: Rect; reliable: boolean }>, face: FaceFinder | null): string | null {
   if (!face) return null;
-  const w = box.x1 - box.x0, h = box.y1 - box.y0;
-  const s = Math.min(Math.max(1, CROP_MIN_PX / Math.min(w, h)), CROP_MAX_PX / Math.max(w, h));
+  const fw = source.videoWidth ?? 1e6, fh = source.videoHeight ?? 1e6;
+  const side = Math.min(Math.max(CONTEXT * Math.max(box.x1 - box.x0, box.y1 - box.y0), MIN_SHARE * Math.min(fw, fh)), fw, fh);
+  const cx = Math.min(Math.max((box.x0 + box.x1) / 2, side / 2), fw - side / 2);
+  const cy = Math.min(Math.max((box.y0 + box.y1) / 2, side / 2), fh - side / 2);
+  box = { x0: cx - side / 2, y0: cy - side / 2, x1: cx + side / 2, y1: cy + side / 2 };
+  const s = Math.min(1, CROP_MAX_PX / side);
   const c = document.createElement("canvas");
-  c.width = Math.round(w * s);
-  c.height = Math.round(h * s);
+  c.width = c.height = Math.round(side * s);
   const g = c.getContext("2d", { willReadFrequently: true })!;
   g.imageSmoothingQuality = "high";
-  g.drawImage(source, box.x0, box.y0, w, h, 0, 0, c.width, c.height);
+  g.drawImage(source, box.x0, box.y0, side, side, 0, 0, c.width, c.height);
   g.fillStyle = "#000";
   for (const hd of heads) {
-    const b = hd.box;
+    let b = hd.box;
+    if (hd.reliable) {
+      const hx = (b.x0 + b.x1) / 2, hy = (b.y0 + b.y1) / 2, r = (HEAD_SHRINK * (b.x1 - b.x0)) / 2;
+      b = { x0: hx - r, y0: hy - r, x1: hx + r, y1: hy + r };
+    }
     if (!(b.x1 > box.x0 && b.y1 > box.y0 && b.x0 < box.x1 && b.y0 < box.y1)) continue;
-    if (!hd.reliable) return null;
     g.fillRect((b.x0 - box.x0) * s, (b.y0 - box.y0) * s, (b.x1 - b.x0) * s, (b.y1 - b.y0) * s);
   }
   for (const d of face.detect(c).detections) {
     const bb = d.boundingBox;
-    if (bb) g.fillRect(bb.originX - 4, bb.originY - 4, bb.width + 8, bb.height + 8);
+    if (!bb) continue;
+    const mx = FACE_MARGIN * bb.width, my = FACE_MARGIN * bb.height;
+    g.fillRect(bb.originX - mx, bb.originY - my, bb.width + 2 * mx, bb.height + 2 * my);
   }
   const px = g.getImageData(0, 0, c.width, c.height).data;
   let black = 0;
   for (let i = 0; i < px.length; i += 4) if (px[i] === 0 && px[i + 1] === 0 && px[i + 2] === 0) black++;
-  if (black / (px.length / 4) > MAX_BLACK) return null;
+  if (black / (px.length / 4) > MAX_BLACK_LIVE) return null;
   return c.toDataURL("image/jpeg", 0.88);
 }
 

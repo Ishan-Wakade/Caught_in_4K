@@ -21,6 +21,8 @@ export type OverlayInput = {
   cam: string;
   now: Date;
   fps: number;
+  /** false: no camera name/clock, red dot or fps (Jolie's /camera has its own header and status there). */
+  stamp?: boolean;
 };
 
 const SKELETON = [[5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [0, 5], [0, 6]];
@@ -110,11 +112,13 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, w: number, h: number,
   const lw = Math.max(2, Math.floor(4 * big));
 
   // surveillance-camera look: name + clock top left, red dot top right
-  text(ctx, `${o.cam}  ${stamp(o.now)}`, 24 * big + 10, 60 * big + 30, 1.1 * big + 0.4, "#fff", ["#000", 6]);
-  ctx.fillStyle = "rgb(255,0,0)";
-  ctx.beginPath();
-  ctx.arc(w - 60 * big - 30, 110 * big + 30, 12 * big + 6, 0, 2 * Math.PI);
-  ctx.fill();
+  if (o.stamp !== false) text(ctx, `${o.cam}  ${stamp(o.now)}`, 24 * big + 10, 60 * big + 30, 1.1 * big + 0.4, "#fff", ["#000", 6]);
+  if (o.stamp !== false) {
+    ctx.fillStyle = "rgb(255,0,0)";
+    ctx.beginPath();
+    ctx.arc(w - 60 * big - 30, 110 * big + 30, 12 * big + 6, 0, 2 * Math.PI);
+    ctx.fill();
+  }
 
   // each bin opening with its label, in its bin's colour
   for (const op of o.openings) {
@@ -159,5 +163,5 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, w: number, h: number,
   }
 
   if (o.caption) bottomBar(ctx, w, h, o.caption);
-  text(ctx, `${Math.round(o.fps)} fps`, w - 200 * big - 40, 50 * big + 20, big + 0.3, "#fff");
+  if (o.stamp !== false) text(ctx, `${Math.round(o.fps)} fps`, w - 200 * big - 40, 50 * big + 20, big + 0.3, "#fff");
 }

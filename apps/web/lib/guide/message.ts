@@ -32,9 +32,16 @@ export function validateMessage(m: GuideMessage): void {
   if (m.bin !== "none" && m.explanation.split(/\s+/).length > MAX_WORDS) throw new Error("explanation longer than 8 words");
 }
 
+/** What people see and hear: the explanation without ", placed in <bin>" (the bin is already said first; Eymen,
+ * 18 Oct). The message itself keeps the full explanation (signatures, worker parity). */
+export function shownText(m: GuideMessage): string {
+  const t = m.explanation.replace(/, placed in \w+$/, "");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 export function spoken(m: GuideMessage): string {
   validateMessage(m);
-  return `${m.bin[0].toUpperCase()}${m.bin.slice(1)}. ${m.explanation}`;
+  return `${m.bin[0].toUpperCase()}${m.bin.slice(1)}. ${shownText(m)}.`;
 }
 
 function placed(bin: Exclude<Bin, "none">, what: string): GuideMessage {

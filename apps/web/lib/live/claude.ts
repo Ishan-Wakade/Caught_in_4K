@@ -19,7 +19,7 @@ const JEV_URL = "https://api.typesafe.ai/v1/systemone";
 export const ITEM_MODEL = process.env.LIVE_ITEM_MODEL || "claude-haiku-5-5";
 /** Haiku is fast but less sure on blurry real crops (17 Oct: IMG_9117 cup "not sure", IMG_9121 chip bag "sandwich in
  * wrapper"): an answer below ESCALATE_BELOW is asked again of this model on the same crops ("" turns it off). */
-export const ESCALATE_MODEL = process.env.LIVE_ESCALATE_MODEL ?? "claude-sonnet-5-5";
+export const ESCALATE_MODEL = process.env.LIVE_ESCALATE_MODEL ?? "";  // 18 Oct: off by default -- on small webcam crops Sonnet was as unsure as Haiku and took 2.3-2.5 s, past Jolie's 1.5 s wait
 export const ESCALATE_BELOW = 0.7;
 export const BINS_MODEL = process.env.LIVE_BINS_MODEL || "claude-sonnet-5-5";
 /** Each model's own "no thinking" (claude_namer.THINKING_OFF): Haiku 5.5 otherwise spends its budget thinking. */

@@ -36,6 +36,10 @@ export async function handleLiveIdentify(request: Request): Promise<Response> {
   }
   const t0 = Date.now();
   const r = await identifyItem(crops as string[], { anthropic: key, jev: process.env.TYPESAFE_API_KEY ?? "" });
+  // One text line per answer (no image data) so a live session can be checked from the Vercel logs.
+  console.info(`[identify] ${JSON.stringify({ source: r.source, name: r.item?.name ?? null, conf: r.item?.confidence ?? null, bin: r.message?.bin ?? null,
+    form: r.item?.form ?? null, model: r.model ?? null, ms: Date.now() - t0, crops: (crops as string[]).length,
+    kb: Math.round((crops as string[]).reduce((n, c) => n + c.length, 0) * 0.75 / 1024) })}`);
   return Response.json({ ...r, ms: Date.now() - t0, spoken: r.message ? spoken(r.message) : null, sig: r.message ? signMessage(r.message) : null },
     { headers: { "Cache-Control": "no-store" } });
 }

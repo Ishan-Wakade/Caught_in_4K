@@ -41,3 +41,9 @@ describe("rules text", () => {
     expect(LOCAL_RULES).toBe(readFileSync(root + "worker/rules/cambridge-ma-2022.md", "utf8"));
   });
 });
+
+describe("electronics by any common name go to the Recycle Center (17 Oct: 'smartphone' fell through to trash)", () => {
+  it.each(["smartphone", "black smartphone", "iPhone", "cell phone", "tablet", "wireless earbuds"])("%s", (name) => {
+    expect(fromSuggestion({ name, hazardous: false }).explanation).toMatch(/Recycle Center/);
+  });
+});

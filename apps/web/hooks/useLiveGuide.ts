@@ -8,6 +8,21 @@ import { loadFaceFinder, readGuideKey, type FaceFinder } from "@/lib/guide/redac
 import type { ItemAnswer } from "@/lib/live/claude";
 import { drawOverlay, itemAndBin } from "@/lib/live/overlay";
 import { itemCrop } from "@/lib/live/session";
+import { pickPrimary, raisedHands, upperBody, type Found } from "@/lib/live/focus";
+import { ZoneSession, loadFarFaceFinder } from "@/lib/live/zone";
+
+/** The "hold it here" zone: a thin rounded frame, so people know where to show the item. */
+function drawZone(ctx: CanvasRenderingContext2D, z: number[], w: number) {
+  const lw = Math.max(2, Math.round(w / 640));
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.lineWidth = lw;
+  ctx.setLineDash([lw * 6, lw * 5]);
+  ctx.beginPath();
+  ctx.roundRect(z[0], z[1], z[2] - z[0], z[3] - z[1], lw * 10);
+  ctx.stroke();
+  ctx.restore();
+}
 
 /**
  * Jolie's live camera model (lib/guide/engine.ts: YOLO11n-pose, her close-up hand scan, CLIP holding check, one steady
@@ -30,6 +45,7 @@ const HOLD_P = 0.35;
 
 let engineLoad: Promise<GuideEngine> | null = null;
 let faceLoad: Promise<FaceFinder | null> | null = null;
+let farFaceLoad: Promise<FaceFinder | null> | null = null;
 
 type Answer = Asked & { item?: ItemAnswer["item"]; ms?: number };
 
@@ -60,6 +76,23 @@ function speaker(token: string) {
   };
 }
 
+type Scene = { all: Found[]; primary: number };
+/**
+ * The engine as the live camera sees a crowded room (focus.ts): people() returns only the person at the camera, with
+ * lowered hands removed; `scene` keeps everyone found (for redacting the crop). Plus the lower holding bar below.
+ */
+function focused(engine: GuideEngine): GuideEngine & { scene: Scene } {
+  const view = withHoldBar(engine) as GuideEngine & { scene: Scene };
+  view.scene = { all: [], primary: -1 };
+  view.people = async (video: HTMLVideoElement) => {
+    const all = await engine.people(video);
+    const primary = pickPrimary(all, video.videoWidth, video.videoHeight);
+    view.scene = { all, primary };
+    return primary < 0 ? [] : [{ ...all[primary], kp: raisedHands(all[primary].kp) }];
+  };
+  return view;
+}
+
 /**
  * The engine with a lower "possibly held" bar for its CLIP watcher. Her on-device catalog answer stays on (as in her
  * design): it answers when Claude is unsure (18 Oct: sauce cup and paper coffee cup came back "not sure" from Claude
@@ -71,8 +104,9 @@ function withHoldBar(engine: GuideEngine): GuideEngine {
 }
 
 export function useLiveGuide(source: LiveSource | null, token: string, videoRef: RefObject<HTMLVideoElement | null>,
-  canvasRef: RefObject<HTMLCanvasElement | null>, opts: { stamp?: boolean } = {}) {
+  canvasRef: RefObject<HTMLCanvasElement | null>, opts: { stamp?: boolean; zone?: boolean } = {}) {
   const stamp = opts.stamp ?? true;
+  const zoneMode = opts.zone ?? false;
   const [status, setStatus] = useState<LiveStatus>("idle");
   const [progress, setProgress] = useState<Progress | null>(null);
   const [backend, setBackend] = useState<Backend | null>(null);
@@ -136,18 +170,18 @@ export function useLiveGuide(source: LiveSource | null, token: string, videoRef:
         // The item box is drawn only while Claude is being asked or has answered: a hand at the face (its crop never
         // leaves the device) or a brief CLIP blip draws nothing (17-18 Oct, holdup2/3: "identifying…" on a hand at the chin).
         let asking = 0, askedAt = -1e9;
-        const identify = async (crops: string[]): Promise<Asked> => {
+        const identify = async (crops: string[], mode?: "holdup"): Promise<Asked> => {
           asking += 1;
           askedAt = performance.now();
           try {
-            return await identifyOnce(crops);
+            return await identifyOnce(crops, mode);
           } finally {
             asking -= 1;
           }
         };
-        const identifyOnce = async (crops: string[]): Promise<Asked> => {
+        const identifyOnce = async (crops: string[], mode?: "holdup"): Promise<Asked> => {
           const res = await fetch("/api/model/identify", {
-            method: "POST", headers: { "content-type": "application/json", "x-guide-token": token }, body: JSON.stringify({ crops }),
+            method: "POST", headers: { "content-type": "application/json", "x-guide-token": token }, body: JSON.stringify({ crops, mode }),
           });
           if (!res.ok) throw new Error(`identify ${res.status}`);
           const r = (await res.json()) as ItemAnswer & { sig: string | null; ms?: number };
@@ -155,9 +189,66 @@ export function useLiveGuide(source: LiveSource | null, token: string, videoRef:
           if (r.message) details.current.set(r.message.explanation, a);
           return a;
         };
-        const session = new GuideSession(withHoldBar(engine), {
+        if (zoneMode) {
+          // "Hold it up to the camera" (zone.ts): the item in the middle of the picture, whoever holds it.
+          const far = await (farFaceLoad ??= loadFarFaceFinder());
+          const zs = new ZoneSession(engine, [face, ...(far ? [far] : [])], (crops) => identify(crops, "holdup"));
+          const say = speaker(token);
+          let prev = 0, rate = 0, lastKey = "", lastView = false, lastCheck = false, lastUnsure = false, since = 0;
+          while (!stopped) {
+            if (video.readyState >= 2 && video.videoWidth) {
+              const now = performance.now() / 1000;
+              const f = await zs.step(video, now);
+              if (stopped) break;
+              if (prev && now > prev) rate = rate ? 0.9 * rate + 0.1 / (now - prev) : 1 / (now - prev);
+              prev = now;
+              const canvas = canvasRef.current;
+              if (canvas) {
+                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                  canvas.width = video.videoWidth;
+                  canvas.height = video.videoHeight;
+                }
+                // the skeleton of the nearest person only (a room full of skeletons hides the item)
+                const near = f.people.reduce<(typeof f.people)[number] | null>((a, p) => (!a || (p.box[3] - p.box[1]) > (a.box[3] - a.box[1]) ? p : a), null);
+                const name = f.banner ? (f.label ?? itemAndBin(f.banner.message)[0]) : f.label;
+                const ctx = canvas.getContext("2d")!;
+                drawOverlay(ctx, canvas.width, canvas.height, {
+                  people: [...(near ? [{ kp: near.kp, item: null, label: null }] : []), ...(f.item ? [{ kp: [], item: f.item as [number, number, number, number], label: name }] : [])],
+                  openings: [], caption: null, cam: "CAM 01", now: new Date(), fps: rate, stamp,
+                });
+                drawZone(ctx, f.zone, canvas.width);
+              }
+              if (soundRef.current) f.speak.forEach(say);
+              if (f.item && !since) since = now;
+              if (!f.item && !f.banner) since = 0;
+              const key = f.banner ? JSON.stringify(f.banner) : "";
+              if (key !== lastKey) {
+                lastKey = key;
+                setBanner(f.banner);
+                if (f.banner) {
+                  const d = details.current.get(f.banner.message.explanation);
+                  setItems((xs) => [...xs, { at: now, message: f.banner!.message, source: f.banner!.source, item: d?.item, ms: d?.ms, tookS: since ? now - since : undefined }]);
+                }
+              }
+              if (f.inView !== lastView) setInView((lastView = f.inView));
+              if (f.checking !== lastCheck) setChecking((lastCheck = f.checking));
+              if (f.unsure !== lastUnsure) setUnsure((lastUnsure = f.unsure));
+              setFps(Math.round(rate));
+              setPeople(f.people.length);
+            }
+            await new Promise((r) => requestAnimationFrame(r));
+          }
+          return;
+        }
+        const view = focused(engine);
+        const session = new GuideSession(view, {
           identify,
-          capture: (v, box, heads) => itemCrop(v, box, heads, face),
+          capture: (v, box, heads) => {
+            const { all, primary } = view.scene;
+            if (primary < 0) return null;
+            const [x0, y0, x1, y1] = upperBody(all[primary], [box.x0, box.y0, box.x1, box.y1], v.videoWidth, v.videoHeight);
+            return itemCrop(v, { x0, y0, x1, y1 }, heads, face, view.scene, true);
+          },
         });
         const say = speaker(token);
         const clock = () => (source.kind === "file" ? video.currentTime : performance.now() / 1000);

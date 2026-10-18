@@ -27,6 +27,8 @@ const THINKING_OFF: Record<string, object> = { "claude-haiku-5-5": { type: "disa
 const BRANDS = ["beanco", "tacostop", "greenbowl", "shakeshack", "goldfish", "biscoff"];
 const CATALOG_PICK_MIN = 0.5; // demo_watcher.CATALOG_PICK_MIN
 const NAME_MIN = 0.4;         // demo_watcher.NAME_MIN: below this nothing is named
+/** Live camera: a name that says nothing ("small handheld object", 18 Oct crowd test: Jev then said trash) is "not sure". */
+const VAGUE = /^(?:(?:small|little|unknown|unidentified|unclear|handheld|hand-held|held|some|an?|dark|light|white|black)\s+)*(?:object|item|thing|stuff)s?$/i;
 
 const TABLE = (binsJson as { items: Record<string, { name: string }> }).items;
 /**
@@ -146,20 +148,28 @@ const binOf = (id: string) => (binsJson as { items: Record<string, { bin: string
 const named = (name: string, bin: string) => fromSuggestion({ name, suggested_destination: BIN_TO_DEST[bin], suggestion_confidence: 1 });
 
 /** Fast model first; an unsure answer (not "nothing held") goes to ESCALATE_MODEL, whose answer is used. */
-export async function identifyItem(crops: string[], keys: { anthropic: string; jev: string }, fetchFn: Fetch = fetch as unknown as Fetch): Promise<ItemAnswer> {
-  const first = await identifyWith(ITEM_MODEL, crops, keys, fetchFn);
+/** The live camera ("hold it up to the camera"): an object that is not held up in a hand is not the answer (18 Oct
+ * crowd test: water bottles standing on tables behind became "RECYCLE plastic water bottle"). */
+const HOLDUP = `
+The camera is a demo station: someone holds an item up close to it. If no object is held in a hand close to the camera (objects standing on a table, lying around, or in the background behind people), set identifiable to false.
+Black areas are faces and people in the background blanked out for privacy. The object is the thing in the hand; clothing, sleeves, hands, arms and furniture are never the object.
+Soft, thin, white paper that is crumpled or folded (tissue-like) is a used paper napkin or tissue (item_napkin), not printer paper.`;
+
+export async function identifyItem(crops: string[], keys: { anthropic: string; jev: string }, fetchFn: Fetch = fetch as unknown as Fetch,
+  holdup = false): Promise<ItemAnswer> {
+  const first = await identifyWith(ITEM_MODEL, crops, keys, fetchFn, holdup);
   const sure = first.source === "nothing_held" || (first.source !== "unclear" && first.source !== "error" && (first.item?.confidence ?? 0) >= ESCALATE_BELOW);
   if (sure || !ESCALATE_MODEL || ESCALATE_MODEL === ITEM_MODEL) return { ...first, model: ITEM_MODEL };
-  const second = await identifyWith(ESCALATE_MODEL, crops, keys, fetchFn);
+  const second = await identifyWith(ESCALATE_MODEL, crops, keys, fetchFn, holdup);
   return second.source === "error" ? { ...first, model: ITEM_MODEL } : { ...second, model: ESCALATE_MODEL };
 }
 
-async function identifyWith(model: string, crops: string[], keys: { anthropic: string; jev: string }, fetchFn: Fetch): Promise<ItemAnswer> {
+async function identifyWith(model: string, crops: string[], keys: { anthropic: string; jev: string }, fetchFn: Fetch, holdup = false): Promise<ItemAnswer> {
   let a: any;
   try {
     a = await claude(fetchFn, keys.anthropic, model, {
       max_tokens: 300,
-      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: holdup ? SYSTEM + HOLDUP : SYSTEM, cache_control: { type: "ephemeral" } }],
       output_config: { format: { type: "json_schema", schema: ITEM_SCHEMA } },
       messages: [{ role: "user", content: [...crops.map(image), { type: "text", text: `${crops.length} crop(s) of the carried object.` }] }],
     }, 20_000);
@@ -173,7 +183,7 @@ async function identifyWith(model: string, crops: string[], keys: { anthropic: s
   if (!a.identifiable || !item.name) return { message: null, source: "nothing_held", item };
   const dangerous = unsureSuggestion({ name: item.name, form: item.form, hazardous: !!a.hazardous }) === false;
   if (dangerous) return { message: fromSuggestion({ name: item.name, form: item.form, hazardous: true }), source: "catalog", item };
-  if (conf < NAME_MIN) return { message: defaultTrash(null), source: "unclear", item };
+  if (conf < NAME_MIN || (holdup && VAGUE.test(item.name))) return { message: defaultTrash(null), source: "unclear", item };
   if (product && product.bin !== "jev" && conf >= CATALOG_PICK_MIN) {
     const rule = productsJson.rules[product.rule as keyof typeof productsJson.rules];
     return { message: product.bin === "none" ? special(item.name, product) : named(item.name, product.bin), source: "catalog", item, rule };

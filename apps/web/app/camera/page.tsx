@@ -29,7 +29,7 @@ function useImprovedGuide(active: boolean, videoRef: RefObject<HTMLVideoElement 
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => setToken(readGuideKey()), []);
   const source = useMemo(() => (active && token ? ({ kind: "camera", facing: "user" } as const) : null), [active, token]);
-  const g = useLiveGuide(source, token ?? "", videoRef, canvasRef, { stamp: false });
+  const g = useLiveGuide(source, token ?? "", videoRef, canvasRef, { stamp: false, zone: true });
   const noKey = token === "";
   const status: GuideStatus = noKey ? "error" : token === null ? "loading" : g.status === "idle" || g.status === "ended" ? "paused" : g.status;
   return {

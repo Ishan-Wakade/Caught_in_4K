@@ -31,7 +31,7 @@ function BinColumn({ bin, lead, emptyingRequested, highlight }: { bin: BinStatus
       {unknown ? (
         <>
           <span className="font-display text-[38px] leading-[0.95] font-bold text-muted">Not enough data</span>
-          <span className="text-[15px] leading-snug text-ink-2">Nothing seen going in yet, and we don&apos;t know what was in it before monitoring began.</span>
+          <span className="text-[15px] leading-snug text-ink-2">Nothing caught going in yet, and we don&apos;t know what was in it before monitoring began.</span>
         </>
       ) : (
         <>
@@ -225,7 +225,7 @@ export default function BinsPage() {
 
         <section aria-labelledby="seen-h" className="bg-paper-deep px-10 pt-4 pb-[18px]">
           <div className="mb-1.5 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-            <h2 id="seen-h" className="m-0 font-display text-xl font-bold">Seen going in</h2>
+            <h2 id="seen-h" className="m-0 font-display text-xl font-bold">Caught going in</h2>
             <span className="font-mono text-[13px] text-muted">since each bin was last emptied{selectedName ? ` · ${selectedName}` : ""}</span>
           </div>
           <div className="flex flex-wrap gap-x-14 gap-y-3">

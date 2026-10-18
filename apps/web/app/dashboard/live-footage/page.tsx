@@ -129,7 +129,7 @@ export default function LiveFootagePage() {
     <>
       <div className="flex flex-col gap-2">
         <h1 className="m-0 font-display text-[40px] leading-none font-bold">Live footage</h1>
-        <span className="text-[15px] text-ink-2">Recorded demo clips, played back as a camera wall. Click a camera to expand it.</span>
+        <span className="text-[15px] text-ink-2">Click a camera to expand it.</span>
       </div>
       {/* As many 300 px+ tiles as fit, like YouTube's grid: three across at the dashboard's full width, fewer on smaller screens. */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4">

@@ -22,7 +22,7 @@ const MAX_WORDS = 8;
 const NOUN: Record<Exclude<Bin, "none">, string> = { compost: "compost", trash: "trash", recycle: "recycling" };
 const JEV_TO_BIN: Record<string, Exclude<Bin, "none">> = { compost: "compost", trash: "trash", recycling: "recycle" };
 const HAZARD: Array<[RegExp, string]> = [
-  [/\b(battery|batteries|electronic|electronics|phone|charger|cable|bulb|lamp|vape)\b/, "the Recycle Center"],
+  [/\b(battery|batteries|electronic|electronics|phone|phones|smartphone|smartphones|cellphone|cell phone|mobile phone|iphone|tablet|laptop|charger|cable|headphones|earbuds|bulb|lamp|vape|e-cigarette)\b/, "the Recycle Center"],
   [/\b(paint|chemical|chemicals|propane|medication|medicine|pesticide|oil|solvent|aerosol)\b/, "a hazardous waste drop-off"],
 ];
 
